@@ -16,7 +16,8 @@ import (
 type RequestTimes struct {
 	Backend      string
 	ConnectError bool
-	StatusError  bool
+	Dropped      bool
+	StatusCode   int
 	ConnectTime  float64
 	TTFB         float64
 	TotalTime    float64
@@ -62,13 +63,9 @@ func main() {
 			log.Fatalf("unmarshal: %v", err)
 		}
 
+		// TODO throttle to defined request rate
 		for _, w := range workers {
-			select {
-			case w.Requests <- &req:
-				// default:
-				// 	fmt.Println("dropped")
-				// 	// Dropped request for worker
-			}
+			w.QueueRequest(ctx, &req, results)
 		}
 
 	}
@@ -85,6 +82,17 @@ func main() {
 type Worker struct {
 	Backend  string
 	Requests chan *Request
+}
+
+func (w *Worker) QueueRequest(ctx context.Context, req *Request, results chan RequestTimes) {
+	select {
+	case w.Requests <- req:
+	default:
+		results <- RequestTimes{
+			Backend: w.Backend,
+			Dropped: true,
+		}
+	}
 }
 
 func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan RequestTimes) {
@@ -141,18 +149,12 @@ func (w *Worker) timeGet(r *Request) RequestTimes {
 		}
 	}
 
-	if resp.StatusCode/100 != 2 {
-		return RequestTimes{
-			Backend:     w.Backend,
-			StatusError: true,
-		}
-	}
-
 	end = time.Now()
 	totalTime = end.Sub(start)
 
 	return RequestTimes{
 		Backend:     w.Backend,
+		StatusCode:  resp.StatusCode,
 		ConnectTime: connectTime.Seconds(),
 		TTFB:        ttfb.Seconds(),
 		TotalTime:   totalTime.Seconds(),
