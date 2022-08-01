@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptrace"
 	"sync"
@@ -84,6 +86,8 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 			ConnectError: true,
 		}
 	}
+	defer resp.Body.Close()
+	io.Copy(ioutil.Discard, resp.Body)
 
 	end = time.Now()
 	totalTime = end.Sub(start)

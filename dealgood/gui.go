@@ -18,15 +18,19 @@ import (
 	"github.com/mum4k/termdash/terminal/tcell"
 	"github.com/mum4k/termdash/terminal/termbox"
 	"github.com/mum4k/termdash/terminal/terminalapi"
+	"github.com/mum4k/termdash/widgets/gauge"
 	"github.com/mum4k/termdash/widgets/linechart"
+	"github.com/mum4k/termdash/widgets/text"
 )
 
 type Gui struct {
-	source   RequestSource
-	backends []*Backend
-	cancel   func()
-	term     terminalapi.Terminal
-	chart    *linechart.LineChart
+	source        RequestSource
+	backends      []*Backend
+	cancel        func()
+	term          terminalapi.Terminal
+	chart         *linechart.LineChart
+	progressGauge *gauge.Gauge
+	ttfbText      *text.Text
 
 	cancelLoaderMu sync.Mutex
 	cancelLoader   func()
@@ -55,7 +59,19 @@ func NewGui(source RequestSource, backends []*Backend) (*Gui, error) {
 		linechart.XLabelCellOpts(cell.FgColor(cell.ColorGreen)),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("new linechart: %w", err)
+		return nil, fmt.Errorf("chart: %w", err)
+	}
+
+	g.ttfbText, err = text.New(text.RollContent(), text.WrapAtWords())
+	if err != nil {
+		return nil, fmt.Errorf("ttfb text: %w", err)
+	}
+
+	g.progressGauge, err = gauge.New(
+		gauge.Border(linestyle.None),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("progress gauge: %w", err)
 	}
 
 	return g, nil
@@ -71,7 +87,16 @@ func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 		return fmt.Errorf("failed to generate container: %w", err)
 	}
 
-	row1 := grid.RowHeightPercWithOpts(70,
+	row1 := grid.RowHeightFixed(6,
+		grid.ColWidthFixed(60, grid.Widget(g.ttfbText, container.Border(linestyle.Light), container.BorderTitle("TTFB (ms)"))),
+		// grid.ColWidthPerc(40, grid.Widget(g.navi, container.Border(linestyle.Light))),
+	)
+
+	row2 := grid.RowHeightFixed(3,
+		grid.ColWidthFixed(60, grid.Widget(g.progressGauge, container.Border(linestyle.Light), container.BorderTitle("Progress"))),
+	)
+
+	row3 := grid.RowHeightFixedWithOpts(10,
 		[]container.Option{container.ID("ttfb")},
 		grid.Widget(g.chart, container.Border(linestyle.Light), container.BorderTitle("TTFB (ms)")),
 	)
@@ -79,6 +104,8 @@ func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 	builder := grid.New()
 	builder.Add(
 		row1,
+		row2,
+		row3,
 	)
 
 	gridOpts, err := builder.Build()
@@ -120,9 +147,6 @@ func (g *Gui) OnKey(k *terminalapi.Keyboard) {
 func (g *Gui) StartLoader(ctx context.Context) {
 	timings := make(chan *RequestTiming, 10000)
 
-	coll := NewCollector(timings, 100*time.Millisecond)
-	go coll.Run(ctx)
-
 	l := &Loader{
 		// Source: NewStdinRequestSource(),
 		Source: NewRandomRequestSource(sampleRequests),
@@ -138,10 +162,61 @@ func (g *Gui) StartLoader(ctx context.Context) {
 		Timings:     timings,
 	}
 
+	coll := NewCollector(timings, 100*time.Millisecond)
+	go coll.Run(ctx)
+
+	go g.Update(ctx, coll, 60*time.Second)
+
 	if err := l.Send(ctx); err != nil {
-		if !errors.Is(err, context.Canceled) {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			log.Printf("loader error: %v", err)
 		}
 	}
 	close(timings)
+}
+
+func (g *Gui) Update(ctx context.Context, coll *Collector, duration time.Duration) {
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
+
+	chartDataMaxLen := 60
+	chartData := []float64{}
+
+	start := time.Now()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			// Update the progress indicator
+			passed := now.Sub(start)
+			percent := int(float64(passed) / float64(duration) * 100)
+			if percent > 100 {
+				continue
+			}
+			g.progressGauge.Percent(percent)
+
+			latest := coll.Latest()
+			st := latest["local"]
+
+			if len(chartData) > chartDataMaxLen {
+				chartData = chartData[1:]
+			}
+			chartData = append(chartData, st.TTFB.P99*1000)
+			g.chart.Series("TTFB P99", chartData)
+
+			g.ttfbText.Write(
+				fmt.Sprintf("Requests:  % 7d\nConn Errs: % 7d\nMin: %.4f Max: %.4f P50: %.4f\n P90: %.4f P95: %.4f P99: %.4f",
+					st.TotalRequests,
+					st.TotalConnectErrors,
+					st.TTFB.Min*1000,
+					st.TTFB.Max*1000,
+					st.TTFB.P50*1000,
+					st.TTFB.P90*1000,
+					st.TTFB.P95*1000,
+					st.TTFB.P99*1000,
+				), text.WriteReplace())
+
+		}
+	}
 }

@@ -61,6 +61,9 @@ func Run(cc *cli.Context) error {
 
 func nogui(ctx context.Context, source RequestSource, backends []*Backend) error {
 	timings := make(chan *RequestTiming, 10000)
+	defer func() {
+		close(timings)
+	}()
 
 	coll := NewCollector(timings, 100*time.Millisecond)
 	go coll.Run(ctx)
@@ -77,6 +80,5 @@ func nogui(ctx context.Context, source RequestSource, backends []*Backend) error
 	if err := l.Send(ctx); err != nil {
 		log.Printf("loader error: %v", err)
 	}
-	close(timings)
 	return nil
 }
