@@ -7,20 +7,29 @@ import (
 )
 
 type Backend struct {
-	Name     string
-	BaseURL  string
-	Requests chan *Request
+	Name     string        // short name of the backend to be used in reports
+	BaseURL  string        // base URL of the backend (without a path)
+	Requests chan *Request // channel used to receive requests to be issued to the backend
 }
 
 type Loader struct {
-	Source      RequestSource
-	Rate        float64 // requests per second
-	Concurrency int     // number of workers per backend
-	Backends    []*Backend
+	Source      RequestSource       // source of requests
+	Backends    []*Backend          // backends to send load to
+	Timings     chan *RequestTiming // channel to send timings to
+	Rate        float64             // maximum number of requests per second per backend
+	Concurrency int                 // number of workers per backend
+	Duration    time.Duration
 }
 
-func (l *Loader) Run(ctx context.Context, d time.Duration, results chan *RequestTiming) error {
-	ctx, cancel := context.WithTimeout(ctx, d)
+type LoadOptions struct {
+	Rate        float64 // maximum number of requests per second per backend
+	Concurrency int     // number of workers per backend
+	Duration    time.Duration
+}
+
+// Send sends requests to each backend until the duration has passed or the context is canceled.
+func (l *Loader) Send(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, l.Duration)
 	defer cancel()
 
 	workers := make([]*Worker, 0, len(l.Backends)*l.Concurrency)
@@ -40,7 +49,7 @@ func (l *Loader) Run(ctx context.Context, d time.Duration, results chan *Request
 	var wg sync.WaitGroup
 	wg.Add(len(workers))
 	for _, w := range workers {
-		go w.Run(ctx, &wg, results)
+		go w.Run(ctx, &wg, l.Timings)
 	}
 
 	// requestInterval is the minimum time to wait between requests
@@ -64,7 +73,7 @@ func (l *Loader) Run(ctx context.Context, d time.Duration, results chan *Request
 			select {
 			case be.Requests <- l.Source.Request():
 			default:
-				results <- &RequestTiming{
+				l.Timings <- &RequestTiming{
 					BackendName: be.Name,
 					Dropped:     true,
 				}

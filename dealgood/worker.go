@@ -16,9 +16,26 @@ type Worker struct {
 func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *RequestTiming) {
 	defer wg.Done()
 
-	for req := range w.Backend.Requests {
-		result := w.timeRequest(req)
-		results <- result
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case req, ok := <-w.Backend.Requests:
+			if !ok {
+				return
+			}
+			result := w.timeRequest(req)
+
+			// Check context again since it might have been canceled while we were
+			// waiting for request
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			results <- result
+		}
 	}
 }
 
