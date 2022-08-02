@@ -45,6 +45,10 @@ func Run(cc *cli.Context) error {
 			Name:    "local",
 			BaseURL: "http://localhost:8080",
 		},
+		{
+			Name:    "local2",
+			BaseURL: "http://localhost:8080",
+		},
 	}
 
 	if flags.nogui {
