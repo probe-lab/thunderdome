@@ -24,13 +24,17 @@ import (
 )
 
 type Gui struct {
-	source        RequestSource
-	backends      []*Backend
-	cancel        func()
-	term          terminalapi.Terminal
+	source   RequestSource
+	backends []*Backend
+	cancel   func()
+	term     terminalapi.Terminal
+
+	// widgets
 	chart         *linechart.LineChart
 	progressGauge *gauge.Gauge
-	ttfbText      *text.Text
+	keysText      *text.Text
+	durationText  *text.Text
+	beStatsTexts  map[string]*text.Text
 
 	cancelLoaderMu sync.Mutex
 	cancelLoader   func()
@@ -38,8 +42,9 @@ type Gui struct {
 
 func NewGui(source RequestSource, backends []*Backend) (*Gui, error) {
 	g := &Gui{
-		source:   source,
-		backends: backends,
+		source:       source,
+		backends:     backends,
+		beStatsTexts: map[string]*text.Text{},
 	}
 
 	var err error
@@ -62,9 +67,27 @@ func NewGui(source RequestSource, backends []*Backend) (*Gui, error) {
 		return nil, fmt.Errorf("chart: %w", err)
 	}
 
-	g.ttfbText, err = text.New(text.RollContent(), text.WrapAtWords())
+	g.keysText, err = text.New(text.DisableScrolling())
 	if err != nil {
-		return nil, fmt.Errorf("ttfb text: %w", err)
+		return nil, fmt.Errorf("keys text: %w", err)
+	}
+	g.keysText.Write("q", text.WriteCellOpts(cell.Bold(), cell.FgColor(cell.ColorYellow)))
+	g.keysText.Write(":quit ")
+	g.keysText.Write("s", text.WriteCellOpts(cell.Bold(), cell.FgColor(cell.ColorYellow)))
+	g.keysText.Write(":start/stop ")
+
+	g.durationText, err = text.New(text.RollContent(), text.WrapAtWords())
+	if err != nil {
+		return nil, fmt.Errorf("duration text: %w", err)
+	}
+
+	for _, be := range g.backends {
+		t, err := text.New(text.RollContent())
+		if err != nil {
+			return nil, fmt.Errorf("backend text: %w", err)
+		}
+		g.beStatsTexts[be.Name] = t
+
 	}
 
 	g.progressGauge, err = gauge.New(
@@ -84,20 +107,26 @@ func (g *Gui) Close() {
 func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 	c, err := container.New(g.term, container.ID("root"))
 	if err != nil {
-		return fmt.Errorf("failed to generate container: %w", err)
+		return fmt.Errorf("new container: %w", err)
 	}
 
-	row1 := grid.RowHeightFixed(6,
-		grid.ColWidthFixed(60, grid.Widget(g.ttfbText, container.Border(linestyle.Light), container.BorderTitle("TTFB (ms)"))),
-		// grid.ColWidthPerc(40, grid.Widget(g.navi, container.Border(linestyle.Light))),
+	elems := []grid.Element{}
+
+	for name, t := range g.beStatsTexts {
+		elems = append(elems, grid.ColWidthFixed(60, grid.Widget(t, container.Border(linestyle.Light), container.BorderTitle(name))))
+	}
+
+	row1 := grid.RowHeightFixed(6, elems...)
+
+	row2 := grid.RowHeightFixed(1,
+		grid.ColWidthFixed(60, grid.Widget(g.keysText)),
 	)
 
-	row2 := grid.RowHeightFixed(3,
-		grid.ColWidthFixed(60, grid.Widget(g.progressGauge, container.Border(linestyle.Light), container.BorderTitle("Progress"))),
+	row3 := grid.RowHeightFixed(3,
+		grid.ColWidthFixed(60, grid.Widget(g.progressGauge, container.Border(linestyle.Light))),
 	)
 
-	row3 := grid.RowHeightFixedWithOpts(10,
-		[]container.Option{container.ID("ttfb")},
+	row4 := grid.RowHeightFixed(10,
 		grid.Widget(g.chart, container.Border(linestyle.Light), container.BorderTitle("TTFB (ms)")),
 	)
 
@@ -106,6 +135,7 @@ func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 		row1,
 		row2,
 		row3,
+		row4,
 	)
 
 	gridOpts, err := builder.Build()
@@ -175,12 +205,28 @@ func (g *Gui) StartLoader(ctx context.Context) {
 	close(timings)
 }
 
+// Update updates the gui until the context is canceled
 func (g *Gui) Update(ctx context.Context, coll *Collector, duration time.Duration) {
 	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 
 	chartDataMaxLen := 60
 	chartData := []float64{}
+
+	f := func(name string, s *MetricSample, t *text.Text) {
+		t.Write(
+			fmt.Sprintf("%s\nRequests:  % 7d\nConn Errs: % 7d\nMin: %.4f Max: %.4f P50: %.4f\n P90: %.4f P95: %.4f P99: %.4f",
+				name,
+				s.TotalRequests,
+				s.TotalConnectErrors,
+				s.TTFB.Min*1000,
+				s.TTFB.Max*1000,
+				s.TTFB.P50*1000,
+				s.TTFB.P90*1000,
+				s.TTFB.P95*1000,
+				s.TTFB.P99*1000,
+			), text.WriteReplace())
+	}
 
 	start := time.Now()
 	for {
@@ -197,26 +243,24 @@ func (g *Gui) Update(ctx context.Context, coll *Collector, duration time.Duratio
 			g.progressGauge.Percent(percent)
 
 			latest := coll.Latest()
-			st := latest["local"]
 
-			if len(chartData) > chartDataMaxLen {
-				chartData = chartData[1:]
+			for name, t := range g.beStatsTexts {
+				st, ok := latest[name]
+				if !ok {
+					continue
+				}
+
+				if name == "local" {
+					if len(chartData) > chartDataMaxLen {
+						chartData = chartData[1:]
+					}
+					chartData = append(chartData, st.TTFB.P99*1000)
+					g.chart.Series("TTFB P99", chartData)
+
+				}
+
+				f(name, &st, t)
 			}
-			chartData = append(chartData, st.TTFB.P99*1000)
-			g.chart.Series("TTFB P99", chartData)
-
-			g.ttfbText.Write(
-				fmt.Sprintf("Requests:  % 7d\nConn Errs: % 7d\nMin: %.4f Max: %.4f P50: %.4f\n P90: %.4f P95: %.4f P99: %.4f",
-					st.TotalRequests,
-					st.TotalConnectErrors,
-					st.TTFB.Min*1000,
-					st.TTFB.Max*1000,
-					st.TTFB.P50*1000,
-					st.TTFB.P90*1000,
-					st.TTFB.P95*1000,
-					st.TTFB.P99*1000,
-				), text.WriteReplace())
-
 		}
 	}
 }
