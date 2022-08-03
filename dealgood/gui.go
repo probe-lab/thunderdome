@@ -221,8 +221,13 @@ func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 
 	elems := []grid.Element{}
 
-	for name, t := range g.beStatsTexts {
-		elems = append(elems, grid.ColWidthFixed(22, grid.Widget(t, container.Border(linestyle.Light), container.BorderTitle(name))))
+	for _, be := range g.backends {
+		t, ok := g.beStatsTexts[be.Name]
+		if !ok {
+			continue
+		}
+
+		elems = append(elems, grid.ColWidthFixed(22, grid.Widget(t, container.Border(linestyle.Light), container.BorderTitle(be.Name))))
 	}
 
 	padText, err := text.New(text.DisableScrolling())
