@@ -237,7 +237,7 @@ func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 		),
 
 		grid.RowHeightFixed(10,
-			grid.Widget(g.chart, container.Border(linestyle.Light), container.BorderTitle("TTFB (ms)")),
+			grid.Widget(g.chart, container.Border(linestyle.Light), container.BorderTitle("TTFB P90 (ms)")),
 		),
 	)
 
