@@ -64,20 +64,32 @@ var durations = []time.Duration{
 
 var requestRates = []int{
 	10,
-	50,
+	20,
+	60,
+	80,
 	100,
-	500,
+	200,
+	400,
+	600,
+	800,
 	1000,
-	5000,
+	1200,
+	1400,
 }
 
 var concurrencies = []int{
 	1,
+	2,
 	4,
 	8,
+	12,
 	16,
-	32,
-	64,
+	20,
+	30,
+	40,
+	50,
+	60,
+	80,
 }
 
 func NewGui(source RequestSource, exp *ExperimentJSON) (*Gui, error) {
@@ -95,6 +107,7 @@ func NewGui(source RequestSource, exp *ExperimentJSON) (*Gui, error) {
 		g.backends = append(g.backends, &Backend{
 			Name:    be.Name,
 			BaseURL: be.BaseURL,
+			Host:    be.Host,
 		})
 	}
 

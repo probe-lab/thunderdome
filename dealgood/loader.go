@@ -7,8 +7,9 @@ import (
 )
 
 type Backend struct {
-	Name     string        // short name of the backend to be used in reports
-	BaseURL  string        // base URL of the backend (without a path)
+	Name     string // short name of the backend to be used in reports
+	BaseURL  string // base URL of the backend (without a path)
+	Host     string
 	Requests chan *Request // channel used to receive requests to be issued to the backend
 }
 
@@ -19,6 +20,7 @@ type Loader struct {
 	Rate        int                 // maximum number of requests per second per backend
 	Concurrency int                 // number of workers per backend
 	Duration    time.Duration
+	Verbose     bool
 }
 
 type LoadOptions struct {
@@ -42,6 +44,7 @@ func (l *Loader) Send(ctx context.Context) error {
 		for j := 0; j < l.Concurrency; j++ {
 			workers = append(workers, &Worker{
 				Backend: be,
+				Verbose: l.Verbose,
 			})
 		}
 	}

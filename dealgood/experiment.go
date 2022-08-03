@@ -14,8 +14,9 @@ type ExperimentJSON struct {
 }
 
 type BackendJSON struct {
-	Name    string `json:"name"`     // short name of the backend to be used in reports
-	BaseURL string `json:"base_url"` // base URL of the backend (without a path)
+	Name    string `json:"name"`           // short name of the backend to be used in reports
+	BaseURL string `json:"base_url"`       // base URL of the backend (without a path)
+	Host    string `json:"host,omitempty"` // An option hostname to be sent as a Host header in requests
 }
 
 func validateExperiment(exp *ExperimentJSON) error {

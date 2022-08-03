@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON) error {
+func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, verbose bool) error {
 	timings := make(chan *RequestTiming, 10000)
 	defer func() {
 		close(timings)
@@ -26,12 +26,14 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON) error
 		Concurrency: exp.Concurrency,
 		Duration:    time.Duration(exp.Duration) * time.Second,
 		Timings:     timings,
+		Verbose:     verbose,
 	}
 
 	for _, be := range exp.Backends {
 		l.Backends = append(l.Backends, &Backend{
 			Name:    be.Name,
 			BaseURL: be.BaseURL,
+			Host:    be.Host,
 		})
 	}
 

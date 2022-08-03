@@ -19,17 +19,15 @@ var sampleRequests = []*Request{
 	{
 		Method: "GET",
 		URI:    "/ipfs/QmQPeNsJPyVWPFDVHb77w8G42Fvo15z4bG2X8D2GhfbSXc/readme",
-		Header: map[string]string{"Host": "ipfs.io"},
 	},
 	{
 		Method: "GET",
 		URI:    "/ipfs/bafkreifjjcie6lypi6ny7amxnfftagclbuxndqonfipmb64f2km2devei4",
-		Header: map[string]string{"Host": "ipfs.io"},
 	},
 	{
 		Method: "GET",
 		URI:    "/ipfs/bafkreifjjcie6lypi6ny7amxnfftagclbuxndqonfipmb64f2km2devei4",
-		Header: map[string]string{"Accept": "application/vnd.ipld.car", "Host": "ipfs.io"},
+		Header: map[string]string{"Accept": "application/vnd.ipld.car"},
 	},
 }
 

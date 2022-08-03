@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptrace"
+	"os"
 	"sync"
 	"time"
 )
@@ -13,6 +15,7 @@ import (
 type Worker struct {
 	Backend  *Backend
 	Requests chan *Request
+	Verbose  bool
 }
 
 func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *RequestTiming) {
@@ -47,8 +50,8 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 		req.Header.Set(k, v)
 	}
 
-	if host, ok := r.Header["Host"]; ok {
-		req.Host = host
+	if w.Backend.Host != "" {
+		req.Host = w.Backend.Host
 	}
 
 	var start, end, connect time.Time
@@ -81,6 +84,9 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		if w.Verbose {
+			fmt.Fprintf(os.Stderr, "%s %s => error %v\n", req.Method, req.URL, err)
+		}
 		return &RequestTiming{
 			BackendName:  w.Backend.Name,
 			ConnectError: true,
@@ -91,6 +97,10 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 
 	end = time.Now()
 	totalTime = end.Sub(start)
+
+	if resp.StatusCode/100 != 2 {
+		fmt.Fprintf(os.Stderr, "%s %s => %s\n", req.Method, req.URL, resp.Status)
+	}
 
 	return &RequestTiming{
 		BackendName: w.Backend.Name,

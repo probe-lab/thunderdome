@@ -65,6 +65,20 @@ var app = &cli.App{
 			Destination: &flags.duration,
 			EnvVars:     []string{"DEALGOOD_DURATION"},
 		},
+		&cli.StringFlag{
+			Name:        "host",
+			Usage:       "Force a host header to be sent with each request (if not using an experiment file)",
+			Value:       "",
+			Destination: &flags.host,
+			EnvVars:     []string{"DEALGOOD_HOST"},
+		},
+		&cli.BoolFlag{
+			Name:        "verbose",
+			Usage:       "Print failed request details (not in gui mode)",
+			Value:       false,
+			Destination: &flags.verbose,
+			EnvVars:     []string{"DEALGOOD_VERBOSE"},
+		},
 	},
 }
 
@@ -73,9 +87,11 @@ var flags struct {
 	source      string
 	nogui       bool
 	baseURL     string
+	host        string
 	rate        int
 	concurrency int
 	duration    int
+	verbose     bool
 }
 
 func main() {
@@ -111,6 +127,7 @@ func Run(cc *cli.Context) error {
 		exp.Backends = []*BackendJSON{
 			{
 				BaseURL: flags.baseURL,
+				Host:    flags.host,
 			},
 		}
 
@@ -121,7 +138,7 @@ func Run(cc *cli.Context) error {
 	}
 
 	if flags.nogui {
-		return nogui(cc.Context, source, &exp)
+		return nogui(cc.Context, source, &exp, flags.verbose)
 	}
 
 	g, err := NewGui(source, &exp)
