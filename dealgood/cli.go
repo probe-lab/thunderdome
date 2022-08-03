@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, verbose bool) error {
+func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, printHeader bool, printTimings bool, printFailures bool) error {
 	timings := make(chan *RequestTiming, 10000)
 	defer func() {
 		close(timings)
@@ -18,15 +18,30 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, verbo
 	coll := NewCollector(timings, 100*time.Millisecond)
 	go coll.Run(ctx)
 
-	go printTimings(ctx, coll, exp)
+	if printHeader {
+		fmt.Printf("Time: %s\n", time.Now().Format(time.RFC1123Z))
+		fmt.Printf("Experiment: %s\n", exp.Name)
+		fmt.Printf("Duration: %ds\n", exp.Duration)
+		fmt.Printf("Request rate: %d\n", exp.Rate)
+		fmt.Printf("Request concurrency: %d\n", exp.Concurrency)
+		fmt.Println("Backends:")
+		for _, be := range exp.Backends {
+			fmt.Printf("  %s (%s)\n", be.Name, be.BaseURL)
+		}
+		fmt.Println("")
+	}
+
+	if printTimings {
+		go printCollectedTimings(ctx, coll, exp)
+	}
 
 	l := &Loader{
-		Source:      source,
-		Rate:        exp.Rate,
-		Concurrency: exp.Concurrency,
-		Duration:    time.Duration(exp.Duration) * time.Second,
-		Timings:     timings,
-		Verbose:     verbose,
+		Source:        source,
+		Rate:          exp.Rate,
+		Concurrency:   exp.Concurrency,
+		Duration:      time.Duration(exp.Duration) * time.Second,
+		Timings:       timings,
+		PrintFailures: printFailures,
 	}
 
 	for _, be := range exp.Backends {
@@ -45,21 +60,10 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, verbo
 	return nil
 }
 
-func printTimings(ctx context.Context, coll *Collector, exp *ExperimentJSON) {
+func printCollectedTimings(ctx context.Context, coll *Collector, exp *ExperimentJSON) {
 	start := time.Now()
 	t := time.NewTicker(1 * time.Second)
 	defer t.Stop()
-
-	fmt.Printf("Time: %s\n", start.Format(time.RFC1123Z))
-	fmt.Printf("Experiment: %s\n", exp.Name)
-	fmt.Printf("Duration: %ds\n", exp.Duration)
-	fmt.Printf("Request rate: %d\n", exp.Rate)
-	fmt.Printf("Request concurrency: %d\n", exp.Concurrency)
-	fmt.Println("Backends:")
-	for _, be := range exp.Backends {
-		fmt.Printf("  %s (%s)\n", be.Name, be.BaseURL)
-	}
-	fmt.Println("")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
 	fmt.Fprintln(w, "time\tbackend\trequests\tconn errs\tdropped\t5xx errs\tTTFB P50\tTTFB P90\tTTFB P90")

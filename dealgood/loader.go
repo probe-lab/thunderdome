@@ -14,13 +14,13 @@ type Backend struct {
 }
 
 type Loader struct {
-	Source      RequestSource       // source of requests
-	Backends    []*Backend          // backends to send load to
-	Timings     chan *RequestTiming // channel to send timings to
-	Rate        int                 // maximum number of requests per second per backend
-	Concurrency int                 // number of workers per backend
-	Duration    time.Duration
-	Verbose     bool
+	Source        RequestSource       // source of requests
+	Backends      []*Backend          // backends to send load to
+	Timings       chan *RequestTiming // channel to send timings to
+	Rate          int                 // maximum number of requests per second per backend
+	Concurrency   int                 // number of workers per backend
+	Duration      time.Duration
+	PrintFailures bool
 }
 
 type LoadOptions struct {
@@ -43,8 +43,8 @@ func (l *Loader) Send(ctx context.Context) error {
 		}
 		for j := 0; j < l.Concurrency; j++ {
 			workers = append(workers, &Worker{
-				Backend: be,
-				Verbose: l.Verbose,
+				Backend:       be,
+				PrintFailures: l.PrintFailures,
 			})
 		}
 	}

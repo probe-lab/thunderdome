@@ -13,9 +13,9 @@ import (
 )
 
 type Worker struct {
-	Backend  *Backend
-	Requests chan *Request
-	Verbose  bool
+	Backend       *Backend
+	Requests      chan *Request
+	PrintFailures bool
 }
 
 func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *RequestTiming) {
@@ -84,7 +84,7 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		if w.Verbose {
+		if w.PrintFailures {
 			fmt.Fprintf(os.Stderr, "%s %s => error %v\n", req.Method, req.URL, err)
 		}
 		return &RequestTiming{
@@ -98,8 +98,10 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 	end = time.Now()
 	totalTime = end.Sub(start)
 
-	if resp.StatusCode/100 != 2 {
-		fmt.Fprintf(os.Stderr, "%s %s => %s\n", req.Method, req.URL, resp.Status)
+	if w.PrintFailures {
+		if resp.StatusCode/100 != 2 {
+			fmt.Fprintf(os.Stderr, "%s %s => %s\n", req.Method, req.URL, resp.Status)
+		}
 	}
 
 	return &RequestTiming{

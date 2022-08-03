@@ -18,10 +18,16 @@ var app = &cli.App{
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:        "experiment",
-			Aliases:     []string{"x"},
-			Usage:       "Path to experiment JSON file",
-			Destination: &flags.experiment,
+			Usage:       "Name of the experiment",
+			Value:       "adhoc",
+			Destination: &flags.experimentName,
 			EnvVars:     []string{"DEALGOOD_EXPERIMENT"},
+		},
+		&cli.StringFlag{
+			Name:        "experiment-file",
+			Usage:       "Path to experiment JSON file",
+			Destination: &flags.experimentFile,
+			EnvVars:     []string{"DEALGOOD_EXPERIMENT_FILE"},
 		},
 		&cli.StringFlag{
 			Name:        "source",
@@ -37,12 +43,12 @@ var app = &cli.App{
 			Destination: &flags.nogui,
 			EnvVars:     []string{"DEALGOOD_NOGUI"},
 		},
-		&cli.StringFlag{
-			Name:        "baseurl",
-			Usage:       "Base URL of backend (if not using an experiment file)",
-			Value:       "http://localhost:8080",
-			Destination: &flags.baseURL,
-			EnvVars:     []string{"DEALGOOD_BASEURL"},
+		&cli.StringSliceFlag{
+			Name:        "targets",
+			Usage:       "Comma separated list of Base URLs of backends (if not using an experiment file)",
+			Value:       cli.NewStringSlice("http://localhost:8080"),
+			Destination: &flags.targets,
+			EnvVars:     []string{"DEALGOOD_TARGETS"},
 		},
 		&cli.IntFlag{
 			Name:        "rate",
@@ -73,25 +79,42 @@ var app = &cli.App{
 			EnvVars:     []string{"DEALGOOD_HOST"},
 		},
 		&cli.BoolFlag{
-			Name:        "verbose",
-			Usage:       "Print failed request details (not in gui mode)",
+			Name:        "timings",
+			Usage:       "Print timings for requests (not in gui mode)",
+			Value:       true,
+			Destination: &flags.timings,
+			EnvVars:     []string{"DEALGOOD_TIMINGS"},
+		},
+		&cli.BoolFlag{
+			Name:        "failures",
+			Usage:       "Print failed request details to stderr (not in gui mode)",
 			Value:       false,
-			Destination: &flags.verbose,
-			EnvVars:     []string{"DEALGOOD_VERBOSE"},
+			Destination: &flags.failures,
+			EnvVars:     []string{"DEALGOOD_FAILURES"},
+		},
+		&cli.BoolFlag{
+			Name:        "quiet",
+			Usage:       "Suppress all output, overriding timings and failures flags (not in gui mode)",
+			Value:       false,
+			Destination: &flags.quiet,
+			EnvVars:     []string{"DEALGOOD_QUIET"},
 		},
 	},
 }
 
 var flags struct {
-	experiment  string
-	source      string
-	nogui       bool
-	baseURL     string
-	host        string
-	rate        int
-	concurrency int
-	duration    int
-	verbose     bool
+	experimentName string
+	experimentFile string
+	source         string
+	nogui          bool
+	targets        cli.StringSlice
+	host           string
+	rate           int
+	concurrency    int
+	duration       int
+	timings        bool
+	failures       bool
+	quiet          bool
 }
 
 func main() {
@@ -103,6 +126,11 @@ func main() {
 }
 
 func Run(cc *cli.Context) error {
+	if flags.quiet {
+		flags.timings = false
+		flags.failures = false
+	}
+
 	var source RequestSource
 	switch flags.source {
 	case "random":
@@ -115,22 +143,21 @@ func Run(cc *cli.Context) error {
 
 	// Load the experiment definition or use a default one
 	var exp ExperimentJSON
-	if flags.experiment != "" {
-		if err := readExperimentFile(flags.experiment, &exp); err != nil {
+	if flags.experimentFile != "" {
+		if err := readExperimentFile(flags.experimentFile, &exp); err != nil {
 			return fmt.Errorf("read experiment file: %w", err)
 		}
 	} else {
-		exp.Name = "adhoc"
+		exp.Name = flags.experimentName
 		exp.Rate = flags.rate
 		exp.Concurrency = flags.concurrency
 		exp.Duration = flags.duration
-		exp.Backends = []*BackendJSON{
-			{
-				BaseURL: flags.baseURL,
+		for _, be := range flags.targets.Value() {
+			exp.Backends = append(exp.Backends, &BackendJSON{
+				BaseURL: be,
 				Host:    flags.host,
-			},
+			})
 		}
-
 	}
 
 	if err := validateExperiment(&exp); err != nil {
@@ -138,7 +165,7 @@ func Run(cc *cli.Context) error {
 	}
 
 	if flags.nogui {
-		return nogui(cc.Context, source, &exp, flags.verbose)
+		return nogui(cc.Context, source, &exp, !flags.quiet, flags.timings, flags.failures)
 	}
 
 	g, err := NewGui(source, &exp)
