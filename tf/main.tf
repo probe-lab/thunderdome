@@ -38,11 +38,23 @@ module "vpc" {
   public_subnet_ipv6_prefixes  = [0, 1]
   private_subnet_ipv6_prefixes = [2, 3]
 
+  # Need both of these, see https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-private-hosted-zones
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
   enable_nat_gateway  = true
   single_nat_gateway  = false
   reuse_nat_ips       = true
   external_nat_ip_ids = aws_eip.nat.*.id
 }
+
+resource "aws_service_discovery_private_dns_namespace" "main" {
+  name        = "thunder.dome"
+  description = "private dns"
+  vpc         = module.vpc.vpc_id
+}
+
+
 
 resource "aws_eip" "nat" {
   count = 3
@@ -54,15 +66,6 @@ module "ecs" {
 
   cluster_name = "thunderdome"
 
-  cluster_configuration = {
-    execute_command_configuration = {
-      logging = "OVERRIDE"
-      log_configuration = {
-        cloud_watch_log_group_name = "/aws/ecs/aws-ec2"
-      }
-    }
-  }
-
   fargate_capacity_providers = {
     FARGATE = {
       default_capacity_provider_strategy = {
@@ -72,6 +75,31 @@ module "ecs" {
   }
 }
 
-resource "aws_ecr_repository" "kubo" {
-  name = "kubo"
+resource "aws_cloudwatch_log_group" "logs" {
+  name = "thunderdome"
+}
+
+resource "aws_security_group" "dealgood" {
+  name   = "dealgood"
+  vpc_id = module.vpc.vpc_id
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+}
+
+resource "aws_security_group" "allow_ssh" {
+  name   = "allow_ssh"
+  vpc_id = module.vpc.vpc_id
+
+  ingress {
+    from_port        = 22
+    to_port          = 22
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
 }
