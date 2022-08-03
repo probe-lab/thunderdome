@@ -15,6 +15,8 @@ module "tracing" {
     { name = "IPFS_PROFILE", value = "server" },
     { name = "OTEL_TRACES_EXPORTER", value = "otlp" },
     { name = "OTEL_TRACES_SAMPLER", value = "traceidratio" },
+    { name = "OTEL_TRACES_EXPORTER", value = "file" },
+    { name = "OTEL_EXPORTER_FILE_PATH", value = "/dev/null" }
   ]
 
   targets = {
