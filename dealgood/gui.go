@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -45,11 +45,12 @@ type Gui struct {
 	experimentName     string
 	duration           time.Duration
 	durationsIdx       int
-	requestRate        float64
+	requestRate        int
 	requestRateIdx     int
 	requestConcurrency int
 	concurrenciesIdx   int
 	statsFormatterIdx  int
+	statsFormatter     *StatsFormatter
 }
 
 var durations = []time.Duration{
@@ -61,7 +62,7 @@ var durations = []time.Duration{
 	720 * time.Minute,
 }
 
-var requestRates = []float64{
+var requestRates = []int{
 	10,
 	50,
 	100,
@@ -79,20 +80,54 @@ var concurrencies = []int{
 	64,
 }
 
-func NewGui(source RequestSource, backends []*Backend) (*Gui, error) {
+func NewGui(source RequestSource, exp *ExperimentJSON) (*Gui, error) {
 	g := &Gui{
-		source:       source,
-		backends:     backends,
-		beStatsTexts: map[string]*text.Text{},
-
-		experimentName:   "Experiment 1",
-		requestRateIdx:   4,
-		concurrenciesIdx: 3,
+		source:             source,
+		beStatsTexts:       map[string]*text.Text{},
+		experimentName:     exp.Name,
+		duration:           time.Duration(exp.Duration) * time.Second,
+		requestRate:        exp.Rate,
+		requestConcurrency: exp.Concurrency,
+		statsFormatter:     &statsFormatters[0],
 	}
 
-	g.duration = durations[g.durationsIdx]
-	g.requestRate = requestRates[g.requestRateIdx]
-	g.requestConcurrency = concurrencies[g.concurrenciesIdx]
+	for _, be := range exp.Backends {
+		g.backends = append(g.backends, &Backend{
+			Name:    be.Name,
+			BaseURL: be.BaseURL,
+		})
+	}
+
+	// Find the closest indices for the cycle-able values
+	for i, v := range durations {
+		if v == g.duration {
+			g.durationsIdx = i
+			break
+		} else if i != 0 && v > g.duration {
+			g.durationsIdx = i - 1
+			break
+		}
+	}
+
+	for i, v := range requestRates {
+		if v == g.requestRate {
+			g.requestRateIdx = i
+			break
+		} else if i != 0 && v > g.requestRate {
+			g.requestRateIdx = i - 1
+			break
+		}
+	}
+
+	for i, v := range concurrencies {
+		if v == g.requestConcurrency {
+			g.concurrenciesIdx = i
+			break
+		} else if i != 0 && v > g.requestConcurrency {
+			g.concurrenciesIdx = i - 1
+			break
+		}
+	}
 
 	var err error
 	if runtime.GOOS == "windows" {
@@ -242,21 +277,25 @@ func (g *Gui) OnKey(k *terminalapi.Keyboard) {
 	case 'm': // cycle displayed metric
 		g.infoMu.Lock()
 		g.statsFormatterIdx = (g.statsFormatterIdx + 1) % len(statsFormatters)
+		g.statsFormatter = &statsFormatters[g.statsFormatterIdx]
 		g.infoMu.Unlock()
 		g.updateInfoText()
 	case 'd': // cycle duration
 		g.infoMu.Lock()
 		g.durationsIdx = (g.durationsIdx + 1) % len(durations)
+		g.duration = durations[g.durationsIdx]
 		g.infoMu.Unlock()
 		g.updateInfoText()
 	case 'r': // cycle rate
 		g.infoMu.Lock()
 		g.requestRateIdx = (g.requestRateIdx + 1) % len(requestRates)
+		g.requestRate = requestRates[g.requestRateIdx]
 		g.infoMu.Unlock()
 		g.updateInfoText()
 	case 'c': // cycle concurrency
 		g.infoMu.Lock()
 		g.concurrenciesIdx = (g.concurrenciesIdx + 1) % len(concurrencies)
+		g.requestConcurrency = concurrencies[g.concurrenciesIdx]
 		g.infoMu.Unlock()
 		g.updateInfoText()
 	}
@@ -267,12 +306,11 @@ func (g *Gui) StartLoader(ctx context.Context) {
 
 	g.infoMu.Lock()
 	l := &Loader{
-		// Source: NewStdinRequestSource(),
-		Source:      NewRandomRequestSource(sampleRequests),
+		Source:      g.source,
 		Backends:    g.backends,
-		Rate:        requestRates[g.requestRateIdx],    // per second
-		Concurrency: concurrencies[g.concurrenciesIdx], // concurrent requests per backend
-		Duration:    durations[g.durationsIdx],
+		Rate:        g.requestRate,
+		Concurrency: g.requestConcurrency,
+		Duration:    g.duration,
 		Timings:     timings,
 	}
 	g.infoMu.Unlock()
@@ -284,7 +322,7 @@ func (g *Gui) StartLoader(ctx context.Context) {
 
 	if err := l.Send(ctx); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			log.Printf("loader error: %v", err)
+			fmt.Fprintf(os.Stderr, "loader stopped: %v", err)
 		}
 	}
 	close(timings)
@@ -296,7 +334,11 @@ func (g *Gui) Update(ctx context.Context, coll *Collector) {
 	defer t.Stop()
 
 	chartDataMaxLen := 60
-	chartData := []float64{}
+	type chartData struct {
+		Requests []float64
+		TTFBP99  []float64
+	}
+	charts := map[string]*chartData{}
 
 	start := time.Now()
 	for {
@@ -306,7 +348,7 @@ func (g *Gui) Update(ctx context.Context, coll *Collector) {
 		case now := <-t.C:
 			g.infoMu.Lock()
 			formatter := statsFormatters[g.statsFormatterIdx]
-			duration := durations[g.durationsIdx]
+			duration := g.duration
 			g.infoMu.Unlock()
 
 			// Update the progress indicator
@@ -327,14 +369,19 @@ func (g *Gui) Update(ctx context.Context, coll *Collector) {
 					continue
 				}
 
-				if name == "local" {
-					if len(chartData) > chartDataMaxLen {
-						chartData = chartData[1:]
-					}
-					chartData = append(chartData, st.TTFB.P99*1000)
-					g.chart.Series("TTFB P99", chartData)
-
+				// Update charts
+				ch, ok := charts[name]
+				if !ok {
+					ch = &chartData{}
 				}
+				if len(ch.Requests) > chartDataMaxLen {
+					ch.Requests = ch.Requests[1:]
+					ch.TTFBP99 = ch.TTFBP99[1:]
+				}
+				ch.Requests = append(ch.Requests, float64(st.TotalRequests))
+				ch.TTFBP99 = append(ch.TTFBP99, st.TTFB.P99*1000)
+				charts[name] = ch
+				g.chart.Series(name, ch.TTFBP99)
 
 				formatter.Fn(name, &st, t)
 			}
@@ -346,21 +393,16 @@ func (g *Gui) updateInfoText() {
 	g.infoMu.Lock()
 	defer g.infoMu.Unlock()
 
-	formatter := statsFormatters[g.statsFormatterIdx]
-	duration := durations[g.durationsIdx]
-	requestRate := requestRates[g.requestRateIdx]
-	requestConcurrency := concurrencies[g.concurrenciesIdx]
-
 	g.infoText.Write("Metric: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)), text.WriteReplace())
-	g.infoText.Write(fmt.Sprintf("%-22s", formatter.Name))
+	g.infoText.Write(fmt.Sprintf("%-22s", g.statsFormatter.Name))
 	g.infoText.Write("  Experiment: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)))
 	g.infoText.Write(g.experimentName)
 	g.infoText.Write("  Duration: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)))
-	g.infoText.Write(fmt.Sprintf("%v", duration))
+	g.infoText.Write(fmt.Sprintf("%v", g.duration))
 	g.infoText.Write("  Rate: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)))
-	g.infoText.Write(fmt.Sprintf("%3.f/s", requestRate))
+	g.infoText.Write(fmt.Sprintf("%d/s", g.requestRate))
 	g.infoText.Write("  Concurrency: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)))
-	g.infoText.Write(fmt.Sprintf("%d", requestConcurrency))
+	g.infoText.Write(fmt.Sprintf("%d", g.requestConcurrency))
 }
 
 type StatsFormatter struct {

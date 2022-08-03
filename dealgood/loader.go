@@ -16,14 +16,14 @@ type Loader struct {
 	Source      RequestSource       // source of requests
 	Backends    []*Backend          // backends to send load to
 	Timings     chan *RequestTiming // channel to send timings to
-	Rate        float64             // maximum number of requests per second per backend
+	Rate        int                 // maximum number of requests per second per backend
 	Concurrency int                 // number of workers per backend
 	Duration    time.Duration
 }
 
 type LoadOptions struct {
-	Rate        float64 // maximum number of requests per second per backend
-	Concurrency int     // number of workers per backend
+	Rate        int // maximum number of requests per second per backend
+	Concurrency int // number of workers per backend
 	Duration    time.Duration
 }
 
@@ -53,7 +53,7 @@ func (l *Loader) Send(ctx context.Context) error {
 	}
 
 	// requestInterval is the minimum time to wait between requests
-	requestInterval := time.Duration(float64(time.Second) / l.Rate)
+	requestInterval := time.Duration(float64(time.Second) / float64(l.Rate))
 	lastRequestDone := time.Now()
 
 	for l.Source.Next() {
