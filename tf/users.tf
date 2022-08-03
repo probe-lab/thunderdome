@@ -30,3 +30,9 @@ resource "aws_instance" "testbox" {
     Name = each.key
   }
 }
+
+resource "aws_eip" "testbox" {
+  for_each = aws_instance.testbox
+  instance = each.value.id
+  vpc      = true
+}
