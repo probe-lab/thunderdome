@@ -23,10 +23,17 @@ var app = &cli.App{
 			Destination: &flags.experiment,
 			EnvVars:     []string{"DEALGOOD_EXPERIMENT"},
 		},
+		&cli.StringFlag{
+			Name:        "source",
+			Value:       "-",
+			Usage:       "Name of request source, use '-' to read JSON from stdin, 'random' to use some builtin random requests",
+			Destination: &flags.source,
+			EnvVars:     []string{"DEALGOOD_SOURCE"},
+		},
 		&cli.BoolFlag{
 			Name:        "nogui",
 			Usage:       "Disable GUI",
-			Value:       true,
+			Value:       false,
 			Destination: &flags.nogui,
 			EnvVars:     []string{"DEALGOOD_NOGUI"},
 		},
@@ -63,6 +70,7 @@ var app = &cli.App{
 
 var flags struct {
 	experiment  string
+	source      string
 	nogui       bool
 	baseURL     string
 	rate        int
@@ -79,7 +87,15 @@ func main() {
 }
 
 func Run(cc *cli.Context) error {
-	source := NewRandomRequestSource(sampleRequests)
+	var source RequestSource
+	switch flags.source {
+	case "random":
+		source = NewRandomRequestSource(sampleRequests)
+	case "-":
+		source = NewStdinRequestSource()
+	default:
+		return fmt.Errorf("unsupported source: %s", flags.source)
+	}
 
 	// Load the experiment definition or use a default one
 	var exp ExperimentJSON

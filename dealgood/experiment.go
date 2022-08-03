@@ -44,6 +44,10 @@ func validateExperiment(exp *ExperimentJSON) error {
 			return fmt.Errorf("backend %d must have a valid base url: %w", i+1, err)
 		}
 
+		if u.Path != "" {
+			return fmt.Errorf("backend %d base url should not have a path", i+1)
+		}
+
 		if be.Name == "" {
 			be.Name = u.Hostname()
 		}
