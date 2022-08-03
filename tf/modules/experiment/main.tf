@@ -61,16 +61,16 @@ resource "aws_ecs_task_definition" "target" {
       image       = each.value.image
       environment = concat(var.shared_env, each.value.environment)
       essential   = true
-      healthCheck = {
-        # if a host is totally dead, we want to replace it
-        # but if it's just really busy, we generally want to leave it alone
-        # so these health checks are pretty liberal with lots of retries
-        command     = ["CMD-SHELL", "curl -fsS -o /dev/null localhost:5001/debug/metrics/prometheus || exit 1"],
-        interval    = 30, # seconds
-        retries     = 10,
-        startPeriod = 300, # seconds
-        timeout     = 10   # seconds
-      }
+      # healthCheck = {
+      #   # if a host is totally dead, we want to replace it
+      #   # but if it's just really busy, we generally want to leave it alone
+      #   # so these health checks are pretty liberal with lots of retries
+      #   command     = ["CMD-SHELL", "curl -fsS -o /dev/null localhost:5001/debug/metrics/prometheus || exit 1"],
+      #   interval    = 30, # seconds
+      #   retries     = 10,
+      #   startPeriod = 300, # seconds
+      #   timeout     = 10   # seconds
+      # }
       logConfiguration = {
         logDriver = "awslogs",
         options = {
