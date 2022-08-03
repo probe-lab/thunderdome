@@ -36,6 +36,12 @@ var app = &cli.App{
 			Destination: &flags.source,
 			EnvVars:     []string{"DEALGOOD_SOURCE"},
 		},
+		&cli.StringFlag{
+			Name:        "source-param",
+			Usage:       "A parameter to be used with some sources",
+			Destination: &flags.sourceParam,
+			EnvVars:     []string{"DEALGOOD_SOURCE_PARAM"},
+		},
 		&cli.BoolFlag{
 			Name:        "nogui",
 			Usage:       "Disable GUI",
@@ -106,6 +112,7 @@ var flags struct {
 	experimentName string
 	experimentFile string
 	source         string
+	sourceParam    string
 	nogui          bool
 	targets        cli.StringSlice
 	host           string
@@ -131,10 +138,16 @@ func Run(cc *cli.Context) error {
 		flags.failures = false
 	}
 
+	var err error
 	var source RequestSource
 	switch flags.source {
 	case "random":
 		source = NewRandomRequestSource(sampleRequests)
+	case "nginxlog":
+		source, err = NewNginxLogRequestSource(flags.sourceParam)
+		if err != nil {
+			return fmt.Errorf("nginx source: %w", err)
+		}
 	case "-":
 		source = NewStdinRequestSource()
 	default:

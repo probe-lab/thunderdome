@@ -2,9 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -113,4 +116,47 @@ func (r *RandomRequestSource) Request() *Request {
 
 func (r *RandomRequestSource) Err() error {
 	return nil
+}
+
+// NewNginxLogRequestSource reads a stream of requests
+// from an nginx formatted access log file and returns a RandomRequestSource
+// that will serve the requests at random. Requests are filtered to GET
+// and paths /ipfs and /ipns
+func NewNginxLogRequestSource(fname string) (*RandomRequestSource, error) {
+	var reqs []*Request
+
+	f, err := os.Open(fname)
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		pos1 := bytes.IndexRune(line, '"')
+		pos2 := bytes.IndexRune(line[pos1+1:], '"')
+
+		fields := strings.SplitN(string(line[pos1+1:pos1+pos2+1]), " ", 3)
+		if len(fields) < 3 {
+			continue
+		}
+		if fields[0] != "GET" {
+			continue
+		}
+		if !strings.HasPrefix(fields[1], "/ipfs") && !strings.HasPrefix(fields[1], "/ipns") {
+			continue
+		}
+
+		reqs = append(reqs, &Request{
+			Method: fields[0],
+			URI:    fields[1],
+		})
+	}
+
+	if scanner.Err() != nil {
+		return nil, scanner.Err()
+	}
+
+	return NewRandomRequestSource(reqs), nil
 }
