@@ -70,7 +70,7 @@ resource "aws_ecs_task_definition" "target" {
       cpu   = 0
       image = each.value.image
 
-      environment = concat(var.shared_env, each.value.environment, [{ name = "IPFS_PATH", value = "/data" }])
+      environment = concat(var.shared_env, each.value.environment)
       essential   = true
       mountPoints = [{
         sourceVolume  = "data",
