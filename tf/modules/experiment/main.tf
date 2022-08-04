@@ -51,26 +51,31 @@ resource "aws_ecs_task_definition" "target" {
   execution_role_arn       = var.execution_role_arn
   task_role_arn            = aws_iam_role.experiment.arn
 
-  cpu      = 4 * 1024
-  memory   = 30 * 1024
+  cpu    = 4 * 1024
+  memory = 30 * 1024
+
   tags     = {}
   tags_all = {}
+
+  ephemeral_storage {
+    size_in_gib = 200
+  }
+
+  volume {
+    name = "data"
+  }
+
   container_definitions = jsonencode([
     {
-      cpu         = 0
-      image       = each.value.image
-      environment = concat(var.shared_env, each.value.environment)
+      cpu   = 0
+      image = each.value.image
+
+      environment = concat(var.shared_env, each.value.environment, [{ name = "IPFS_PATH", value = "/data" }])
       essential   = true
-      # healthCheck = {
-      #   # if a host is totally dead, we want to replace it
-      #   # but if it's just really busy, we generally want to leave it alone
-      #   # so these health checks are pretty liberal with lots of retries
-      #   command     = ["CMD-SHELL", "curl -fsS -o /dev/null localhost:5001/debug/metrics/prometheus || exit 1"],
-      #   interval    = 30, # seconds
-      #   retries     = 10,
-      #   startPeriod = 300, # seconds
-      #   timeout     = 10   # seconds
-      # }
+      mountPoints = [{
+        sourceVolume  = "data",
+        containerPath = "/data"
+      }]
       logConfiguration = {
         logDriver = "awslogs",
         options = {
@@ -81,9 +86,11 @@ resource "aws_ecs_task_definition" "target" {
       }
       mountPoints = []
       name        = "gateway"
+
       portMappings = [
         { containerPort = 8080, hostPort = 8080, protocol = "tcp" },
       ]
+
       ulimits = [
         {
           name      = "nofile",
