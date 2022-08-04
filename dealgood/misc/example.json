@@ -1,0 +1,16 @@
+{
+	"name": "example",
+	"duration": 120,
+	"rate": 300,
+	"concurrency": 10,
+	"backends": [
+		{
+			"name": "localhost1",
+			"base_url": "http://localhost:8080"
+		},
+		{
+			"name": "localhost2",
+			"base_url": "http://localhost:8080"
+		}
+	]
+}

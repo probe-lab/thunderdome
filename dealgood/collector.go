@@ -67,9 +67,17 @@ func (c *Collector) Run(ctx context.Context) {
 			if res.Dropped {
 				st.TotalDropped++
 			}
-			if res.StatusCode/100 == 5 {
-				st.TotalServerErrors++
+			switch res.StatusCode / 100 {
+			case 2:
+				st.TotalHttp2XX++
+			case 3:
+				st.TotalHttp3XX++
+			case 4:
+				st.TotalHttp4XX++
+			case 5:
+				st.TotalHttp5XX++
 			}
+
 			st.ConnectTime.Add(res.ConnectTime.Seconds(), 1)
 			st.TTFB.Add(res.TTFB.Seconds(), 1)
 			st.TotalTime.Add(res.TotalTime.Seconds(), 1)
@@ -83,7 +91,21 @@ func (c *Collector) Run(ctx context.Context) {
 					TotalRequests:      st.TotalRequests,
 					TotalConnectErrors: st.TotalConnectErrors,
 					TotalDropped:       st.TotalDropped,
-					TotalServerErrors:  st.TotalServerErrors,
+					TotalHttp2XX:       st.TotalHttp2XX,
+					TotalHttp3XX:       st.TotalHttp3XX,
+					TotalHttp4XX:       st.TotalHttp4XX,
+					TotalHttp5XX:       st.TotalHttp5XX,
+					ConnectTime: MetricVaues{
+						Mean: st.ConnectTime.Quantile(0.5),
+						Max:  st.ConnectTime.Quantile(1.0),
+						Min:  st.ConnectTime.Quantile(0.0),
+						P50:  st.ConnectTime.Quantile(0.50),
+						P75:  st.ConnectTime.Quantile(0.75),
+						P90:  st.ConnectTime.Quantile(0.90),
+						P95:  st.ConnectTime.Quantile(0.95),
+						P99:  st.ConnectTime.Quantile(0.99),
+						P999: st.ConnectTime.Quantile(0.999),
+					},
 					TTFB: MetricVaues{
 						Mean: st.TTFB.Quantile(0.5),
 						Max:  st.TTFB.Quantile(1.0),
@@ -94,6 +116,17 @@ func (c *Collector) Run(ctx context.Context) {
 						P95:  st.TTFB.Quantile(0.95),
 						P99:  st.TTFB.Quantile(0.99),
 						P999: st.TTFB.Quantile(0.999),
+					},
+					TotalTime: MetricVaues{
+						Mean: st.TotalTime.Quantile(0.5),
+						Max:  st.TotalTime.Quantile(1.0),
+						Min:  st.TotalTime.Quantile(0.0),
+						P50:  st.TotalTime.Quantile(0.50),
+						P75:  st.TotalTime.Quantile(0.75),
+						P90:  st.TotalTime.Quantile(0.90),
+						P95:  st.TotalTime.Quantile(0.95),
+						P99:  st.TotalTime.Quantile(0.99),
+						P999: st.TotalTime.Quantile(0.999),
 					},
 				}
 				_ = fmt.Printf
@@ -110,6 +143,9 @@ func (c *Collector) Run(ctx context.Context) {
 func (c *Collector) Latest() map[string]MetricSample {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if len(c.samples) == 0 {
+		return map[string]MetricSample{}
+	}
 	return c.samples[len(c.samples)-1]
 }
 
@@ -117,7 +153,10 @@ type BackendStats struct {
 	TotalRequests      int
 	TotalConnectErrors int
 	TotalDropped       int
-	TotalServerErrors  int
+	TotalHttp2XX       int
+	TotalHttp3XX       int
+	TotalHttp4XX       int
+	TotalHttp5XX       int
 	ConnectTime        *tdigest.TDigest
 	TTFB               *tdigest.TDigest
 	TotalTime          *tdigest.TDigest
@@ -127,8 +166,13 @@ type MetricSample struct {
 	TotalRequests      int
 	TotalConnectErrors int
 	TotalDropped       int
-	TotalServerErrors  int
+	TotalHttp2XX       int
+	TotalHttp3XX       int
+	TotalHttp4XX       int
+	TotalHttp5XX       int
+	ConnectTime        MetricVaues
 	TTFB               MetricVaues
+	TotalTime          MetricVaues
 }
 
 type MetricVaues struct {
