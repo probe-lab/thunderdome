@@ -70,6 +70,8 @@ func (c *Collector) Run(ctx context.Context) {
 			switch res.StatusCode / 100 {
 			case 2:
 				st.TotalHttp2XX++
+				st.TTFB.Add(res.TTFB.Seconds(), 1)
+				st.TotalTime.Add(res.TotalTime.Seconds(), 1)
 			case 3:
 				st.TotalHttp3XX++
 			case 4:
@@ -79,8 +81,6 @@ func (c *Collector) Run(ctx context.Context) {
 			}
 
 			st.ConnectTime.Add(res.ConnectTime.Seconds(), 1)
-			st.TTFB.Add(res.TTFB.Seconds(), 1)
-			st.TotalTime.Add(res.TotalTime.Seconds(), 1)
 			stats[res.BackendName] = st
 
 		case <-sampleTicker.C:
