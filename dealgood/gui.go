@@ -51,6 +51,10 @@ type Gui struct {
 	concurrenciesIdx   int
 	statsFormatterIdx  int
 	statsFormatter     *StatsFormatter
+
+	// latestSamples held here so we can view them even when experiment is stopped
+	latestSamplesMu sync.Mutex
+	latestSamples   map[string]MetricSample
 }
 
 var durations = []time.Duration{
@@ -299,6 +303,7 @@ func (g *Gui) OnKey(k *terminalapi.Keyboard) {
 		g.statsFormatter = &statsFormatters[g.statsFormatterIdx]
 		g.infoMu.Unlock()
 		g.updateInfoText()
+		g.redrawMetrics()
 	case 'd': // cycle duration
 		g.infoMu.Lock()
 		g.durationsIdx = (g.durationsIdx + 1) % len(durations)
@@ -382,6 +387,10 @@ func (g *Gui) Update(ctx context.Context, coll *Collector) {
 
 			latest := coll.Latest()
 
+			g.latestSamplesMu.Lock()
+			g.latestSamples = latest
+			g.latestSamplesMu.Unlock()
+
 			for name, t := range g.beStatsTexts {
 				st, ok := latest[name]
 				if !ok {
@@ -422,6 +431,25 @@ func (g *Gui) updateInfoText() {
 	g.infoText.Write(fmt.Sprintf("%d/s", g.requestRate))
 	g.infoText.Write("  Concurrency: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)))
 	g.infoText.Write(fmt.Sprintf("%d", g.requestConcurrency))
+}
+
+func (g *Gui) redrawMetrics() {
+	g.latestSamplesMu.Lock()
+	latest := g.latestSamples
+	g.latestSamplesMu.Unlock()
+
+	g.infoMu.Lock()
+	formatter := statsFormatters[g.statsFormatterIdx]
+	g.infoMu.Unlock()
+
+	for name, t := range g.beStatsTexts {
+		st, ok := latest[name]
+		if !ok {
+			continue
+		}
+
+		formatter.Fn(name, &st, t)
+	}
 }
 
 type StatsFormatter struct {
