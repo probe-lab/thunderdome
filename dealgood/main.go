@@ -59,14 +59,14 @@ var app = &cli.App{
 		&cli.IntFlag{
 			Name:        "rate",
 			Usage:       "Number of requests per second to send (if not using an experiment file)",
-			Value:       100,
+			Value:       10,
 			Destination: &flags.rate,
 			EnvVars:     []string{"DEALGOOD_RATE"},
 		},
 		&cli.IntFlag{
 			Name:        "concurrency",
 			Usage:       "Number of concurrent requests to send (if not using an experiment file)",
-			Value:       8,
+			Value:       10,
 			Destination: &flags.concurrency,
 			EnvVars:     []string{"DEALGOOD_CONCURRENCY"},
 		},

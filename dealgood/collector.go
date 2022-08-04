@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -55,9 +56,9 @@ func (c *Collector) Run(ctx context.Context) {
 			st, ok := stats[res.BackendName]
 			if !ok {
 				st = &BackendStats{
-					ConnectTime: tdigest.New(),
-					TTFB:        tdigest.New(),
-					TotalTime:   tdigest.New(),
+					ConnectTime: NewTimeMetric(),
+					TTFB:        NewTimeMetric(),
+					TotalTime:   NewTimeMetric(),
 				}
 			}
 			st.TotalRequests++
@@ -70,8 +71,8 @@ func (c *Collector) Run(ctx context.Context) {
 			switch res.StatusCode / 100 {
 			case 2:
 				st.TotalHttp2XX++
-				st.TTFB.Add(res.TTFB.Seconds(), 1)
-				st.TotalTime.Add(res.TotalTime.Seconds(), 1)
+				st.TTFB.Add(res.TTFB.Seconds())
+				st.TotalTime.Add(res.TotalTime.Seconds())
 			case 3:
 				st.TotalHttp3XX++
 			case 4:
@@ -80,7 +81,7 @@ func (c *Collector) Run(ctx context.Context) {
 				st.TotalHttp5XX++
 			}
 
-			st.ConnectTime.Add(res.ConnectTime.Seconds(), 1)
+			st.ConnectTime.Add(res.ConnectTime.Seconds())
 			stats[res.BackendName] = st
 
 		case <-sampleTicker.C:
@@ -96,37 +97,37 @@ func (c *Collector) Run(ctx context.Context) {
 					TotalHttp4XX:       st.TotalHttp4XX,
 					TotalHttp5XX:       st.TotalHttp5XX,
 					ConnectTime: MetricVaues{
-						Mean: st.ConnectTime.Quantile(0.5),
-						Max:  st.ConnectTime.Quantile(1.0),
-						Min:  st.ConnectTime.Quantile(0.0),
-						P50:  st.ConnectTime.Quantile(0.50),
-						P75:  st.ConnectTime.Quantile(0.75),
-						P90:  st.ConnectTime.Quantile(0.90),
-						P95:  st.ConnectTime.Quantile(0.95),
-						P99:  st.ConnectTime.Quantile(0.99),
-						P999: st.ConnectTime.Quantile(0.999),
+						Mean: st.ConnectTime.Mean(),
+						Max:  st.ConnectTime.Max,
+						Min:  st.ConnectTime.Min,
+						P50:  st.ConnectTime.Digest.Quantile(0.50),
+						P75:  st.ConnectTime.Digest.Quantile(0.75),
+						P90:  st.ConnectTime.Digest.Quantile(0.90),
+						P95:  st.ConnectTime.Digest.Quantile(0.95),
+						P99:  st.ConnectTime.Digest.Quantile(0.99),
+						P999: st.ConnectTime.Digest.Quantile(0.999),
 					},
 					TTFB: MetricVaues{
-						Mean: st.TTFB.Quantile(0.5),
-						Max:  st.TTFB.Quantile(1.0),
-						Min:  st.TTFB.Quantile(0.0),
-						P50:  st.TTFB.Quantile(0.50),
-						P75:  st.TTFB.Quantile(0.75),
-						P90:  st.TTFB.Quantile(0.90),
-						P95:  st.TTFB.Quantile(0.95),
-						P99:  st.TTFB.Quantile(0.99),
-						P999: st.TTFB.Quantile(0.999),
+						Mean: st.TTFB.Mean(),
+						Max:  st.TTFB.Max,
+						Min:  st.TTFB.Min,
+						P50:  st.TTFB.Digest.Quantile(0.50),
+						P75:  st.TTFB.Digest.Quantile(0.75),
+						P90:  st.TTFB.Digest.Quantile(0.90),
+						P95:  st.TTFB.Digest.Quantile(0.95),
+						P99:  st.TTFB.Digest.Quantile(0.99),
+						P999: st.TTFB.Digest.Quantile(0.999),
 					},
 					TotalTime: MetricVaues{
-						Mean: st.TotalTime.Quantile(0.5),
-						Max:  st.TotalTime.Quantile(1.0),
-						Min:  st.TotalTime.Quantile(0.0),
-						P50:  st.TotalTime.Quantile(0.50),
-						P75:  st.TotalTime.Quantile(0.75),
-						P90:  st.TotalTime.Quantile(0.90),
-						P95:  st.TotalTime.Quantile(0.95),
-						P99:  st.TotalTime.Quantile(0.99),
-						P999: st.TotalTime.Quantile(0.999),
+						Mean: st.TotalTime.Mean(),
+						Max:  st.TotalTime.Max,
+						Min:  st.TotalTime.Min,
+						P50:  st.TotalTime.Digest.Quantile(0.50),
+						P75:  st.TotalTime.Digest.Quantile(0.75),
+						P90:  st.TotalTime.Digest.Quantile(0.90),
+						P95:  st.TotalTime.Digest.Quantile(0.95),
+						P99:  st.TotalTime.Digest.Quantile(0.99),
+						P999: st.TotalTime.Digest.Quantile(0.999),
 					},
 				}
 				_ = fmt.Printf
@@ -157,9 +158,44 @@ type BackendStats struct {
 	TotalHttp3XX       int
 	TotalHttp4XX       int
 	TotalHttp5XX       int
-	ConnectTime        *tdigest.TDigest
-	TTFB               *tdigest.TDigest
-	TotalTime          *tdigest.TDigest
+	ConnectTime        *TimeMetric
+	TTFB               *TimeMetric
+	TotalTime          *TimeMetric
+}
+
+type TimeMetric struct {
+	Digest *tdigest.TDigest
+	Count  int
+	Sum    float64
+	Min    float64
+	Max    float64
+}
+
+func NewTimeMetric() *TimeMetric {
+	return &TimeMetric{
+		Digest: tdigest.New(),
+		Min:    math.NaN(),
+		Max:    math.NaN(),
+	}
+}
+
+func (t *TimeMetric) Add(v float64) {
+	t.Count++
+	t.Sum += v
+	t.Digest.Add(v, 1)
+	if math.IsNaN(t.Min) || v < t.Min {
+		t.Min = v
+	}
+	if math.IsNaN(t.Max) || v > t.Max {
+		t.Max = v
+	}
+}
+
+func (t *TimeMetric) Mean() float64 {
+	if t.Count == 0 {
+		return 0
+	}
+	return t.Sum / float64(t.Count)
 }
 
 type MetricSample struct {
