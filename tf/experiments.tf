@@ -52,6 +52,35 @@ module "tracing" {
   }
 }
 
+module "peering" {
+  source = "./modules/experiment"
+
+  name = "peering"
+
+  ecs_cluster_id     = module.ecs.cluster_id
+  vpc_subnets        = module.vpc.public_subnets
+  security_groups    = [aws_security_group.target.id]
+  execution_role_arn = aws_iam_role.ecsTaskExecutionRole.arn
+  log_group_name     = aws_cloudwatch_log_group.logs.name
+
+  aws_service_discovery_private_dns_namespace_id = aws_service_discovery_private_dns_namespace.main.id
+
+  shared_env = [
+    { name = "IPFS_PROFILE", value = "server" },
+  ]
+
+  targets = {
+    "with" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:peering-with"
+      environment = []
+    }
+    "without" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:peering-without"
+      environment = []
+    }
+  }
+}
+
 resource "aws_security_group" "target" {
   name   = "target"
   vpc_id = module.vpc.vpc_id
