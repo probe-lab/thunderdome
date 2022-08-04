@@ -65,6 +65,7 @@ var durations = []time.Duration{
 var requestRates = []int{
 	10,
 	20,
+	40,
 	60,
 	80,
 	100,
@@ -82,8 +83,8 @@ var concurrencies = []int{
 	2,
 	4,
 	8,
-	12,
-	16,
+	10,
+	15,
 	20,
 	30,
 	40,
@@ -484,6 +485,16 @@ var statsFormatters = []StatsFormatter{
 				formatStatLineInt(t, "HTTP 3xx", s.TotalHttp3XX),
 				formatStatLineInt(t, "HTTP 4xx", s.TotalHttp4XX),
 				formatStatLineInt(t, "HTTP 5xx", s.TotalHttp5XX),
+			)
+		},
+	},
+	{
+		Name: "Request failure rates",
+		Fn: func(name string, s *MetricSample, t *text.Text) {
+			writeStat(t, name,
+				formatStatLineFloat(t, "Conn Err %", 100*(float64(s.TotalConnectErrors)/float64(s.TotalRequests))),
+				formatStatLineFloat(t, "Dropped %", 100*(float64(s.TotalDropped)/float64(s.TotalRequests))),
+				formatStatLineFloat(t, "Serv. Err %", 100*(float64(s.TotalHttp5XX)/float64(s.TotalRequests))),
 			)
 		},
 	},
