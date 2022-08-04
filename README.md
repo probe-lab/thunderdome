@@ -38,3 +38,21 @@ terraform apply
 ```
 
 As usual
+
+## Getting a console on a running container
+
+ECS can inject an SSM agent into any running container so that you can
+effectively "SSH" into it.
+
+* Setup your credentials for an IAM user/role that has SSM permissions
+* [Install AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+* [Install the Session Manager plugin for AWS CLI](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
+* Find the ECS task ID that you want to SSH into:
+  - Log in to the AWS Console
+  - Go to ECS
+  - Select the eu-west-1 region
+  - Select Clusters -> thunderdome
+  - Select the Tasks tab
+  - The Task ID is the UUID in the first column
+* `export TASK_ID=<task_id> CONTAINER=gateway`
+* `aws ecs execute-command --task $TASK_ID  --cluster thunderdome --container $CONTAINER --command '/bin/sh' --interactive`
