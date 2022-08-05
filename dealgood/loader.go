@@ -62,7 +62,7 @@ func (l *Loader) Send(ctx context.Context) error {
 	for l.Source.Next() {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil
 		default:
 		}
 

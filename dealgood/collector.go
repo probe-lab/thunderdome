@@ -96,7 +96,7 @@ func (c *Collector) Run(ctx context.Context) {
 					TotalHttp3XX:       st.TotalHttp3XX,
 					TotalHttp4XX:       st.TotalHttp4XX,
 					TotalHttp5XX:       st.TotalHttp5XX,
-					ConnectTime: MetricVaues{
+					ConnectTime: MetricValues{
 						Mean: st.ConnectTime.Mean(),
 						Max:  st.ConnectTime.Max,
 						Min:  st.ConnectTime.Min,
@@ -107,7 +107,7 @@ func (c *Collector) Run(ctx context.Context) {
 						P99:  st.ConnectTime.Digest.Quantile(0.99),
 						P999: st.ConnectTime.Digest.Quantile(0.999),
 					},
-					TTFB: MetricVaues{
+					TTFB: MetricValues{
 						Mean: st.TTFB.Mean(),
 						Max:  st.TTFB.Max,
 						Min:  st.TTFB.Min,
@@ -118,7 +118,7 @@ func (c *Collector) Run(ctx context.Context) {
 						P99:  st.TTFB.Digest.Quantile(0.99),
 						P999: st.TTFB.Digest.Quantile(0.999),
 					},
-					TotalTime: MetricVaues{
+					TotalTime: MetricValues{
 						Mean: st.TotalTime.Mean(),
 						Max:  st.TotalTime.Max,
 						Min:  st.TotalTime.Min,
@@ -206,12 +206,13 @@ type MetricSample struct {
 	TotalHttp3XX       int
 	TotalHttp4XX       int
 	TotalHttp5XX       int
-	ConnectTime        MetricVaues
-	TTFB               MetricVaues
-	TotalTime          MetricVaues
+	ConnectTime        MetricValues
+	TTFB               MetricValues
+	TotalTime          MetricValues
 }
 
-type MetricVaues struct {
+// MetricValues contains timings in seconds
+type MetricValues struct {
 	Mean float64
 	Max  float64
 	Min  float64

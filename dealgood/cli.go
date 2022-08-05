@@ -57,6 +57,10 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 			fmt.Fprintf(os.Stderr, "loader stopped: %v", err)
 		}
 	}
+
+	latest := coll.Latest()
+	printSampleTimings(ctx, latest, exp)
+
 	return nil
 }
 
@@ -82,10 +86,64 @@ func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment
 				}
 
 				_ = st
-				fmt.Fprintf(w, "% 5d\t%12s\t% 9d\t% 9d\t% 9d\t% 9d\t%8.4f\t%8.4f\t%8.4f\n", now.Sub(start)/time.Second, be.Name, st.TotalRequests, st.TotalConnectErrors, st.TotalDropped, st.TotalHttp5XX, st.TTFB.P50, st.TTFB.P90, st.TTFB.P99)
+				fmt.Fprintf(w, "% 5d\t%12s\t% 9d\t% 9d\t% 9d\t% 9d\t%9.3f\t%9.3f\t%9.3f\n", now.Sub(start)/time.Second, be.Name, st.TotalRequests, st.TotalConnectErrors, st.TotalDropped, st.TotalHttp5XX, st.TTFB.P50*1000, st.TTFB.P90*1000, st.TTFB.P99*1000)
 
 			}
 			w.Flush()
 		}
+	}
+}
+
+func printSampleTimings(ctx context.Context, sample map[string]MetricSample, exp *ExperimentJSON) {
+	for _, be := range exp.Backends {
+		st, ok := sample[be.Name]
+		if !ok {
+			continue
+		}
+
+		connectedRequests := st.TotalRequests - st.TotalConnectErrors - st.TotalDropped
+
+		fmt.Printf("Backend:  %s\n", be.Name)
+		fmt.Printf("Base URL: %s\n", be.BaseURL)
+		fmt.Printf("------------------------------\n")
+		fmt.Printf("Issued:          %9d\n", st.TotalRequests)
+		fmt.Printf("Connect Errors:  %9d (%6.2f%%)\n", st.TotalConnectErrors, 100*float64(st.TotalConnectErrors)/float64(st.TotalRequests))
+		fmt.Printf("Dropped:         %9d (%6.2f%%)\n", st.TotalDropped, 100*float64(st.TotalDropped)/float64(st.TotalRequests))
+		fmt.Printf("Connected:       %9d (%6.2f%%)\n", connectedRequests, 100*float64(connectedRequests)/float64(st.TotalRequests))
+		fmt.Println()
+		fmt.Printf("HTTP 2XX Responses: %9d (%6.2f%%)\n", st.TotalHttp2XX, 100*float64(st.TotalHttp2XX)/float64(connectedRequests))
+		fmt.Printf("HTTP 3XX Responses: %9d (%6.2f%%)\n", st.TotalHttp3XX, 100*float64(st.TotalHttp3XX)/float64(connectedRequests))
+		fmt.Printf("HTTP 4XX Responses: %9d (%6.2f%%)\n", st.TotalHttp4XX, 100*float64(st.TotalHttp4XX)/float64(connectedRequests))
+		fmt.Printf("HTTP 5XX Responses: %9d (%6.2f%%)\n", st.TotalHttp5XX, 100*float64(st.TotalHttp5XX)/float64(connectedRequests))
+		fmt.Println()
+		fmt.Printf("Time to connect\n")
+		fmt.Printf("  Mean: %9.3fms\n", st.ConnectTime.Mean*1000)
+		fmt.Printf("  Min:  %9.3fms\n", st.ConnectTime.Min*1000)
+		fmt.Printf("  Max:  %9.3fms\n", st.ConnectTime.Max*1000)
+		fmt.Printf("  P50:  %9.3fms\n", st.ConnectTime.P50*1000)
+		fmt.Printf("  P90:  %9.3fms\n", st.ConnectTime.P90*1000)
+		fmt.Printf("  P95:  %9.3fms\n", st.ConnectTime.P95*1000)
+		fmt.Printf("  P99:  %9.3fms\n", st.ConnectTime.P99*1000)
+		fmt.Println()
+		fmt.Printf("Time to first byte\n")
+		fmt.Printf("  Mean: %9.3fms\n", st.TTFB.Mean*1000)
+		fmt.Printf("  Min:  %9.3fms\n", st.TTFB.Min*1000)
+		fmt.Printf("  Max:  %9.3fms\n", st.TTFB.Max*1000)
+		fmt.Printf("  P50:  %9.3fms\n", st.TTFB.P50*1000)
+		fmt.Printf("  P90:  %9.3fms\n", st.TTFB.P90*1000)
+		fmt.Printf("  P95:  %9.3fms\n", st.TTFB.P95*1000)
+		fmt.Printf("  P99:  %9.3fms\n", st.TTFB.P99*1000)
+		fmt.Println()
+		fmt.Printf("Total request time\n")
+		fmt.Printf("  Mean: %9.3fms\n", st.TotalTime.Mean*1000)
+		fmt.Printf("  Min:  %9.3fms\n", st.TotalTime.Min*1000)
+		fmt.Printf("  Max:  %9.3fms\n", st.TotalTime.Max*1000)
+		fmt.Printf("  P50:  %9.3fms\n", st.TotalTime.P50*1000)
+		fmt.Printf("  P90:  %9.3fms\n", st.TotalTime.P90*1000)
+		fmt.Printf("  P95:  %9.3fms\n", st.TotalTime.P95*1000)
+		fmt.Printf("  P99:  %9.3fms\n", st.TotalTime.P99*1000)
+
+		fmt.Println()
+
 	}
 }
