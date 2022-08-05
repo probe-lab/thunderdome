@@ -71,10 +71,10 @@ func (l *Loader) Send(ctx context.Context) error {
 			time.Sleep(intervalToNextRequest)
 		}
 
-		// TODO throttle to defined request rate
+		req := l.Source.Request()
 		for _, be := range l.Backends {
 			select {
-			case be.Requests <- l.Source.Request():
+			case be.Requests <- &req:
 			default:
 				l.Timings <- &RequestTiming{
 					BackendName: be.Name,

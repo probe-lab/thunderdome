@@ -14,7 +14,6 @@ import (
 
 type Worker struct {
 	Backend       *Backend
-	Requests      chan *Request
 	PrintFailures bool
 }
 

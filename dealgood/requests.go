@@ -41,7 +41,7 @@ type RequestSource interface {
 	Next() bool
 
 	// Request returns the current request from the stream.
-	Request() *Request
+	Request() Request
 
 	// Err returns any error that was encountered while advancing the stream.
 	Err() error
@@ -82,8 +82,8 @@ func (s *StdinRequestSource) Next() bool {
 	return true
 }
 
-func (s *StdinRequestSource) Request() *Request {
-	return &s.req
+func (s *StdinRequestSource) Request() Request {
+	return s.req
 }
 
 func (s *StdinRequestSource) Err() error {
@@ -110,8 +110,8 @@ func (r *RandomRequestSource) Next() bool {
 	return true
 }
 
-func (r *RandomRequestSource) Request() *Request {
-	return r.reqs[r.idx]
+func (r *RandomRequestSource) Request() Request {
+	return *r.reqs[r.idx]
 }
 
 func (r *RandomRequestSource) Err() error {
