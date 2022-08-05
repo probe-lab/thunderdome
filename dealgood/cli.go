@@ -95,17 +95,22 @@ func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment
 }
 
 func printSampleTimings(ctx context.Context, sample map[string]MetricSample, exp *ExperimentJSON) {
-	for _, be := range exp.Backends {
+	for i, be := range exp.Backends {
+		if i > 0 {
+			fmt.Println()
+		}
+		fmt.Printf("Backend:  %s\n", be.Name)
+		fmt.Printf("Base URL: %s\n", be.BaseURL)
+		fmt.Printf("------------------------------\n")
+
 		st, ok := sample[be.Name]
 		if !ok {
+			fmt.Println("no metrics available")
 			continue
 		}
 
 		connectedRequests := st.TotalRequests - st.TotalConnectErrors - st.TotalDropped
 
-		fmt.Printf("Backend:  %s\n", be.Name)
-		fmt.Printf("Base URL: %s\n", be.BaseURL)
-		fmt.Printf("------------------------------\n")
 		fmt.Printf("Issued:          %9d\n", st.TotalRequests)
 		fmt.Printf("Connect Errors:  %9d (%6.2f%%)\n", st.TotalConnectErrors, 100*float64(st.TotalConnectErrors)/float64(st.TotalRequests))
 		fmt.Printf("Dropped:         %9d (%6.2f%%)\n", st.TotalDropped, 100*float64(st.TotalDropped)/float64(st.TotalRequests))
@@ -142,8 +147,5 @@ func printSampleTimings(ctx context.Context, sample map[string]MetricSample, exp
 		fmt.Printf("  P90:  %9.3fms\n", st.TotalTime.P90*1000)
 		fmt.Printf("  P95:  %9.3fms\n", st.TotalTime.P95*1000)
 		fmt.Printf("  P99:  %9.3fms\n", st.TotalTime.P99*1000)
-
-		fmt.Println()
-
 	}
 }
