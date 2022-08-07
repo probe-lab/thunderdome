@@ -20,6 +20,13 @@ provider "aws" {
 
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
+data "aws_kms_key" "default_secretsmanager_key" {
+  key_id = "arn:aws:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:key/d32eafb8-e9b3-44f2-9703-fd4663949020"
+}
+
+data "aws_secretsmanager_secret" "grafana-push-secret" {
+  arn = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:grafana-push-MxjNiv"
+}
 
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
@@ -77,6 +84,11 @@ module "ecs" {
 
 resource "aws_ecr_repository" "thunderdome" {
   name                 = "thunderdome"
+  image_tag_mutability = "MUTABLE"
+}
+
+resource "aws_ecr_repository" "grafana-agent" {
+  name                 = "grafana-agent"
   image_tag_mutability = "MUTABLE"
 }
 

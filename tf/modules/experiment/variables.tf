@@ -28,3 +28,7 @@ variable "targets" {}
 variable "log_group_name" {}
 
 variable "aws_service_discovery_private_dns_namespace_id" {}
+
+variable "grafana_secrets" {
+  default = []
+}

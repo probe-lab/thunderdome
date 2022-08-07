@@ -1,0 +1,4 @@
+FROM grafana/agent:v0.26.1
+
+COPY agent.yaml /etc/agent/agent.yaml
+

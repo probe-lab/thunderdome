@@ -62,20 +62,27 @@ resource "aws_ecs_task_definition" "target" {
   }
 
   volume {
-    name = "data"
+    name = "ipfs-data"
+  }
+
+  volume {
+    name = "grafana-agent-data"
   }
 
   container_definitions = jsonencode([
     {
-      cpu   = 0
-      image = each.value.image
+      name      = "gateway"
+      image     = each.value.image
+      cpu       = 0
+      essential = true
 
       environment = concat(var.shared_env, each.value.environment)
-      essential   = true
+
       mountPoints = [{
-        sourceVolume  = "data",
-        containerPath = "/data"
+        sourceVolume  = "ipfs-data",
+        containerPath = "/data/ipfs"
       }]
+
       logConfiguration = {
         logDriver = "awslogs",
         options = {
@@ -84,8 +91,6 @@ resource "aws_ecs_task_definition" "target" {
           awslogs-stream-prefix = "ecs"
         }
       }
-      mountPoints = []
-      name        = "gateway"
 
       portMappings = [
         { containerPort = 8080, hostPort = 8080, protocol = "tcp" },
@@ -99,7 +104,38 @@ resource "aws_ecs_task_definition" "target" {
         }
       ]
       volumesFrom = []
+    },
+    {
+      command = [
+        "-metrics.wal-directory=/data/grafana-agent",
+        "-config.expand-env",
+        "-config.file=/etc/agent/agent.yaml"
+      ]
+      cpu   = 0
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/grafana-agent:latest"
+      environment = [
+        # we use this for setting labels on metrics
+        { name = "TARGET_NAME", value = "${var.name}-${each.key}" }
+      ]
+      essential = true
+      logConfiguration = {
+        logDriver = "awslogs",
+        options = {
+          awslogs-group         = var.log_group_name,
+          awslogs-region        = "${data.aws_region.current.name}",
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+      mountPoints = [{
+        sourceVolume  = "grafana-agent-data",
+        containerPath = "/data/grafana-agent"
+      }]
+      name         = "grafana-agent"
+      portMappings = []
+      secrets      = var.grafana_secrets
+      volumesFrom  = []
     }
+
   ])
 }
 

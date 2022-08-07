@@ -1,15 +1,18 @@
 module "tracing" {
   source = "./modules/experiment"
+  name   = "tracing"
 
-  name = "tracing"
-
-  ecs_cluster_id     = module.ecs.cluster_id
-  vpc_subnets        = module.vpc.public_subnets
-  security_groups    = [aws_security_group.target.id]
-  execution_role_arn = aws_iam_role.ecsTaskExecutionRole.arn
-  log_group_name     = aws_cloudwatch_log_group.logs.name
-
+  ecs_cluster_id                                 = module.ecs.cluster_id
+  vpc_subnets                                    = module.vpc.public_subnets
+  security_groups                                = [aws_security_group.target.id]
+  execution_role_arn                             = aws_iam_role.ecsTaskExecutionRole.arn
+  log_group_name                                 = aws_cloudwatch_log_group.logs.name
   aws_service_discovery_private_dns_namespace_id = aws_service_discovery_private_dns_namespace.main.id
+
+  grafana_secrets = [
+    { name = "GRAFANA_USER", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:username::" },
+    { name = "GRAFANA_PASS", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:password::" }
+  ]
 
   shared_env = [
     { name = "IPFS_PROFILE", value = "server" },
@@ -54,16 +57,18 @@ module "tracing" {
 
 module "peering" {
   source = "./modules/experiment"
+  name   = "peering"
 
-  name = "peering"
-
-  ecs_cluster_id     = module.ecs.cluster_id
-  vpc_subnets        = module.vpc.public_subnets
-  security_groups    = [aws_security_group.target.id]
-  execution_role_arn = aws_iam_role.ecsTaskExecutionRole.arn
-  log_group_name     = aws_cloudwatch_log_group.logs.name
-
+  ecs_cluster_id                                 = module.ecs.cluster_id
+  vpc_subnets                                    = module.vpc.public_subnets
+  security_groups                                = [aws_security_group.target.id]
+  execution_role_arn                             = aws_iam_role.ecsTaskExecutionRole.arn
+  log_group_name                                 = aws_cloudwatch_log_group.logs.name
   aws_service_discovery_private_dns_namespace_id = aws_service_discovery_private_dns_namespace.main.id
+  grafana_secrets = [
+    { name = "GRAFANA_USER", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:username::" },
+    { name = "GRAFANA_PASS", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:password::" }
+  ]
 
   shared_env = [
     { name = "IPFS_PROFILE", value = "server" },
