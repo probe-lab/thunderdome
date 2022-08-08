@@ -18,7 +18,11 @@ metrics:
           scheme: http
           static_configs:
             - targets: ['localhost:5001']
-          relabel_configs:
-            - source_labels: [__address__]
-              replacement: ${TARGET_NAME}
-              target_label: name
+              labels:
+                experiment: ${THUNDERDOME_EXPERIMENT}
+                target: ${THUNDERDOME_TARGET}
+          metric_relabel_configs:
+            - target_label: instance
+              replacement: ""
+            - target_label: __address__
+              replacement: ""

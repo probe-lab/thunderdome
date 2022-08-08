@@ -112,10 +112,11 @@ resource "aws_ecs_task_definition" "target" {
         "-config.file=/etc/agent/agent.yaml"
       ]
       cpu   = 0
-      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/grafana-agent:latest"
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/grafana-agent:ca4c691"
       environment = [
-        # we use this for setting labels on metrics
-        { name = "TARGET_NAME", value = "${var.name}-${each.key}" }
+        # we use these for setting labels on metrics
+        { name = "THUNDERDOME_EXPERIMENT", value = var.name },
+        { name = "THUNDERDOME_TARGET", value = each.key }
       ]
       essential = true
       logConfiguration = {
