@@ -26,3 +26,27 @@ metrics:
               replacement: ""
             - target_label: __address__
               replacement: ""
+traces:
+  configs:
+  - name: thunderdome
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+          http:
+    attributes:
+      actions:
+        - action: upsert
+          key: env
+          value: thunderdome
+        - action: upsert
+          key: experiment
+          value: ${THUNDERDOME_EXPERIMENT}
+        - action: upsert
+          key: target
+          value: ${THUNDERDOME_TARGET}
+    remote_write:
+      - endpoint: tempo-us-central1.grafana.net:443
+        basic_auth:
+          username: 76
+          password: ${GRAFANA_PASS}
