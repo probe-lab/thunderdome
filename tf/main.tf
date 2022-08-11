@@ -38,14 +38,17 @@ module "vpc" {
   private_subnets = ["10.0.1.0/24"]
   public_subnets  = ["10.0.100.0/24"]
 
-  enable_ipv6                                    = true
-  assign_ipv6_address_on_creation                = true
+  enable_ipv6 = true # This is mostly historic coincidence as we started out with it enabled
+
+  # we don't assign ipv6 addresses by default as we can't block ipv6 traffic with a NACL
+  assign_ipv6_address_on_creation                = false
   private_subnet_assign_ipv6_address_on_creation = false
 
   public_subnet_ipv6_prefixes  = [0, 1]
   private_subnet_ipv6_prefixes = [2, 3]
 
-  # Need both of these, see https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-private-hosted-zones
+  # Need both of these to make DNS auto-discovery work
+  # see https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-private-hosted-zones
   enable_dns_hostnames = true
   enable_dns_support   = true
 
@@ -60,8 +63,6 @@ resource "aws_service_discovery_private_dns_namespace" "main" {
   description = "private dns"
   vpc         = module.vpc.vpc_id
 }
-
-
 
 resource "aws_eip" "nat" {
   count = 3
