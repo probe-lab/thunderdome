@@ -13,8 +13,10 @@ import (
 )
 
 type Worker struct {
-	Backend       *Backend
-	PrintFailures bool
+	Backend        *Backend
+	ExperimentName string
+	Client         *http.Client
+	PrintFailures  bool
 }
 
 func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *RequestTiming) {
@@ -81,14 +83,15 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 	start = time.Now()
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := w.Client.Do(req)
 	if err != nil {
 		if w.PrintFailures {
 			fmt.Fprintf(os.Stderr, "%s %s => error %v\n", req.Method, req.URL, err)
 		}
 		return &RequestTiming{
-			BackendName:  w.Backend.Name,
-			ConnectError: true,
+			ExperimentName: w.ExperimentName,
+			BackendName:    w.Backend.Name,
+			ConnectError:   true,
 		}
 	}
 	defer resp.Body.Close()
@@ -104,10 +107,11 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 	}
 
 	return &RequestTiming{
-		BackendName: w.Backend.Name,
-		StatusCode:  resp.StatusCode,
-		ConnectTime: connectTime,
-		TTFB:        ttfb,
-		TotalTime:   totalTime,
+		ExperimentName: w.ExperimentName,
+		BackendName:    w.Backend.Name,
+		StatusCode:     resp.StatusCode,
+		ConnectTime:    connectTime,
+		TTFB:           ttfb,
+		TotalTime:      totalTime,
 	}
 }

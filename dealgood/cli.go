@@ -15,7 +15,10 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 		close(timings)
 	}()
 
-	coll := NewCollector(timings, 100*time.Millisecond)
+	coll, err := NewCollector(timings, 100*time.Millisecond)
+	if err != nil {
+		return fmt.Errorf("new collector: %w", err)
+	}
 	go coll.Run(ctx)
 
 	if printHeader {
@@ -36,12 +39,13 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 	}
 
 	l := &Loader{
-		Source:        source,
-		Rate:          exp.Rate,
-		Concurrency:   exp.Concurrency,
-		Duration:      time.Duration(exp.Duration) * time.Second,
-		Timings:       timings,
-		PrintFailures: printFailures,
+		Source:         source,
+		ExperimentName: exp.Name,
+		Rate:           exp.Rate,
+		Concurrency:    exp.Concurrency,
+		Duration:       time.Duration(exp.Duration) * time.Second,
+		Timings:        timings,
+		PrintFailures:  printFailures,
 	}
 
 	for _, be := range exp.Backends {

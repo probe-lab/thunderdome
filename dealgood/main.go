@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
+	"contrib.go.opencensus.io/exporter/prometheus"
+	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/urfave/cli/v2"
+	"go.opencensus.io/stats/view"
 )
 
 const appName = "dealgood"
@@ -105,6 +109,13 @@ var app = &cli.App{
 			Destination: &flags.quiet,
 			EnvVars:     []string{"DEALGOOD_QUIET"},
 		},
+		&cli.StringFlag{
+			Name:        "prometheus-addr",
+			Usage:       "Network address to start a prometheus metric exporter server on (example: :9991)",
+			Value:       "",
+			Destination: &flags.prometheusAddr,
+			EnvVars:     []string{"DEALGOOD_PROMETHEUS_ADDR"},
+		},
 	},
 }
 
@@ -122,6 +133,7 @@ var flags struct {
 	timings        bool
 	failures       bool
 	quiet          bool
+	prometheusAddr string
 }
 
 func main() {
@@ -177,6 +189,12 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("experiment: %w", err)
 	}
 
+	if flags.prometheusAddr != "" {
+		if err := startPrometheusServer(flags.prometheusAddr); err != nil {
+			return fmt.Errorf("start prometheus: %w", err)
+		}
+	}
+
 	if flags.nogui {
 		return nogui(cc.Context, source, &exp, !flags.quiet, flags.timings, flags.failures)
 	}
@@ -199,5 +217,27 @@ func readExperimentFile(fname string, exp *ExperimentJSON) error {
 	if err := json.NewDecoder(expf).Decode(exp); err != nil {
 		return fmt.Errorf("parse: %w", err)
 	}
+	return nil
+}
+
+func startPrometheusServer(addr string) error {
+	pe, err := prometheus.NewExporter(prometheus.Options{
+		Namespace:  appName,
+		Registerer: prom.DefaultRegisterer,
+		Gatherer:   prom.DefaultGatherer,
+	})
+	if err != nil {
+		return fmt.Errorf("new prometheus exporter: %w", err)
+	}
+
+	// register prometheus with opencensus
+	view.RegisterExporter(pe)
+	view.SetReportingPeriod(2 * time.Second)
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", pe)
+	go func() {
+		http.ListenAndServe(addr, mux)
+	}()
 	return nil
 }

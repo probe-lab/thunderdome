@@ -37,6 +37,7 @@ type Gui struct {
 	keysText      *text.Text
 	durationText  *text.Text
 	beStatsTexts  map[string]*text.Text
+	beColors      map[string]cell.Color
 
 	cancelLoaderMu sync.Mutex
 	cancelLoader   func()
@@ -67,9 +68,16 @@ var durations = []time.Duration{
 }
 
 var requestRates = []int{
+	1,
+	2,
+	4,
+	8,
 	10,
+	15,
 	20,
+	30,
 	40,
+	50,
 	60,
 	80,
 	100,
@@ -97,10 +105,29 @@ var concurrencies = []int{
 	80,
 }
 
+var colors = []cell.Color{
+	cell.ColorWhite,
+	cell.ColorRed,
+	cell.ColorLime,
+	cell.ColorTeal,
+	cell.ColorMaroon,
+	cell.ColorGreen,
+	cell.ColorOlive,
+	cell.ColorNavy,
+	cell.ColorPurple,
+	cell.ColorSilver,
+	cell.ColorGray,
+	cell.ColorAqua,
+	cell.ColorYellow,
+	cell.ColorBlue,
+	cell.ColorFuchsia,
+}
+
 func NewGui(source RequestSource, exp *ExperimentJSON) (*Gui, error) {
 	g := &Gui{
 		source:             source,
 		beStatsTexts:       map[string]*text.Text{},
+		beColors:           map[string]cell.Color{},
 		experimentName:     exp.Name,
 		duration:           time.Duration(exp.Duration) * time.Second,
 		requestRate:        exp.Rate,
@@ -226,13 +253,15 @@ func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 
 	elems := []grid.Element{}
 
-	for _, be := range g.backends {
+	for i, be := range g.backends {
 		t, ok := g.beStatsTexts[be.Name]
 		if !ok {
 			continue
 		}
+		color := colors[i%len(colors)]
+		g.beColors[be.Name] = color
 
-		elems = append(elems, grid.ColWidthFixed(22, grid.Widget(t, container.Border(linestyle.Light), container.BorderTitle(be.Name))))
+		elems = append(elems, grid.ColWidthFixed(24, grid.Widget(t, container.Border(linestyle.Light), container.BorderTitle(be.Name), container.TitleColor(color))))
 	}
 
 	padText, err := text.New(text.DisableScrolling())
@@ -266,7 +295,7 @@ func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 
 	gridOpts, err := builder.Build()
 	if err != nil {
-		return err
+		return fmt.Errorf("build gui: %w", err)
 	}
 
 	if err := c.Update("root", gridOpts...); err != nil {
@@ -292,7 +321,7 @@ func (g *Gui) OnKey(k *terminalapi.Keyboard) {
 		if g.cancelLoader == nil {
 			ctx, cancel := context.WithCancel(context.Background())
 			g.cancelLoader = cancel
-			go g.StartLoader(ctx)
+			g.StartLoader(ctx)
 		} else {
 			g.cancelLoader()
 			g.cancelLoader = nil
@@ -304,9 +333,28 @@ func (g *Gui) OnKey(k *terminalapi.Keyboard) {
 		g.infoMu.Unlock()
 		g.updateInfoText()
 		g.redrawMetrics()
+	case 'M': // cycle displayed metric
+		g.infoMu.Lock()
+		g.statsFormatterIdx--
+		if g.statsFormatterIdx < 0 {
+			g.statsFormatterIdx = len(statsFormatters) - 1
+		}
+		g.statsFormatter = &statsFormatters[g.statsFormatterIdx]
+		g.infoMu.Unlock()
+		g.updateInfoText()
+		g.redrawMetrics()
 	case 'd': // cycle duration
 		g.infoMu.Lock()
 		g.durationsIdx = (g.durationsIdx + 1) % len(durations)
+		g.duration = durations[g.durationsIdx]
+		g.infoMu.Unlock()
+		g.updateInfoText()
+	case 'D': // cycle duration
+		g.infoMu.Lock()
+		g.durationsIdx--
+		if g.durationsIdx < 0 {
+			g.durationsIdx = len(durations) - 1
+		}
 		g.duration = durations[g.durationsIdx]
 		g.infoMu.Unlock()
 		g.updateInfoText()
@@ -316,40 +364,67 @@ func (g *Gui) OnKey(k *terminalapi.Keyboard) {
 		g.requestRate = requestRates[g.requestRateIdx]
 		g.infoMu.Unlock()
 		g.updateInfoText()
+	case 'R': // cycle rate
+		g.infoMu.Lock()
+		g.requestRateIdx--
+		if g.requestRateIdx < 0 {
+			g.requestRateIdx = len(requestRates) - 1
+		}
+		g.requestRate = requestRates[g.requestRateIdx]
+		g.infoMu.Unlock()
+		g.updateInfoText()
 	case 'c': // cycle concurrency
 		g.infoMu.Lock()
 		g.concurrenciesIdx = (g.concurrenciesIdx + 1) % len(concurrencies)
 		g.requestConcurrency = concurrencies[g.concurrenciesIdx]
 		g.infoMu.Unlock()
 		g.updateInfoText()
+	case 'C': // cycle concurrency
+		g.infoMu.Lock()
+		g.concurrenciesIdx--
+		if g.concurrenciesIdx < 0 {
+			g.concurrenciesIdx = len(concurrencies) - 1
+		}
+		g.requestConcurrency = concurrencies[g.concurrenciesIdx]
+		g.infoMu.Unlock()
+		g.updateInfoText()
 	}
 }
 
-func (g *Gui) StartLoader(ctx context.Context) {
+func (g *Gui) StartLoader(ctx context.Context) error {
 	timings := make(chan *RequestTiming, 10000)
+	defer func() { close(timings) }()
 
-	g.infoMu.Lock()
-	l := &Loader{
-		Source:      g.source,
-		Backends:    g.backends,
-		Rate:        g.requestRate,
-		Concurrency: g.requestConcurrency,
-		Duration:    g.duration,
-		Timings:     timings,
+	coll, err := NewCollector(timings, 100*time.Millisecond)
+	if err != nil {
+		return fmt.Errorf("new collector: %w", err)
 	}
-	g.infoMu.Unlock()
 
-	coll := NewCollector(timings, 100*time.Millisecond)
-	go coll.Run(ctx)
-
-	go g.Update(ctx, coll)
-
-	if err := l.Send(ctx); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			fmt.Fprintf(os.Stderr, "loader stopped: %v", err)
+	go func() {
+		g.infoMu.Lock()
+		l := &Loader{
+			Source:         g.source,
+			ExperimentName: g.experimentName,
+			Backends:       g.backends,
+			Rate:           g.requestRate,
+			Concurrency:    g.requestConcurrency,
+			Duration:       g.duration,
+			Timings:        timings,
 		}
-	}
-	close(timings)
+		g.infoMu.Unlock()
+
+		go coll.Run(ctx)
+
+		go g.Update(ctx, coll)
+
+		if err := l.Send(ctx); err != nil {
+			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				fmt.Fprintf(os.Stderr, "loader stopped: %v", err)
+			}
+		}
+	}()
+
+	return nil
 }
 
 // Update updates the gui until the context is canceled
@@ -409,7 +484,7 @@ func (g *Gui) Update(ctx context.Context, coll *Collector) {
 				ch.Requests = append(ch.Requests, float64(st.TotalRequests))
 				ch.TTFBP99 = append(ch.TTFBP99, st.TTFB.P99*1000)
 				charts[name] = ch
-				g.chart.Series(name, ch.TTFBP99)
+				g.chart.Series(name, ch.TTFBP99, linechart.SeriesCellOpts(cell.FgColor(g.beColors[name])))
 
 				formatter.Fn(name, &st, t)
 			}
@@ -533,9 +608,9 @@ func writeStat(t *text.Text, title string, lines ...string) {
 }
 
 func formatStatLineFloat(t *text.Text, label string, value float64) string {
-	return fmt.Sprintf("%-11s %7.4f", label, value)
+	return fmt.Sprintf("%-11s %9.3f", label, value)
 }
 
 func formatStatLineInt(t *text.Text, label string, value int) string {
-	return fmt.Sprintf("%-11s % 7d", label, value)
+	return fmt.Sprintf("%-11s % 8d", label, value)
 }

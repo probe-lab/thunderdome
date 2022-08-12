@@ -76,10 +76,7 @@ func (s *StdinRequestSource) Next() bool {
 	data := s.scanner.Bytes()
 	s.req = Request{}
 	s.err = json.Unmarshal(data, &s.req)
-	if s.err != nil {
-		return false
-	}
-	return true
+	return s.err == nil
 }
 
 func (s *StdinRequestSource) Request() Request {
