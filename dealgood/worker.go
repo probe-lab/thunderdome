@@ -10,6 +10,11 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Worker struct {
@@ -55,19 +60,16 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 		req.Host = w.Backend.Host
 	}
 
+	ctx, span := otel.Tracer("dealgood").Start(req.Context(), "HTTP "+req.Method, trace.WithAttributes(attribute.String("uri", r.URI)))
+	defer span.End()
+
+	prop := otel.GetTextMapPropagator()
+	prop.Inject(ctx, propagation.HeaderCarrier(req.Header))
+	req = req.WithContext(ctx)
+
 	var start, end, connect time.Time
 	var connectTime, ttfb, totalTime time.Duration
 	trace := &httptrace.ClientTrace{
-		// DNSStart: func(dsi httptrace.DNSStartInfo) { dns = time.Now() },
-		// DNSDone: func(ddi httptrace.DNSDoneInfo) {
-		// 	fmt.Printf("DNS Done: %v\n", time.Since(dns))
-		// },
-
-		// TLSHandshakeStart: func() { tlsHandshake = time.Now() },
-		// TLSHandshakeDone: func(cs tls.ConnectionState, err error) {
-		// 	fmt.Printf("TLS Handshake: %v\n", time.Since(tlsHandshake))
-		// },
-
 		ConnectStart: func(network, addr string) {
 			connect = time.Now()
 		},

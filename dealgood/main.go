@@ -6,12 +6,19 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/urfave/cli/v2"
 	"go.opencensus.io/stats/view"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/zipkin"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/trace"
 )
 
 const appName = "dealgood"
@@ -145,6 +152,8 @@ func main() {
 }
 
 func Run(cc *cli.Context) error {
+	ctx := cc.Context
+
 	if flags.quiet {
 		flags.timings = false
 		flags.failures = false
@@ -195,8 +204,14 @@ func Run(cc *cli.Context) error {
 		}
 	}
 
+	tc := propagation.TraceContext{}
+	otel.SetTextMapPropagator(tc)
+	if err := setTracerProvider(ctx); err != nil {
+		return fmt.Errorf("set tracer provider: %w", err)
+	}
+
 	if flags.nogui {
-		return nogui(cc.Context, source, &exp, !flags.quiet, flags.timings, flags.failures)
+		return nogui(ctx, source, &exp, !flags.quiet, flags.timings, flags.failures)
 	}
 
 	g, err := NewGui(source, &exp)
@@ -204,7 +219,7 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("gui: %w", err)
 	}
 	defer g.Close()
-	return g.Show(cc.Context, 100*time.Millisecond)
+	return g.Show(ctx, 100*time.Millisecond)
 }
 
 func readExperimentFile(fname string, exp *ExperimentJSON) error {
@@ -240,4 +255,56 @@ func startPrometheusServer(addr string) error {
 		http.ListenAndServe(addr, mux)
 	}()
 	return nil
+}
+
+func setTracerProvider(ctx context.Context) error {
+	exporters, err := buildTracerExporters(ctx)
+	if err != nil {
+		return err
+	}
+
+	options := []trace.TracerProviderOption{}
+
+	for _, exporter := range exporters {
+		options = append(options, trace.WithBatcher(exporter))
+	}
+
+	tp := trace.NewTracerProvider(options...)
+	otel.SetTracerProvider(tp)
+
+	return nil
+}
+
+func buildTracerExporters(ctx context.Context) ([]trace.SpanExporter, error) {
+	var exporters []trace.SpanExporter
+
+	if os.Getenv("OTEL_TRACES_EXPORTER") == "" {
+		return exporters, nil
+	}
+
+	for _, exporterStr := range strings.Split(os.Getenv("OTEL_TRACES_EXPORTER"), ",") {
+		switch exporterStr {
+		case "otlp":
+			exporter, err := otlptracegrpc.New(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("new OTLP gRPC exporter: %w", err)
+			}
+			exporters = append(exporters, exporter)
+		case "jaeger":
+			exporter, err := jaeger.New(jaeger.WithCollectorEndpoint())
+			if err != nil {
+				return nil, fmt.Errorf("new Jaeger exporter: %w", err)
+			}
+			exporters = append(exporters, exporter)
+		case "zipkin":
+			exporter, err := zipkin.New("")
+			if err != nil {
+				return nil, fmt.Errorf("new Zipkin exporter: %w", err)
+			}
+			exporters = append(exporters, exporter)
+		default:
+			return nil, fmt.Errorf("unknown or unsupported exporter: %q", exporterStr)
+		}
+	}
+	return exporters, nil
 }
