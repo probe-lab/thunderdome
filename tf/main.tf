@@ -40,7 +40,7 @@ module "vpc" {
 
   enable_ipv6 = true # This is mostly historic coincidence as we started out with it enabled
 
-  # we don't assign ipv6 addresses by default as we can't block ipv6 traffic with a NACL
+  # we don't assign ipv6 addresses by default as we can't block internal ipv6 traffic with a NACL
   assign_ipv6_address_on_creation                = false
   private_subnet_assign_ipv6_address_on_creation = false
 
