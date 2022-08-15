@@ -131,7 +131,6 @@ resource "aws_ecs_task_definition" "target" {
       secrets      = var.grafana_secrets
       volumesFrom  = []
     }
-
   ])
 }
 
