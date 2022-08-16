@@ -46,7 +46,7 @@ traces:
           key: target
           value: ${THUNDERDOME_TARGET}
     remote_write:
-      - endpoint: tempo-us-central1.grafana.net:443
+      - endpoint: tempo-eu-west-0.grafana.net:443
         basic_auth:
-          username: 76
+          username: 263936
           password: ${GRAFANA_PASS}

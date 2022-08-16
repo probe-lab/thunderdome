@@ -107,7 +107,7 @@ resource "aws_ecs_task_definition" "target" {
     },
     {
       cpu   = 0
-      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/grafana-agent:56d42b5"
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/grafana-agent:${var.grafana_agent_tag}"
       environment = [
         # we use these for setting labels on metrics
         { name = "THUNDERDOME_EXPERIMENT", value = var.name },
