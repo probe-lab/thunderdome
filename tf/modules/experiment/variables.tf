@@ -32,3 +32,7 @@ variable "aws_service_discovery_private_dns_namespace_id" {}
 variable "grafana_secrets" {
   default = []
 }
+
+variable "grafana_agent_tag" {
+  default = "150e302"
+}
