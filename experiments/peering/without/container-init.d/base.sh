@@ -30,4 +30,4 @@ ipfs config --json Swarm.ConnMgr.LowWater 3000
 ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true
 
 ipfs config --json Experimental.AcceleratedDHTClient true
-ipfs config --json Experimental.StrategicProviding: true
+ipfs config --json Experimental.StrategicProviding true
