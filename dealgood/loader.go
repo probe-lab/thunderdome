@@ -24,20 +24,17 @@ type Loader struct {
 	Timings        chan *RequestTiming // channel to send timings to
 	Rate           int                 // maximum number of requests per second per target
 	Concurrency    int                 // number of workers per target
-	Duration       time.Duration
+	Duration       int
 	PrintFailures  bool
-}
-
-type LoadOptions struct {
-	Rate        int // maximum number of requests per second per target
-	Concurrency int // number of workers per target
-	Duration    time.Duration
 }
 
 // Send sends requests to each target until the duration has passed or the context is canceled.
 func (l *Loader) Send(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, l.Duration)
-	defer cancel()
+	var cancel func()
+	if l.Duration > 0 {
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(l.Duration)*time.Second)
+		defer cancel()
+	}
 
 	workers := make([]*Worker, 0, len(l.Targets)*l.Concurrency)
 	for _, be := range l.Targets {

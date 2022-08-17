@@ -24,7 +24,7 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 	if printHeader {
 		fmt.Printf("Time: %s\n", time.Now().Format(time.RFC1123Z))
 		fmt.Printf("Experiment: %s\n", exp.Name)
-		fmt.Printf("Duration: %ds\n", exp.Duration)
+		fmt.Printf("Duration: %s\n", durationDesc(exp.Duration))
 		fmt.Printf("Request rate: %d\n", exp.Rate)
 		fmt.Printf("Request concurrency: %d\n", exp.Concurrency)
 		fmt.Println("Targets:")
@@ -43,7 +43,7 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 		ExperimentName: exp.Name,
 		Rate:           exp.Rate,
 		Concurrency:    exp.Concurrency,
-		Duration:       time.Duration(exp.Duration) * time.Second,
+		Duration:       exp.Duration,
 		Timings:        timings,
 		PrintFailures:  printFailures,
 	}

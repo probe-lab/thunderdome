@@ -26,8 +26,8 @@ func validateExperiment(exp *ExperimentJSON) error {
 	if exp.Concurrency <= 0 {
 		return fmt.Errorf("concurrency must be greater than zero")
 	}
-	if exp.Duration <= 0 {
-		return fmt.Errorf("duration must be greater than zero")
+	if exp.Duration <= 0 && exp.Duration != -1 {
+		return fmt.Errorf("duration must be -1 or greater than zero ")
 	}
 
 	if len(exp.Targets) == 0 {

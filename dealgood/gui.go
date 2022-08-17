@@ -44,7 +44,7 @@ type Gui struct {
 
 	infoMu             sync.Mutex // guards changes to following
 	experimentName     string
-	duration           time.Duration
+	duration           int
 	durationsIdx       int
 	requestRate        int
 	requestRateIdx     int
@@ -58,13 +58,16 @@ type Gui struct {
 	latestSamples   map[string]MetricSample
 }
 
-var durations = []time.Duration{
-	1 * time.Minute,
-	5 * time.Minute,
-	15 * time.Minute,
-	60 * time.Minute,
-	180 * time.Minute,
-	720 * time.Minute,
+var durations = []int{
+	-1,
+	1 * 60,
+	5 * 60,
+	10 * 60,
+	15 * 60,
+	30 * 60,
+	60 * 60,
+	180 * 60,
+	720 * 60,
 }
 
 var requestRates = []int{
@@ -129,7 +132,7 @@ func NewGui(source RequestSource, exp *ExperimentJSON) (*Gui, error) {
 		beStatsTexts:       map[string]*text.Text{},
 		beColors:           map[string]cell.Color{},
 		experimentName:     exp.Name,
-		duration:           time.Duration(exp.Duration) * time.Second,
+		duration:           exp.Duration,
 		requestRate:        exp.Rate,
 		requestConcurrency: exp.Concurrency,
 		statsFormatter:     &statsFormatters[0],
@@ -393,7 +396,6 @@ func (g *Gui) OnKey(k *terminalapi.Keyboard) {
 
 func (g *Gui) StartLoader(ctx context.Context) error {
 	timings := make(chan *RequestTiming, 10000)
-	defer func() { close(timings) }()
 
 	coll, err := NewCollector(timings, 100*time.Millisecond)
 	if err != nil {
@@ -401,6 +403,7 @@ func (g *Gui) StartLoader(ctx context.Context) error {
 	}
 
 	go func() {
+		defer func() { close(timings) }()
 		g.infoMu.Lock()
 		l := &Loader{
 			Source:         g.source,
@@ -450,13 +453,15 @@ func (g *Gui) Update(ctx context.Context, coll *Collector) {
 			duration := g.duration
 			g.infoMu.Unlock()
 
-			// Update the progress indicator
-			passed := now.Sub(start)
-			percent := int(float64(passed) / float64(duration) * 100)
-			if percent > 100 {
-				continue
+			if duration != -1 {
+				// Update the progress indicator
+				passed := now.Sub(start)
+				percent := int(float64(passed) / float64(time.Duration(duration)*time.Second) * 100)
+				if percent > 100 {
+					continue
+				}
+				g.progressGauge.Percent(percent)
 			}
-			g.progressGauge.Percent(percent)
 
 			g.updateInfoText()
 
@@ -501,7 +506,8 @@ func (g *Gui) updateInfoText() {
 	g.infoText.Write("  Experiment: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)))
 	g.infoText.Write(g.experimentName)
 	g.infoText.Write("  Duration: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)))
-	g.infoText.Write(fmt.Sprintf("%v", g.duration))
+
+	g.infoText.Write(fmt.Sprintf("%v", durationDesc(g.duration)))
 	g.infoText.Write("  Rate: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)))
 	g.infoText.Write(fmt.Sprintf("%d/s", g.requestRate))
 	g.infoText.Write("  Concurrency: ", text.WriteCellOpts(cell.FgColor(cell.ColorBlue)))
@@ -613,4 +619,19 @@ func formatStatLineFloat(t *text.Text, label string, value float64) string {
 
 func formatStatLineInt(t *text.Text, label string, value int) string {
 	return fmt.Sprintf("%-11s % 8d", label, value)
+}
+
+func durationDesc(d int) string {
+	if d == -1 {
+		return "forever"
+	}
+
+	s := (time.Duration(d) * time.Second).String()
+	if strings.HasSuffix(s, "m0s") {
+		s = s[:len(s)-2]
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = s[:len(s)-2]
+	}
+	return s
 }

@@ -82,7 +82,7 @@ var app = &cli.App{
 		},
 		&cli.IntFlag{
 			Name:        "duration",
-			Usage:       "Duration of experiment in seconds(if not using an experiment file)",
+			Usage:       "Duration of experiment in seconds, -1 means forever (if not using an experiment file)",
 			Value:       60,
 			Destination: &flags.duration,
 			EnvVars:     []string{"DEALGOOD_DURATION"},
