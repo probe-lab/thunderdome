@@ -1,4 +1,5 @@
-FROM ipfs/kubo:v0.14.0
+ARG kuboimage
+FROM $kuboimage
 
 ADD /container-init.d/* /container-init.d/
 ARG config
