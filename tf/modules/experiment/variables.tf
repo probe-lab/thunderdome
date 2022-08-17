@@ -36,3 +36,6 @@ variable "grafana_secrets" {
 variable "grafana_agent_tag" {
   default = "150e302"
 }
+
+variable "ssm_exec_policy_arn" {
+}

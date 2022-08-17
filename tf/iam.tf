@@ -36,3 +36,25 @@ resource "aws_iam_role_policy_attachment" "ecsTaskExecutionRole_policy" {
   role       = aws_iam_role.ecsTaskExecutionRole.name
   policy_arn = aws_iam_policy.ecsTaskExecutionRole_policy.arn
 }
+
+resource "aws_iam_policy" "ssm-exec" {
+  name = "ssm-exec"
+  path = "/"
+
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      # allow SSH access via SSM
+      {
+        "Effect" : "Allow",
+        "Action" : [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ],
+        "Resource" : "*"
+      }
+    ]
+  })
+}

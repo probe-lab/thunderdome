@@ -153,24 +153,8 @@ resource "aws_iam_role" "experiment" {
   })
 }
 
-resource "aws_iam_role_policy" "experiment" {
-  name = var.name
-  role = aws_iam_role.experiment.id
-
-  policy = jsonencode({
-    "Version" : "2012-10-17",
-    "Statement" : [
-      # allow SSH access via SSM
-      {
-        "Effect" : "Allow",
-        "Action" : [
-          "ssmmessages:CreateControlChannel",
-          "ssmmessages:CreateDataChannel",
-          "ssmmessages:OpenControlChannel",
-          "ssmmessages:OpenDataChannel"
-        ],
-        "Resource" : "*"
-      }
-    ]
-  })
+resource "aws_iam_role_policy_attachment" "experiment-ssm" {
+  role       = aws_iam_role.experiment.name
+  policy_arn = aws_iam_policy.ssm-exec.arn
 }
+

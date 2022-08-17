@@ -8,6 +8,7 @@ module "tracing" {
   execution_role_arn                             = aws_iam_role.ecsTaskExecutionRole.arn
   log_group_name                                 = aws_cloudwatch_log_group.logs.name
   aws_service_discovery_private_dns_namespace_id = aws_service_discovery_private_dns_namespace.main.id
+  ssm_exec_policy_arn                            = aws_iam_policy.ssm-exec.arn
 
   grafana_secrets = [
     { name = "GRAFANA_USER", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:username::" },
@@ -66,6 +67,7 @@ module "peering" {
   execution_role_arn                             = aws_iam_role.ecsTaskExecutionRole.arn
   log_group_name                                 = aws_cloudwatch_log_group.logs.name
   aws_service_discovery_private_dns_namespace_id = aws_service_discovery_private_dns_namespace.main.id
+  ssm_exec_policy_arn                            = aws_iam_policy.ssm-exec.arn
   grafana_secrets = [
     { name = "GRAFANA_USER", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:username::" },
     { name = "GRAFANA_PASS", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:password::" }
