@@ -3,13 +3,13 @@
 	"duration": 120,
 	"rate": 300,
 	"concurrency": 10,
-	"backends": [
+	"targets": [
 		{
-			"name": "localhost1",
+			"name": "local1",
 			"base_url": "http://localhost:8080"
 		},
 		{
-			"name": "localhost2",
+			"name": "local2",
 			"base_url": "http://localhost:8080"
 		}
 	]

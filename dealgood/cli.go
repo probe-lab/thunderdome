@@ -24,11 +24,11 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 	if printHeader {
 		fmt.Printf("Time: %s\n", time.Now().Format(time.RFC1123Z))
 		fmt.Printf("Experiment: %s\n", exp.Name)
-		fmt.Printf("Duration: %ds\n", exp.Duration)
+		fmt.Printf("Duration: %s\n", durationDesc(exp.Duration))
 		fmt.Printf("Request rate: %d\n", exp.Rate)
 		fmt.Printf("Request concurrency: %d\n", exp.Concurrency)
-		fmt.Println("Backends:")
-		for _, be := range exp.Backends {
+		fmt.Println("Targets:")
+		for _, be := range exp.Targets {
 			fmt.Printf("  %s (%s)\n", be.Name, be.BaseURL)
 		}
 		fmt.Println("")
@@ -43,13 +43,13 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 		ExperimentName: exp.Name,
 		Rate:           exp.Rate,
 		Concurrency:    exp.Concurrency,
-		Duration:       time.Duration(exp.Duration) * time.Second,
+		Duration:       exp.Duration,
 		Timings:        timings,
 		PrintFailures:  printFailures,
 	}
 
-	for _, be := range exp.Backends {
-		l.Backends = append(l.Backends, &Backend{
+	for _, be := range exp.Targets {
+		l.Targets = append(l.Targets, &Target{
 			Name:    be.Name,
 			BaseURL: be.BaseURL,
 			Host:    be.Host,
@@ -74,7 +74,7 @@ func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment
 	defer t.Stop()
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-	fmt.Fprintln(w, "time\tbackend\trequests\tconn errs\tdropped\t5xx errs\tTTFB P50\tTTFB P90\tTTFB P90")
+	fmt.Fprintln(w, "time\ttarget\trequests\tconn errs\tdropped\t5xx errs\tTTFB P50\tTTFB P90\tTTFB P90")
 	for {
 		select {
 		case <-ctx.Done():
@@ -83,7 +83,7 @@ func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment
 
 			latest := coll.Latest()
 
-			for _, be := range exp.Backends {
+			for _, be := range exp.Targets {
 				st, ok := latest[be.Name]
 				if !ok {
 					continue
@@ -99,11 +99,11 @@ func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment
 }
 
 func printSampleTimings(ctx context.Context, sample map[string]MetricSample, exp *ExperimentJSON) {
-	for i, be := range exp.Backends {
+	for i, be := range exp.Targets {
 		if i > 0 {
 			fmt.Println()
 		}
-		fmt.Printf("Backend:  %s\n", be.Name)
+		fmt.Printf("Target:  %s\n", be.Name)
 		fmt.Printf("Base URL: %s\n", be.BaseURL)
 		fmt.Printf("------------------------------\n")
 

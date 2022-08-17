@@ -10,39 +10,36 @@ import (
 	"golang.org/x/net/http2"
 )
 
-type Backend struct {
-	Name     string // short name of the backend to be used in reports
-	BaseURL  string // base URL of the backend (without a path)
+type Target struct {
+	Name     string // short name of the target to be used in reports and metrics
+	BaseURL  string // base URL of the target (without a path)
 	Host     string
-	Requests chan *Request // channel used to receive requests to be issued to the backend
+	Requests chan *Request // channel used to receive requests to be issued to the target
 }
 
 type Loader struct {
 	Source         RequestSource // source of requests
 	ExperimentName string
-	Backends       []*Backend          // backends to send load to
+	Targets        []*Target           // targets to send load to
 	Timings        chan *RequestTiming // channel to send timings to
-	Rate           int                 // maximum number of requests per second per backend
-	Concurrency    int                 // number of workers per backend
-	Duration       time.Duration
+	Rate           int                 // maximum number of requests per second per target
+	Concurrency    int                 // number of workers per target
+	Duration       int
 	PrintFailures  bool
 }
 
-type LoadOptions struct {
-	Rate        int // maximum number of requests per second per backend
-	Concurrency int // number of workers per backend
-	Duration    time.Duration
-}
-
-// Send sends requests to each backend until the duration has passed or the context is canceled.
+// Send sends requests to each target until the duration has passed or the context is canceled.
 func (l *Loader) Send(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, l.Duration)
-	defer cancel()
+	var cancel func()
+	if l.Duration > 0 {
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(l.Duration)*time.Second)
+		defer cancel()
+	}
 
-	workers := make([]*Worker, 0, len(l.Backends)*l.Concurrency)
-	for _, be := range l.Backends {
-		// One unbuffered request channel per backend, shared by all concurrent workers
-		// for that backend.
+	workers := make([]*Worker, 0, len(l.Targets)*l.Concurrency)
+	for _, be := range l.Targets {
+		// One unbuffered request channel per target, shared by all concurrent workers
+		// for that target.
 		if be.Requests == nil {
 			be.Requests = make(chan *Request)
 		}
@@ -59,7 +56,7 @@ func (l *Loader) Send(ctx context.Context) error {
 			http2.ConfigureTransport(tr)
 
 			workers = append(workers, &Worker{
-				Backend:        be,
+				Target:         be,
 				ExperimentName: l.ExperimentName,
 				Client: &http.Client{
 					Transport: tr,
@@ -93,20 +90,20 @@ func (l *Loader) Send(ctx context.Context) error {
 		}
 
 		req := l.Source.Request()
-		for _, be := range l.Backends {
+		for _, be := range l.Targets {
 			select {
 			case be.Requests <- &req:
 			default:
 				l.Timings <- &RequestTiming{
 					ExperimentName: l.ExperimentName,
-					BackendName:    be.Name,
+					TargetName:     be.Name,
 					Dropped:        true,
 				}
 			}
 		}
 		lastRequestDone = time.Now()
 	}
-	for _, be := range l.Backends {
+	for _, be := range l.Targets {
 		close(be.Requests)
 	}
 	wg.Wait()

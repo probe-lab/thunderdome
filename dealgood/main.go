@@ -30,7 +30,6 @@ var app = &cli.App{
 		&cli.StringFlag{
 			Name:        "experiment",
 			Usage:       "Name of the experiment",
-			Value:       "adhoc",
 			Destination: &flags.experimentName,
 			EnvVars:     []string{"DEALGOOD_EXPERIMENT"},
 		},
@@ -43,7 +42,7 @@ var app = &cli.App{
 		&cli.StringFlag{
 			Name:        "source",
 			Value:       "-",
-			Usage:       "Name of request source, use '-' to read JSON from stdin, 'random' to use some builtin random requests",
+			Usage:       "Name of request source, use '-' to read JSONL from stdin, 'random' to use some builtin random requests",
 			Destination: &flags.source,
 			EnvVars:     []string{"DEALGOOD_SOURCE"},
 		},
@@ -62,8 +61,8 @@ var app = &cli.App{
 		},
 		&cli.StringSliceFlag{
 			Name:        "targets",
-			Usage:       "Comma separated list of Base URLs of backends (if not using an experiment file)",
-			Value:       cli.NewStringSlice("http://localhost:8080"),
+			Usage:       "Comma separated list of Base URLs of targets, optionally each can be prefixed by a name, for example 'target::http://target.domain:8080' (if not using an experiment file)",
+			Value:       cli.NewStringSlice("local::http://localhost:8080"),
 			Destination: &flags.targets,
 			EnvVars:     []string{"DEALGOOD_TARGETS"},
 		},
@@ -83,7 +82,7 @@ var app = &cli.App{
 		},
 		&cli.IntFlag{
 			Name:        "duration",
-			Usage:       "Duration of experiment in seconds(if not using an experiment file)",
+			Usage:       "Duration of experiment in seconds, -1 means forever (if not using an experiment file)",
 			Value:       60,
 			Destination: &flags.duration,
 			EnvVars:     []string{"DEALGOOD_DURATION"},
@@ -187,10 +186,17 @@ func Run(cc *cli.Context) error {
 		exp.Concurrency = flags.concurrency
 		exp.Duration = flags.duration
 		for _, be := range flags.targets.Value() {
-			exp.Backends = append(exp.Backends, &BackendJSON{
+			bej := &TargetJSON{
 				BaseURL: be,
 				Host:    flags.host,
-			})
+			}
+			if name, base, found := strings.Cut(be, "::"); found {
+				bej.Name = name
+				bej.BaseURL = base
+			} else {
+				bej.BaseURL = be
+			}
+			exp.Targets = append(exp.Targets, bej)
 		}
 	}
 

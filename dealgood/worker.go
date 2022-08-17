@@ -18,7 +18,7 @@ import (
 )
 
 type Worker struct {
-	Backend        *Backend
+	Target         *Target
 	ExperimentName string
 	Client         *http.Client
 	PrintFailures  bool
@@ -31,7 +31,7 @@ func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *Requ
 		select {
 		case <-ctx.Done():
 			return
-		case req, ok := <-w.Backend.Requests:
+		case req, ok := <-w.Target.Requests:
 			if !ok {
 				return
 			}
@@ -51,13 +51,13 @@ func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *Requ
 }
 
 func (w *Worker) timeRequest(r *Request) *RequestTiming {
-	req, _ := http.NewRequest("GET", w.Backend.BaseURL+r.URI, nil)
+	req, _ := http.NewRequest("GET", w.Target.BaseURL+r.URI, nil)
 	for k, v := range r.Header {
 		req.Header.Set(k, v)
 	}
 
-	if w.Backend.Host != "" {
-		req.Host = w.Backend.Host
+	if w.Target.Host != "" {
+		req.Host = w.Target.Host
 	}
 
 	ctx, span := otel.Tracer("dealgood").Start(req.Context(), "HTTP "+req.Method, trace.WithAttributes(attribute.String("uri", r.URI)))
@@ -92,7 +92,7 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 		}
 		return &RequestTiming{
 			ExperimentName: w.ExperimentName,
-			BackendName:    w.Backend.Name,
+			TargetName:     w.Target.Name,
 			ConnectError:   true,
 		}
 	}
@@ -110,7 +110,7 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 
 	return &RequestTiming{
 		ExperimentName: w.ExperimentName,
-		BackendName:    w.Backend.Name,
+		TargetName:     w.Target.Name,
 		StatusCode:     resp.StatusCode,
 		ConnectTime:    connectTime,
 		TTFB:           ttfb,
