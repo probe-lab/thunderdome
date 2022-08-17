@@ -25,10 +25,10 @@ import (
 )
 
 type Gui struct {
-	source   RequestSource
-	backends []*Backend
-	cancel   func()
-	term     terminalapi.Terminal
+	source  RequestSource
+	targets []*Target
+	cancel  func()
+	term    terminalapi.Terminal
 
 	// widgets
 	chart         *linechart.LineChart
@@ -135,8 +135,8 @@ func NewGui(source RequestSource, exp *ExperimentJSON) (*Gui, error) {
 		statsFormatter:     &statsFormatters[0],
 	}
 
-	for _, be := range exp.Backends {
-		g.backends = append(g.backends, &Backend{
+	for _, be := range exp.Targets {
+		g.targets = append(g.targets, &Target{
 			Name:    be.Name,
 			BaseURL: be.BaseURL,
 			Host:    be.Host,
@@ -222,10 +222,10 @@ func NewGui(source RequestSource, exp *ExperimentJSON) (*Gui, error) {
 		return nil, fmt.Errorf("duration text: %w", err)
 	}
 
-	for _, be := range g.backends {
+	for _, be := range g.targets {
 		t, err := text.New(text.RollContent())
 		if err != nil {
-			return nil, fmt.Errorf("backend text: %w", err)
+			return nil, fmt.Errorf("target text: %w", err)
 		}
 		g.beStatsTexts[be.Name] = t
 
@@ -253,7 +253,7 @@ func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 
 	elems := []grid.Element{}
 
-	for i, be := range g.backends {
+	for i, be := range g.targets {
 		t, ok := g.beStatsTexts[be.Name]
 		if !ok {
 			continue
@@ -405,7 +405,7 @@ func (g *Gui) StartLoader(ctx context.Context) error {
 		l := &Loader{
 			Source:         g.source,
 			ExperimentName: g.experimentName,
-			Backends:       g.backends,
+			Targets:        g.targets,
 			Rate:           g.requestRate,
 			Concurrency:    g.requestConcurrency,
 			Duration:       g.duration,

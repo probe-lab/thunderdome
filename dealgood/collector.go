@@ -14,7 +14,7 @@ import (
 
 type RequestTiming struct {
 	ExperimentName string
-	BackendName    string
+	TargetName     string
 	ConnectError   bool
 	Dropped        bool
 	StatusCode     int
@@ -49,35 +49,63 @@ func NewCollector(timings chan *RequestTiming, sampleInterval time.Duration) (*C
 	}
 
 	var err error
-	coll.ttfbHist, err = newHistogramMetric("ttfb_seconds", "The time till the first byte is received for successful gateway requests.", []string{"experiment", "target"})
+	coll.ttfbHist, err = newHistogramMetric(
+		"ttfb_seconds",
+		"The time till the first byte is received for successful gateway requests.",
+		[]string{"experiment", "target"},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new histogram: %w", err)
 	}
-	coll.connectHist, err = newHistogramMetric("connect_time_seconds", "The time to connect to the target gateway.", []string{"experiment", "target"})
+	coll.connectHist, err = newHistogramMetric(
+		"connect_time_seconds",
+		"The time to connect to the target gateway.",
+		[]string{"experiment", "target"},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new histogram: %w", err)
 	}
-	coll.totalHist, err = newHistogramMetric("request_time_seconds", "The total time taken for successful gateway requests.", []string{"experiment", "target"})
+	coll.totalHist, err = newHistogramMetric(
+		"request_time_seconds",
+		"The total time taken for successful gateway requests.",
+		[]string{"experiment", "target"},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new histogram: %w", err)
 	}
 
-	coll.requestsCounter, err = newCounterMetric("requests_total", "The total number of requests attempted.", []string{"experiment", "target"})
+	coll.requestsCounter, err = newCounterMetric(
+		"requests_total",
+		"The total number of requests attempted.",
+		[]string{"experiment", "target"},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	coll.droppedCounter, err = newCounterMetric("dropped_total", "The total number of requests that were dropped because there were too many requests already in-flight.", []string{"experiment", "target"})
+	coll.droppedCounter, err = newCounterMetric(
+		"dropped_total",
+		"The total number of requests that were dropped because there were too many requests already in-flight.",
+		[]string{"experiment", "target"},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	coll.connectErrorCounter, err = newCounterMetric("connect_error_total", "The total number of requests that unable to connect to the target.", []string{"experiment", "target"})
+	coll.connectErrorCounter, err = newCounterMetric(
+		"connect_error_total",
+		"The total number of requests that unable to connect to the target.",
+		[]string{"experiment", "target"},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	coll.responsesCounter, err = newCounterMetric("responses_total", "The total number of responses received.", []string{"experiment", "target", "code"})
+	coll.responsesCounter, err = newCounterMetric(
+		"responses_total",
+		"The total number of responses received.",
+		[]string{"experiment", "target", "code"},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
@@ -86,7 +114,7 @@ func NewCollector(timings chan *RequestTiming, sampleInterval time.Duration) (*C
 }
 
 func (c *Collector) Run(ctx context.Context) {
-	stats := make(map[string]*BackendStats)
+	stats := make(map[string]*TargetStats)
 
 	sampleTicker := time.NewTicker(c.sampleInterval)
 	defer sampleTicker.Stop()
@@ -100,34 +128,34 @@ func (c *Collector) Run(ctx context.Context) {
 				return
 			}
 
-			st, ok := stats[res.BackendName]
+			st, ok := stats[res.TargetName]
 			if !ok {
-				st = &BackendStats{
+				st = &TargetStats{
 					ConnectTime: NewTimeMetric(),
 					TTFB:        NewTimeMetric(),
 					TotalTime:   NewTimeMetric(),
 				}
 			}
 			st.TotalRequests++
-			c.requestsCounter.WithLabelValues(res.ExperimentName, res.BackendName).Add(1)
+			c.requestsCounter.WithLabelValues(res.ExperimentName, res.TargetName).Add(1)
 			if res.ConnectError {
 				st.TotalConnectErrors++
-				c.connectErrorCounter.WithLabelValues(res.ExperimentName, res.BackendName).Add(1)
+				c.connectErrorCounter.WithLabelValues(res.ExperimentName, res.TargetName).Add(1)
 			} else if res.Dropped {
 				st.TotalDropped++
-				c.droppedCounter.WithLabelValues(res.ExperimentName, res.BackendName).Add(1)
+				c.droppedCounter.WithLabelValues(res.ExperimentName, res.TargetName).Add(1)
 			} else {
 				st.ConnectTime.Add(res.ConnectTime.Seconds())
-				c.connectHist.WithLabelValues(res.ExperimentName, res.BackendName).Observe(res.ConnectTime.Seconds())
-				c.responsesCounter.WithLabelValues(res.ExperimentName, res.BackendName, strconv.Itoa(res.StatusCode)).Add(1)
+				c.connectHist.WithLabelValues(res.ExperimentName, res.TargetName).Observe(res.ConnectTime.Seconds())
+				c.responsesCounter.WithLabelValues(res.ExperimentName, res.TargetName, strconv.Itoa(res.StatusCode)).Add(1)
 
 				switch res.StatusCode / 100 {
 				case 2:
 					st.TotalHttp2XX++
 					st.TTFB.Add(res.TTFB.Seconds())
 					st.TotalTime.Add(res.TotalTime.Seconds())
-					c.ttfbHist.WithLabelValues(res.ExperimentName, res.BackendName).Observe(res.TTFB.Seconds())
-					c.totalHist.WithLabelValues(res.ExperimentName, res.BackendName).Observe(res.TotalTime.Seconds())
+					c.ttfbHist.WithLabelValues(res.ExperimentName, res.TargetName).Observe(res.TTFB.Seconds())
+					c.totalHist.WithLabelValues(res.ExperimentName, res.TargetName).Observe(res.TotalTime.Seconds())
 				case 3:
 					st.TotalHttp3XX++
 				case 4:
@@ -137,7 +165,7 @@ func (c *Collector) Run(ctx context.Context) {
 				}
 			}
 
-			stats[res.BackendName] = st
+			stats[res.TargetName] = st
 
 		case <-sampleTicker.C:
 			sample := map[string]MetricSample{}
@@ -205,7 +233,7 @@ func (c *Collector) Latest() map[string]MetricSample {
 	return c.samples[len(c.samples)-1]
 }
 
-type BackendStats struct {
+type TargetStats struct {
 	TotalRequests      int
 	TotalConnectErrors int
 	TotalDropped       int
