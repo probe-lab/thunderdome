@@ -54,8 +54,10 @@ resource "aws_ecs_task_definition" "target" {
   cpu    = 4 * 1024
   memory = 30 * 1024
 
-  tags     = {}
-  tags_all = {}
+  tags = {
+    "experiment" = var.name
+    "target"     = each.key
+  }
 
   ephemeral_storage {
     size_in_gib = 200
