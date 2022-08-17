@@ -87,6 +87,59 @@ module "peering" {
   }
 }
 
+module "providerdelay" {
+  source = "./modules/experiment"
+  name   = "providerdelay"
+
+  ecs_cluster_id                                 = module.ecs.cluster_id
+  vpc_subnets                                    = module.vpc.public_subnets
+  security_groups                                = [aws_security_group.target.id]
+  execution_role_arn                             = aws_iam_role.ecsTaskExecutionRole.arn
+  log_group_name                                 = aws_cloudwatch_log_group.logs.name
+  aws_service_discovery_private_dns_namespace_id = aws_service_discovery_private_dns_namespace.main.id
+  grafana_secrets = [
+    { name = "GRAFANA_USER", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:username::" },
+    { name = "GRAFANA_PASS", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:password::" }
+  ]
+
+  shared_env = [
+    { name = "IPFS_PROFILE", value = "server" },
+  ]
+
+  targets = {
+    "providerdelay-0ms" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:providerdelay-0ms"
+      environment = []
+    }
+    "providerdelay-20ms" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:providerdelay-20ms"
+      environment = []
+    }
+    "providerdelay-50ms" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:providerdelay-50ms"
+      environment = []
+    }
+    "providerdelay-100ms" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:providerdelay-100ms"
+      environment = []
+    }
+    "providerdelay-200ms" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:providerdelay-200ms"
+      environment = []
+    }
+    "providerdelay-500ms" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:providerdelay-500ms"
+      environment = []
+    }
+    "providerdelay-1000ms" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:providerdelay-1000ms"
+      environment = []
+    }
+  }
+}
+
+
+
 resource "aws_security_group" "target" {
   name   = "target"
   vpc_id = module.vpc.vpc_id
