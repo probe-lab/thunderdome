@@ -37,7 +37,7 @@ traces:
     attributes:
       actions:
         - action: upsert
-          key: env
+          key: project
           value: thunderdome
         - action: upsert
           key: experiment
