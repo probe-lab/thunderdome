@@ -1,0 +1,24 @@
+version: '3.4'
+
+services:
+  grafana-agent:
+    build: grafana-agent/dealgood
+    network_mode: host
+    env_file:
+      - grafana-agent/dealgood/.env
+  ipfs:
+    image: ipfs/kubo:v0.14.0
+    network_mode: host
+    ports:
+      - "8080:8080"
+    environment:
+      - IPFS_PROFILE=server
+  dealgood:
+    build: dealgood
+    network_mode: host
+    environment:
+      - DEALGOOD_EXPERIMENT=docker
+      # - OTEL_TRACES_SAMPLER=traceidratio
+      - OTEL_TRACES_EXPORTER=otlp
+      # - OTEL_TRACES_SAMPLER_ARG=0.1
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
