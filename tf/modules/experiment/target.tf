@@ -12,7 +12,7 @@ resource "aws_ecs_service" "target" {
 
   network_configuration {
     subnets          = var.vpc_subnets
-    security_groups  = var.security_groups
+    security_groups  = var.target_security_groups
     assign_public_ip = true
   }
 
@@ -106,7 +106,7 @@ resource "aws_ecs_task_definition" "target" {
     },
     {
       cpu   = 0
-      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/grafana-agent:${var.grafana_agent_tag}"
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/grafana-agent:${var.target_agent_tag}"
       environment = [
         # we use these for setting labels on metrics
         { name = "THUNDERDOME_EXPERIMENT", value = var.name },

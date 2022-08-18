@@ -11,7 +11,11 @@ variable "vpc_subnets" {
   type = list(string)
 }
 
-variable "security_groups" {
+variable "target_security_groups" {
+  type = list(string)
+}
+
+variable "dealgood_security_groups" {
   type = list(string)
 }
 
@@ -33,9 +37,21 @@ variable "grafana_secrets" {
   default = []
 }
 
-variable "grafana_agent_tag" {
-  default = "150e302"
+variable "target_agent_tag" {
+  default = "target-d8e47a8"
+}
+
+variable "dealgood_agent_tag" {
+  default = "dealgood-e71b18b"
+}
+
+variable "dealgood_tag" {
+  default = "latest"
 }
 
 variable "ssm_exec_policy_arn" {
 }
+
+variable "dealgood_task_role_arn" {
+}
+
