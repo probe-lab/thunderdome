@@ -51,7 +51,18 @@ func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *Requ
 }
 
 func (w *Worker) timeRequest(r *Request) *RequestTiming {
-	req, _ := http.NewRequest("GET", w.Target.BaseURL+r.URI, nil)
+	req, err := http.NewRequest(r.Method, w.Target.BaseURL+r.URI, nil)
+	if err != nil {
+		if w.PrintFailures {
+			fmt.Fprintf(os.Stderr, "%s %s => error %v\n", r.Method, w.Target.BaseURL+r.URI, err)
+		}
+		return &RequestTiming{
+			ExperimentName: w.ExperimentName,
+			TargetName:     w.Target.Name,
+			ConnectError:   true,
+		}
+	}
+
 	for k, v := range r.Header {
 		req.Header.Set(k, v)
 	}

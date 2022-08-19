@@ -69,14 +69,14 @@ var app = &cli.App{
 		&cli.IntFlag{
 			Name:        "rate",
 			Usage:       "Number of requests per second to send (if not using an experiment file)",
-			Value:       10,
+			Value:       5,
 			Destination: &flags.rate,
 			EnvVars:     []string{"DEALGOOD_RATE"},
 		},
 		&cli.IntFlag{
 			Name:        "concurrency",
 			Usage:       "Number of concurrent requests to send (if not using an experiment file)",
-			Value:       10,
+			Value:       40,
 			Destination: &flags.concurrency,
 			EnvVars:     []string{"DEALGOOD_CONCURRENCY"},
 		},
@@ -162,7 +162,7 @@ func Run(cc *cli.Context) error {
 	var source RequestSource
 	switch flags.source {
 	case "random":
-		source = NewRandomRequestSource(sampleRequests)
+		source = NewRandomRequestSource(sampleRequests())
 	case "nginxlog":
 		source, err = NewNginxLogRequestSource(flags.sourceParam)
 		if err != nil {
