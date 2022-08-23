@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
+	"github.com/pkg/profile"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/urfave/cli/v2"
 	"go.opencensus.io/stats/view"
@@ -122,6 +123,20 @@ var app = &cli.App{
 			Destination: &flags.prometheusAddr,
 			EnvVars:     []string{"DEALGOOD_PROMETHEUS_ADDR"},
 		},
+		&cli.StringFlag{
+			Name:        "cpuprofile",
+			Usage:       "Write a CPU profile to the specified file before exiting.",
+			Value:       "",
+			Destination: &flags.cpuprofile,
+			EnvVars:     []string{"DEALGOOD_CPUPROFILE"},
+		},
+		&cli.StringFlag{
+			Name:        "memprofile",
+			Usage:       "Write an allocation profile to the file before exiting.",
+			Value:       "",
+			Destination: &flags.memprofile,
+			EnvVars:     []string{"DEALGOOD_MEMPROFILE"},
+		},
 	},
 }
 
@@ -140,6 +155,8 @@ var flags struct {
 	failures       bool
 	quiet          bool
 	prometheusAddr string
+	cpuprofile     string
+	memprofile     string
 }
 
 func main() {
@@ -208,6 +225,14 @@ func Run(cc *cli.Context) error {
 		if err := startPrometheusServer(flags.prometheusAddr); err != nil {
 			return fmt.Errorf("start prometheus: %w", err)
 		}
+	}
+
+	if flags.cpuprofile != "" {
+		defer profile.Start(profile.CPUProfile, profile.ProfilePath(flags.cpuprofile)).Stop()
+	}
+
+	if flags.memprofile != "" {
+		defer profile.Start(profile.MemProfile, profile.ProfilePath(flags.memprofile)).Stop()
 	}
 
 	tc := propagation.TraceContext{}

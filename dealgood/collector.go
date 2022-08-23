@@ -35,7 +35,7 @@ type Collector struct {
 	responsesCounter    *prometheus.CounterVec
 
 	mu      sync.Mutex // guards access to samples
-	samples []map[string]MetricSample
+	samples map[string]MetricSample
 }
 
 func NewCollector(timings chan *RequestTiming, sampleInterval time.Duration) (*Collector, error) {
@@ -168,10 +168,10 @@ func (c *Collector) Run(ctx context.Context) {
 			stats[res.TargetName] = st
 
 		case <-sampleTicker.C:
-			sample := map[string]MetricSample{}
+			samples := map[string]MetricSample{}
 			for k, v := range stats {
 				st := *v
-				sample[k] = MetricSample{
+				samples[k] = MetricSample{
 					TotalRequests:      st.TotalRequests,
 					TotalConnectErrors: st.TotalConnectErrors,
 					TotalDropped:       st.TotalDropped,
@@ -217,7 +217,7 @@ func (c *Collector) Run(ctx context.Context) {
 				// fmt.Printf("requests: %d, dropped: %d, errored: %d, 5xx: %d, TTFB 50th: %.5f, TTFB 90th: %.5f, TTFB 99th: %.5f\n", st.TotalRequests, st.TotalDropped, st.TotalConnectErrors, st.TotalServerErrors, st.TTFB.Quantile(0.5), st.TTFB.Quantile(0.9), st.TTFB.Quantile(0.99))
 			}
 			c.mu.Lock()
-			c.samples = append(c.samples, sample)
+			c.samples = samples
 			c.mu.Unlock()
 
 		}
@@ -230,7 +230,11 @@ func (c *Collector) Latest() map[string]MetricSample {
 	if len(c.samples) == 0 {
 		return map[string]MetricSample{}
 	}
-	return c.samples[len(c.samples)-1]
+	samples := map[string]MetricSample{}
+	for k, v := range c.samples {
+		samples[k] = v
+	}
+	return samples
 }
 
 type TargetStats struct {
