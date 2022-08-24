@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptrace"
 	"os"
@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/net/http2"
+	"golang.org/x/sync/errgroup"
 )
 
 type Worker struct {
@@ -108,7 +110,7 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 		}
 	}
 	defer resp.Body.Close()
-	io.Copy(ioutil.Discard, resp.Body)
+	io.Copy(io.Discard, resp.Body)
 
 	end = time.Now()
 	totalTime = end.Sub(start)
@@ -127,4 +129,69 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 		TTFB:           ttfb,
 		TotalTime:      totalTime,
 	}
+}
+
+func targetsReady(ctx context.Context, targets []*TargetJSON, quiet bool) error {
+	const readyTimeout = 60
+	var lastErr error
+	start := time.Now()
+	for {
+		running := time.Since(start)
+		if running > readyTimeout*time.Second {
+			return fmt.Errorf("unable to connect to all targets within %s", durationDesc(readyTimeout))
+		}
+
+		g, ctx := errgroup.WithContext(ctx)
+		for _, target := range targets {
+			target = target // avoid shadowing
+			g.Go(func() error {
+				tr := &http.Transport{
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: true,
+						ServerName:         target.Host,
+					},
+					MaxIdleConnsPerHost: http.DefaultMaxIdleConnsPerHost,
+					DisableCompression:  true,
+					DisableKeepAlives:   true,
+				}
+				http2.ConfigureTransport(tr)
+
+				hc := &http.Client{
+					Transport: tr,
+					Timeout:   2 * time.Second,
+				}
+				req, err := http.NewRequest("GET", target.BaseURL, nil)
+				if err != nil {
+					return fmt.Errorf("new request to target: %w", err)
+				}
+				req = req.WithContext(ctx)
+
+				resp, err := hc.Do(req)
+				if err != nil {
+					return fmt.Errorf("request: %w", err)
+				}
+				defer resp.Body.Close()
+				io.Copy(io.Discard, resp.Body)
+				return nil
+			})
+
+		}
+
+		lastErr = g.Wait()
+		if lastErr == nil {
+			if !quiet {
+				fmt.Printf("all targets ready\n")
+			}
+			// All requests succeeded
+			return nil
+		}
+
+		if !quiet {
+			fmt.Printf("ready check failed: %v\n", lastErr)
+		}
+		time.Sleep(5 * time.Second)
+
+	}
+
+	return lastErr
 }

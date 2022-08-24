@@ -241,6 +241,10 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("set tracer provider: %w", err)
 	}
 
+	if err := targetsReady(ctx, exp.Targets, flags.quiet); err != nil {
+		return fmt.Errorf("targets ready check: %w", err)
+	}
+
 	if flags.nogui {
 		return nogui(ctx, source, &exp, !flags.quiet, flags.timings, flags.failures)
 	}

@@ -37,17 +37,17 @@ func (l *Loader) Send(ctx context.Context) error {
 	}
 
 	workers := make([]*Worker, 0, len(l.Targets)*l.Concurrency)
-	for _, be := range l.Targets {
+	for _, target := range l.Targets {
 		// One unbuffered request channel per target, shared by all concurrent workers
 		// for that target.
-		if be.Requests == nil {
-			be.Requests = make(chan *Request)
+		if target.Requests == nil {
+			target.Requests = make(chan *Request)
 		}
 		for j := 0; j < l.Concurrency; j++ {
 			tr := &http.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
-					ServerName:         be.Host,
+					ServerName:         target.Host,
 				},
 				MaxIdleConnsPerHost: http.DefaultMaxIdleConnsPerHost,
 				DisableCompression:  true,
@@ -56,7 +56,7 @@ func (l *Loader) Send(ctx context.Context) error {
 			http2.ConfigureTransport(tr)
 
 			workers = append(workers, &Worker{
-				Target:         be,
+				Target:         target,
 				ExperimentName: l.ExperimentName,
 				Client: &http.Client{
 					Transport: tr,
