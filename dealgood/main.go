@@ -228,11 +228,11 @@ func Run(cc *cli.Context) error {
 	}
 
 	if flags.cpuprofile != "" {
-		defer profile.Start(profile.CPUProfile, profile.ProfilePath(flags.cpuprofile)).Stop()
+		defer profile.Start(profile.CPUProfile, profile.ProfileFilename(flags.cpuprofile)).Stop()
 	}
 
 	if flags.memprofile != "" {
-		defer profile.Start(profile.MemProfile, profile.ProfilePath(flags.memprofile)).Stop()
+		defer profile.Start(profile.MemProfile, profile.ProfileFilename(flags.memprofile)).Stop()
 	}
 
 	tc := propagation.TraceContext{}

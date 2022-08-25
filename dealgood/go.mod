@@ -5,6 +5,7 @@ go 1.18
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.1
 	github.com/mum4k/termdash v0.17.0
+	github.com/pkg/profile v0.0.0-00010101000000-000000000000
 	github.com/prometheus/client_golang v1.13.0
 	github.com/spenczar/tdigest v2.1.0+incompatible
 	github.com/urfave/cli/v2 v2.11.1
@@ -16,6 +17,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.9.0
 	go.opentelemetry.io/otel/trace v1.9.0
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
+	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 )
 
 require (
@@ -38,7 +40,6 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/nsf/termbox-go v1.1.1 // indirect
 	github.com/openzipkin/zipkin-go v0.4.0 // indirect
-	github.com/pkg/profile v1.6.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
@@ -49,7 +50,6 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.9.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.9.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.18.0 // indirect
-	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f // indirect
 	golang.org/x/sys v0.0.0-20220704084225-05e143d24a9e // indirect
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467 // indirect
 	golang.org/x/text v0.3.7 // indirect
@@ -58,3 +58,5 @@ require (
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+replace github.com/pkg/profile => github.com/iand/profile v0.0.0-20220825113751-13692ce5785f
