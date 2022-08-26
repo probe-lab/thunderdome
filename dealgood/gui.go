@@ -309,7 +309,10 @@ func (g *Gui) Show(ctx context.Context, redrawInterval time.Duration) error {
 	g.cancel = cancel
 	defer g.cancel()
 
-	return termdash.Run(ctx, g.term, c, termdash.KeyboardSubscriber(g.OnKey), termdash.RedrawInterval(redrawInterval))
+	if err := termdash.Run(ctx, g.term, c, termdash.KeyboardSubscriber(g.OnKey), termdash.RedrawInterval(redrawInterval)); err != nil {
+		return fmt.Errorf("run: %w", err)
+	}
+	return nil
 }
 
 func (g *Gui) OnKey(k *terminalapi.Keyboard) {

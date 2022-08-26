@@ -8,7 +8,15 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/grafana/loki/pkg/logcli/client"
+	"github.com/grafana/loki/pkg/logcli/query"
+	"github.com/grafana/loki/pkg/loghttp"
+	"github.com/grafana/loki/pkg/util/unmarshal"
+	"github.com/prometheus/common/config"
 )
 
 type Request struct {
@@ -20,54 +28,74 @@ type Request struct {
 
 // A RequestSource is a provider of a stream of requests that can be sent to workers.
 type RequestSource interface {
-	// Next advances to the next requests. It returns false if no more requests are
-	// available or a fatal error occured while advancing the stream.
-	Next() bool
+	// Start starts the request source, makiing requests available on Chan.
+	Start() error
 
-	// Request returns the current request from the stream.
-	Request() Request
+	// Stop stops sending requests to the channel.
+	Stop()
 
-	// Err returns any error that was encountered while advancing the stream.
+	// Chan is a channel that can be used to read requests produced by the source.
+	Chan() <-chan Request
+
+	// Err returns any error that was encountered while processing the stream.
 	Err() error
 }
 
 // StdinRequestSource is a request source that reads a stream of JSON requests
 // from stdin.
 type StdinRequestSource struct {
-	scanner *bufio.Scanner
-	req     Request
-	err     error
+	ch   chan Request
+	done chan struct{}
+
+	mu  sync.Mutex // guards following fields
+	err error
 }
 
 var _ RequestSource = (*StdinRequestSource)(nil)
 
 func NewStdinRequestSource() *StdinRequestSource {
 	return &StdinRequestSource{
-		scanner: bufio.NewScanner(os.Stdin),
+		done: make(chan struct{}),
+		ch:   make(chan Request),
 	}
 }
 
-func (s *StdinRequestSource) Next() bool {
-	if s.err != nil {
-		return false
-	}
-
-	if !s.scanner.Scan() {
-		s.err = s.scanner.Err()
-		return false
-	}
-
-	data := s.scanner.Bytes()
-	s.req = Request{}
-	s.err = json.Unmarshal(data, &s.req)
-	return s.err == nil
+func (s *StdinRequestSource) Chan() <-chan Request {
+	return s.ch
 }
 
-func (s *StdinRequestSource) Request() Request {
-	return s.req
+func (s *StdinRequestSource) Start() error {
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			data := scanner.Bytes()
+			var req Request
+			if err := json.Unmarshal(data, &req); err != nil {
+				s.mu.Lock()
+				s.err = err
+				s.mu.Unlock()
+				s.Stop()
+				return
+			}
+
+			select {
+			case <-s.done:
+				return
+			case s.ch <- req:
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (s *StdinRequestSource) Stop() {
+	close(s.done)
 }
 
 func (s *StdinRequestSource) Err() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.err
 }
 
@@ -75,24 +103,42 @@ func (s *StdinRequestSource) Err() error {
 // from a list of requests.
 type RandomRequestSource struct {
 	reqs []*Request
-	idx  int
 	rng  *rand.Rand
+	ch   chan Request
+	done chan struct{}
 }
 
 func NewRandomRequestSource(reqs []*Request) *RandomRequestSource {
 	return &RandomRequestSource{
 		reqs: reqs,
 		rng:  rand.New(rand.NewSource(time.Now().UnixNano())),
+		ch:   make(chan Request),
 	}
 }
 
-func (r *RandomRequestSource) Next() bool {
-	r.idx = r.rng.Intn(len(r.reqs))
-	return true
+func (r *RandomRequestSource) Chan() <-chan Request {
+	return r.ch
 }
 
-func (r *RandomRequestSource) Request() Request {
-	return *r.reqs[r.idx]
+func (r *RandomRequestSource) Start() error {
+	go func() {
+		for {
+			idx := r.rng.Intn(len(r.reqs))
+			req := *r.reqs[idx]
+
+			select {
+			case <-r.done:
+				return
+			case r.ch <- req:
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (r *RandomRequestSource) Stop() {
+	close(r.done)
 }
 
 func (r *RandomRequestSource) Err() error {
@@ -136,7 +182,7 @@ func NewNginxLogRequestSource(fname string) (*RandomRequestSource, error) {
 	}
 
 	if scanner.Err() != nil {
-		return nil, scanner.Err()
+		return nil, fmt.Errorf("scanner: %w", scanner.Err())
 	}
 
 	return NewRandomRequestSource(reqs), nil
@@ -232,4 +278,166 @@ func permutePaths(paths []string) []*Request {
 	}
 
 	return reqs
+}
+
+// LokiRequestSource is a request source that reads a stream of nginx logs from Loki
+type LokiRequestSource struct {
+	cfg    LokiConfig
+	ch     chan Request
+	done   chan struct{}
+	filter RequestFilter
+
+	mu   sync.Mutex // guards following fields
+	conn *websocket.Conn
+	err  error
+}
+
+type LokiConfig struct {
+	URI      string // URI of the loki server, e.g. https://logs-prod-us-central1.grafana.net
+	Username string // For grafana cloud this is a numeric user id
+	Password string // For grafana cloud this is the API token
+	Query    string // the query to use to obtain logs
+}
+
+func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter) (*LokiRequestSource, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config must not be nil")
+	}
+	return &LokiRequestSource{
+		cfg: *cfg,
+		ch:  make(chan Request, 500),
+	}, nil
+}
+
+func (l *LokiRequestSource) Chan() <-chan Request {
+	return l.ch
+}
+
+func (l *LokiRequestSource) Start() error {
+	client := &client.DefaultClient{
+		TLSConfig: config.TLSConfig{},
+		Address:   l.cfg.URI,
+		Username:  l.cfg.Username,
+		Password:  l.cfg.Password,
+	}
+
+	q := &query.Query{
+		Limit:       100,
+		QueryString: l.cfg.Query,
+		Start:       time.Now().Add(-60 * time.Minute),
+		End:         time.Now(),
+		BatchSize:   1000,
+	}
+
+	conn, err := client.LiveTailQueryConn(q.QueryString, 0, q.Limit, q.Start, q.Quiet)
+	if err != nil {
+		l.err = fmt.Errorf("tailing logs failed: %w", err)
+		return l.err
+	}
+	l.mu.Lock()
+	l.conn = conn
+	l.mu.Unlock()
+
+	type logline struct {
+		Server  string            `json:"server"`
+		Time    time.Time         `json:"time"`
+		Method  string            `json:"method"`
+		URI     string            `json:"uri"`
+		Status  int               `json:"status"`
+		Headers map[string]string `json:"headers"`
+	}
+
+	go func() {
+		for {
+			tr, ok := l.readTailResponse()
+			if !ok {
+				return
+			}
+			for _, stream := range tr.Streams {
+				for _, entry := range stream.Entries {
+					var line logline
+					json.Unmarshal([]byte(entry.Line), &line)
+
+					req := Request{
+						Method: line.Method,
+						URI:    line.URI,
+						Header: line.Headers,
+					}
+
+					if l.filter != nil && !l.filter(&req) {
+						continue
+					}
+
+					select {
+					case <-l.done:
+						return
+					case l.ch <- req:
+
+					default:
+					}
+
+				}
+			}
+
+		}
+	}()
+
+	return nil
+}
+
+func (l *LokiRequestSource) Stop() {
+	close(l.done)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.conn == nil {
+		return
+	}
+
+	if err := l.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
+		l.err = err
+	}
+	l.conn = nil
+}
+
+func (l *LokiRequestSource) Err() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.err
+}
+
+func (l *LokiRequestSource) readTailResponse() (*loghttp.TailResponse, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.conn == nil {
+		l.err = fmt.Errorf("disconnected")
+		return nil, false
+	}
+
+	tr := new(loghttp.TailResponse)
+	err := unmarshal.ReadTailResponseJSON(tr, l.conn)
+	if err != nil {
+		l.err = fmt.Errorf("read tail response json: %w", err)
+		return nil, false
+	}
+
+	return tr, true
+}
+
+type RequestFilter func(*Request) bool
+
+func NullRequestFilter(*Request) bool {
+	return true
+}
+
+func PathRequestFilter(req *Request) bool {
+	if req.Method != "GET" {
+		return false
+	}
+	if !strings.HasPrefix(req.URI, "/ipfs") && !strings.HasPrefix(req.URI, "/ipns") {
+		return false
+	}
+	return true
 }

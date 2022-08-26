@@ -43,7 +43,7 @@ var app = &cli.App{
 		&cli.StringFlag{
 			Name:        "source",
 			Value:       "-",
-			Usage:       "Name of request source, use '-' to read JSONL from stdin, 'random' to use some builtin random requests",
+			Usage:       "Name of request source, use '-' to read JSONL from stdin, 'random' to use some builtin random requests, 'loki' to read from a Loki log stream",
 			Destination: &flags.source,
 			EnvVars:     []string{"DEALGOOD_SOURCE"},
 		},
@@ -137,6 +137,34 @@ var app = &cli.App{
 			Destination: &flags.memprofile,
 			EnvVars:     []string{"DEALGOOD_MEMPROFILE"},
 		},
+		&cli.StringFlag{
+			Name:        "loki-uri",
+			Usage:       "URI of the loki server when using loki as a request source.",
+			Value:       "",
+			Destination: &flags.lokiURI,
+			EnvVars:     []string{"DEALGOOD_LOKI_URI"},
+		},
+		&cli.StringFlag{
+			Name:        "loki-username",
+			Usage:       "Username to use when using loki as a request source.",
+			Value:       "",
+			Destination: &flags.lokiUsername,
+			EnvVars:     []string{"DEALGOOD_LOKI_USERNAME"},
+		},
+		&cli.StringFlag{
+			Name:        "loki-password",
+			Usage:       "Password to use when using loki as a request source.",
+			Value:       "",
+			Destination: &flags.lokiPassword,
+			EnvVars:     []string{"DEALGOOD_LOKI_PASSWORD"},
+		},
+		&cli.StringFlag{
+			Name:        "loki-query",
+			Usage:       "Query to use when using loki as a request source.",
+			Value:       "",
+			Destination: &flags.lokiQuery,
+			EnvVars:     []string{"DEALGOOD_LOKI_QUERY"},
+		},
 	},
 }
 
@@ -157,6 +185,10 @@ var flags struct {
 	prometheusAddr string
 	cpuprofile     string
 	memprofile     string
+	lokiURI        string
+	lokiUsername   string
+	lokiPassword   string
+	lokiQuery      string
 }
 
 func main() {
@@ -184,6 +216,18 @@ func Run(cc *cli.Context) error {
 		source, err = NewNginxLogRequestSource(flags.sourceParam)
 		if err != nil {
 			return fmt.Errorf("nginx source: %w", err)
+		}
+	case "loki":
+		cfg := &LokiConfig{
+			URI:      flags.lokiURI,
+			Username: flags.lokiUsername,
+			Password: flags.lokiPassword,
+			Query:    flags.lokiQuery,
+		}
+
+		source, err = NewLokiRequestSource(cfg, PathRequestFilter)
+		if err != nil {
+			return fmt.Errorf("loki source: %w", err)
 		}
 	case "-":
 		source = NewStdinRequestSource()

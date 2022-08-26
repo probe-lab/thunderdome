@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -73,40 +74,54 @@ func (l *Loader) Send(ctx context.Context) error {
 		go w.Run(ctx, &wg, l.Timings)
 	}
 
-	// requestInterval is the minimum time to wait between requests
+	if err := l.Source.Start(); err != nil {
+		return fmt.Errorf("start source: %w", err)
+	}
+
 	requestInterval := time.Duration(float64(time.Second) / float64(l.Rate))
 	lastRequestDone := time.Now()
 
-	for l.Source.Next() {
+loop:
+	for {
 		select {
 		case <-ctx.Done():
-			return nil
-		default:
-		}
+			break loop
+		case req := <-l.Source.Chan():
 
-		intervalToNextRequest := requestInterval - time.Since(lastRequestDone)
-		if intervalToNextRequest > 0 {
-			time.Sleep(intervalToNextRequest)
-		}
+			timeSinceLast := time.Since(lastRequestDone)
+			if timeSinceLast < requestInterval {
+				time.Sleep(requestInterval - timeSinceLast)
+			}
 
-		req := l.Source.Request()
-		for _, be := range l.Targets {
 			select {
-			case be.Requests <- &req:
+			case <-ctx.Done():
+				break loop
 			default:
-				l.Timings <- &RequestTiming{
-					ExperimentName: l.ExperimentName,
-					TargetName:     be.Name,
-					Dropped:        true,
+			}
+
+			for _, be := range l.Targets {
+				select {
+				case be.Requests <- &req:
+					lastRequestDone = time.Now()
+				default:
+					l.Timings <- &RequestTiming{
+						ExperimentName: l.ExperimentName,
+						TargetName:     be.Name,
+						Dropped:        true,
+					}
 				}
 			}
 		}
-		lastRequestDone = time.Now()
 	}
+
 	for _, be := range l.Targets {
 		close(be.Requests)
 	}
 	wg.Wait()
 
-	return l.Source.Err()
+	if err := l.Source.Err(); err != nil {
+		return fmt.Errorf("source: %w", err)
+	}
+
+	return nil
 }
