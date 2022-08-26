@@ -138,12 +138,12 @@ func targetsReady(ctx context.Context, targets []*TargetJSON, quiet bool) error 
 	for {
 		running := time.Since(start)
 		if running > readyTimeout*time.Second {
-			return fmt.Errorf("unable to connect to all targets within %s", durationDesc(readyTimeout))
+			return fmt.Errorf("unable to connect to all targets within %s: %w", durationDesc(readyTimeout), lastErr)
 		}
 
 		g, ctx := errgroup.WithContext(ctx)
 		for _, target := range targets {
-			target = target // avoid shadowing
+			target := target // avoid shadowing
 			g.Go(func() error {
 				tr := &http.Transport{
 					TLSClientConfig: &tls.Config{
@@ -192,6 +192,4 @@ func targetsReady(ctx context.Context, targets []*TargetJSON, quiet bool) error 
 		time.Sleep(5 * time.Second)
 
 	}
-
-	return lastErr
 }
