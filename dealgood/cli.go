@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, printHeader bool, printTimings bool, printFailures bool) error {
+func nogui(ctx context.Context, source RequestSource, exp *Experiment, printHeader bool, printTimings bool, printFailures bool) error {
 	timings := make(chan *RequestTiming, 10000)
 	defer func() {
 		close(timings)
@@ -28,8 +28,8 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 		fmt.Printf("Request rate: %d\n", exp.Rate)
 		fmt.Printf("Request concurrency: %d\n", exp.Concurrency)
 		fmt.Println("Targets:")
-		for _, be := range exp.Targets {
-			fmt.Printf("  %s (%s)\n", be.Name, be.BaseURL)
+		for _, t := range exp.Targets {
+			fmt.Printf("  %s (%s://%s)\n", t.Name, t.URLScheme, t.HostPort())
 		}
 		fmt.Println("")
 	}
@@ -46,14 +46,7 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 		Duration:       exp.Duration,
 		Timings:        timings,
 		PrintFailures:  printFailures,
-	}
-
-	for _, be := range exp.Targets {
-		l.Targets = append(l.Targets, &Target{
-			Name:    be.Name,
-			BaseURL: be.BaseURL,
-			Host:    be.Host,
-		})
+		Targets:        exp.Targets,
 	}
 
 	if err := l.Send(ctx); err != nil {
@@ -68,7 +61,7 @@ func nogui(ctx context.Context, source RequestSource, exp *ExperimentJSON, print
 	return nil
 }
 
-func printCollectedTimings(ctx context.Context, coll *Collector, exp *ExperimentJSON) {
+func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment) {
 	start := time.Now()
 	t := time.NewTicker(1 * time.Second)
 	defer t.Stop()
@@ -98,7 +91,7 @@ func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment
 	}
 }
 
-func printSampleTimings(ctx context.Context, sample map[string]MetricSample, exp *ExperimentJSON) {
+func printSampleTimings(ctx context.Context, sample map[string]MetricSample, exp *Experiment) {
 	for i, be := range exp.Targets {
 		if i > 0 {
 			fmt.Println()

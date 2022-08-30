@@ -126,7 +126,7 @@ var colors = []cell.Color{
 	cell.ColorFuchsia,
 }
 
-func NewGui(source RequestSource, exp *ExperimentJSON) (*Gui, error) {
+func NewGui(source RequestSource, exp *Experiment) (*Gui, error) {
 	g := &Gui{
 		source:             source,
 		beStatsTexts:       map[string]*text.Text{},
@@ -136,14 +136,7 @@ func NewGui(source RequestSource, exp *ExperimentJSON) (*Gui, error) {
 		requestRate:        exp.Rate,
 		requestConcurrency: exp.Concurrency,
 		statsFormatter:     &statsFormatters[0],
-	}
-
-	for _, be := range exp.Targets {
-		g.targets = append(g.targets, &Target{
-			Name:    be.Name,
-			BaseURL: be.BaseURL,
-			Host:    be.Host,
-		})
+		targets:            exp.Targets,
 	}
 
 	// Find the closest indices for the cycle-able values

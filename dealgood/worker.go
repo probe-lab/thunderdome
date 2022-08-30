@@ -1,13 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptrace"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,7 +42,7 @@ func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *Requ
 			if !ok {
 				return
 			}
-			result := w.timeRequest(req)
+			result := w.timeRequest(ctx, req)
 
 			// Check context again since it might have been canceled while we were
 			// waiting for request
@@ -52,8 +57,8 @@ func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *Requ
 	}
 }
 
-func (w *Worker) timeRequest(r *Request) *RequestTiming {
-	req, err := http.NewRequest(r.Method, w.Target.BaseURL+r.URI, nil)
+func (w *Worker) timeRequest(ctx context.Context, r *Request) *RequestTiming {
+	req, err := newRequest(ctx, w.Target, r)
 	if err != nil {
 		if w.PrintFailures {
 			fmt.Fprintf(os.Stderr, "%s %s => error %v\n", r.Method, w.Target.BaseURL+r.URI, err)
@@ -63,14 +68,6 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 			TargetName:     w.Target.Name,
 			ConnectError:   true,
 		}
-	}
-
-	for k, v := range r.Header {
-		req.Header.Set(k, v)
-	}
-
-	if w.Target.Host != "" {
-		req.Host = w.Target.Host
 	}
 
 	ctx, span := otel.Tracer("dealgood").Start(req.Context(), "HTTP "+req.Method, trace.WithAttributes(attribute.String("uri", r.URI)))
@@ -131,9 +128,40 @@ func (w *Worker) timeRequest(r *Request) *RequestTiming {
 	}
 }
 
-func targetsReady(ctx context.Context, targets []*TargetJSON, quiet bool) error {
+func newRequest(ctx context.Context, t *Target, r *Request) (*http.Request, error) {
+	req := &http.Request{
+		Method: r.Method,
+		URL: &url.URL{
+			Scheme: t.URLScheme,
+			Host:   t.HostPort(),
+			Path:   r.URI,
+		},
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header:     make(http.Header),
+	}
+
+	if r.Body != nil {
+		req.Body = io.NopCloser(bytes.NewReader(r.Body))
+	}
+
+	for k, v := range r.Header {
+		req.Header.Set(k, v)
+	}
+
+	if t.HostName != "" {
+		req.Host = t.HostName
+	}
+
+	return req, nil
+}
+
+// targetsReady
+func targetsReady(ctx context.Context, targets []*Target, quiet bool) error {
 	const readyTimeout = 60
 	var lastErr error
+
 	start := time.Now()
 	for {
 		running := time.Since(start)
@@ -145,10 +173,23 @@ func targetsReady(ctx context.Context, targets []*TargetJSON, quiet bool) error 
 		for _, target := range targets {
 			target := target // avoid shadowing
 			g.Go(func() error {
+				// Resolve target host
+				origHostport := target.HostPort()
+				hostport, err := resolve(origHostport)
+				if err != nil {
+					return fmt.Errorf("unable to resolve target %q: %w", origHostport, err)
+				}
+				if origHostport != hostport {
+					target.SetHostPort(hostport)
+					if !quiet {
+						fmt.Printf("resolved %s to %s\n", origHostport, hostport)
+					}
+				}
+
 				tr := &http.Transport{
 					TLSClientConfig: &tls.Config{
 						InsecureSkipVerify: true,
-						ServerName:         target.Host,
+						ServerName:         target.HostName,
 					},
 					MaxIdleConnsPerHost: http.DefaultMaxIdleConnsPerHost,
 					DisableCompression:  true,
@@ -160,7 +201,8 @@ func targetsReady(ctx context.Context, targets []*TargetJSON, quiet bool) error 
 					Transport: tr,
 					Timeout:   2 * time.Second,
 				}
-				req, err := http.NewRequest("GET", target.BaseURL, nil)
+
+				req, err := newRequest(ctx, target, &Request{Method: "GET", URI: "/"})
 				if err != nil {
 					return fmt.Errorf("new request to target: %w", err)
 				}
@@ -192,4 +234,60 @@ func targetsReady(ctx context.Context, targets []*TargetJSON, quiet bool) error 
 		time.Sleep(5 * time.Second)
 
 	}
+}
+
+func resolve(name string) (string, error) {
+	host, port, err := net.SplitHostPort(name)
+	if err != nil {
+		return name, fmt.Errorf("split host port: %w", err)
+	}
+
+	// Special case localhost
+	if host == "localhost" {
+		return name, nil
+	}
+
+	// name may already be using a raw IP address
+	if net.ParseIP(host) != nil {
+		return name, nil
+	}
+
+	// Lookup A record
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		var de *net.DNSError
+		if errors.As(err, &de) {
+			if de.Temporary() {
+				return name, fmt.Errorf("temporary dns error: %w", de)
+			}
+			if de.Timeout() {
+				return name, fmt.Errorf("dns timeout: %w", de)
+			}
+		}
+	}
+
+	// Pick first IP if we got one
+	if len(ips) > 0 {
+		return fmt.Sprintf("%s:%s", ips[0], port), nil
+	}
+
+	// No A record so lookup SRV
+	_, recs, err := net.DefaultResolver.LookupSRV(context.Background(), "", "", host)
+	if err != nil {
+		return name, fmt.Errorf("lookup srv: %w", err)
+	}
+
+	if len(recs) == 0 {
+		return name, fmt.Errorf("no srv records found")
+	}
+
+	// Pick first record
+	host = strings.TrimRight(recs[0].Target, ".")
+	// Did we get an IP address
+	if net.ParseIP(host) != nil {
+		return fmt.Sprintf("%s:%d", host, recs[0].Port), nil
+	}
+
+	// attempt to resolve
+	return resolve(fmt.Sprintf("%s:%d", host, recs[0].Port))
 }

@@ -11,13 +11,6 @@ import (
 	"golang.org/x/net/http2"
 )
 
-type Target struct {
-	Name     string // short name of the target to be used in reports and metrics
-	BaseURL  string // base URL of the target (without a path)
-	Host     string
-	Requests chan *Request // channel used to receive requests to be issued to the target
-}
-
 type Loader struct {
 	Source         RequestSource // source of requests
 	ExperimentName string
@@ -39,16 +32,11 @@ func (l *Loader) Send(ctx context.Context) error {
 
 	workers := make([]*Worker, 0, len(l.Targets)*l.Concurrency)
 	for _, target := range l.Targets {
-		// One unbuffered request channel per target, shared by all concurrent workers
-		// for that target.
-		if target.Requests == nil {
-			target.Requests = make(chan *Request)
-		}
 		for j := 0; j < l.Concurrency; j++ {
 			tr := &http.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
-					ServerName:         target.Host,
+					ServerName:         target.HostName,
 				},
 				MaxIdleConnsPerHost: http.DefaultMaxIdleConnsPerHost,
 				DisableCompression:  true,
