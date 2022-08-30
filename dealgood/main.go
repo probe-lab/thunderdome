@@ -236,16 +236,16 @@ func Run(cc *cli.Context) error {
 	}
 
 	// Load the experiment definition or use a default one
-	var exp ExperimentJSON
+	var expjson ExperimentJSON
 	if flags.experimentFile != "" {
-		if err := readExperimentFile(flags.experimentFile, &exp); err != nil {
+		if err := readExperimentFile(flags.experimentFile, &expjson); err != nil {
 			return fmt.Errorf("read experiment file: %w", err)
 		}
 	} else {
-		exp.Name = flags.experimentName
-		exp.Rate = flags.rate
-		exp.Concurrency = flags.concurrency
-		exp.Duration = flags.duration
+		expjson.Name = flags.experimentName
+		expjson.Rate = flags.rate
+		expjson.Concurrency = flags.concurrency
+		expjson.Duration = flags.duration
 		for _, be := range flags.targets.Value() {
 			bej := &TargetJSON{
 				BaseURL: be,
@@ -257,14 +257,16 @@ func Run(cc *cli.Context) error {
 			} else {
 				bej.BaseURL = be
 			}
-			exp.Targets = append(exp.Targets, bej)
+			expjson.Targets = append(expjson.Targets, bej)
 		}
 	}
 
-	if err := validateExperiment(&exp); err != nil {
+	exp, err := newExperiment(&expjson)
+	if err != nil {
 		return fmt.Errorf("experiment: %w", err)
 	}
 
+	_ = exp
 	if flags.prometheusAddr != "" {
 		if err := startPrometheusServer(flags.prometheusAddr); err != nil {
 			return fmt.Errorf("start prometheus: %w", err)
@@ -290,10 +292,10 @@ func Run(cc *cli.Context) error {
 	}
 
 	if flags.nogui {
-		return nogui(ctx, source, &exp, !flags.quiet, flags.timings, flags.failures)
+		return nogui(ctx, source, exp, !flags.quiet, flags.timings, flags.failures)
 	}
 
-	g, err := NewGui(source, &exp)
+	g, err := NewGui(source, exp)
 	if err != nil {
 		return fmt.Errorf("gui: %w", err)
 	}
