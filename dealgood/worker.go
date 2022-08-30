@@ -237,9 +237,16 @@ func targetsReady(ctx context.Context, targets []*Target, quiet bool) error {
 }
 
 func resolve(name string) (string, error) {
-	host, port, err := net.SplitHostPort(name)
-	if err != nil {
-		return name, fmt.Errorf("split host port: %w", err)
+	var host, port string
+	var err error
+	if strings.Contains(name, ":") {
+		host, port, err = net.SplitHostPort(name)
+		if err != nil {
+			return name, fmt.Errorf("split host port: %w", err)
+		}
+	} else {
+		host = name
+		port = "8080" // assume gateway default
 	}
 
 	// Special case localhost
@@ -252,23 +259,25 @@ func resolve(name string) (string, error) {
 		return name, nil
 	}
 
-	// Lookup A record
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		var de *net.DNSError
-		if errors.As(err, &de) {
-			if de.Temporary() {
-				return name, fmt.Errorf("temporary dns error: %w", de)
-			}
-			if de.Timeout() {
-				return name, fmt.Errorf("dns timeout: %w", de)
+	if port != "" {
+		// Lookup A record
+		ips, err := net.LookupIP(host)
+		if err != nil {
+			var de *net.DNSError
+			if errors.As(err, &de) {
+				if de.Temporary() {
+					return name, fmt.Errorf("temporary dns error: %w", de)
+				}
+				if de.Timeout() {
+					return name, fmt.Errorf("dns timeout: %w", de)
+				}
 			}
 		}
-	}
 
-	// Pick first IP if we got one
-	if len(ips) > 0 {
-		return fmt.Sprintf("%s:%s", ips[0], port), nil
+		// Pick first IP if we got one
+		if len(ips) > 0 {
+			return fmt.Sprintf("%s:%s", ips[0], port), nil
+		}
 	}
 
 	// No A record so lookup SRV
