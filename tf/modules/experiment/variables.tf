@@ -38,15 +38,15 @@ variable "grafana_secrets" {
 }
 
 variable "target_agent_tag" {
-  default = "target-d8e47a8"
+  default = "target-75858d9"
 }
 
 variable "dealgood_agent_tag" {
-  default = "dealgood-e71b18b"
+  default = "dealgood-d881af7"
 }
 
 variable "dealgood_tag" {
-  default = "latest"
+  default = "2022-08-23__2226"
 }
 
 variable "ssm_exec_policy_arn" {
