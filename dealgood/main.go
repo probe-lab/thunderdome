@@ -211,7 +211,7 @@ func Run(cc *cli.Context) error {
 	var source RequestSource
 	switch flags.source {
 	case "random":
-		source = NewRandomRequestSource(sampleRequests())
+		source = NewRandomRequestSource("random", sampleRequests())
 	case "nginxlog":
 		source, err = NewNginxLogRequestSource(flags.sourceParam)
 		if err != nil {

@@ -27,6 +27,7 @@ func nogui(ctx context.Context, source RequestSource, exp *Experiment, printHead
 		fmt.Printf("Duration: %s\n", durationDesc(exp.Duration))
 		fmt.Printf("Request rate: %d\n", exp.Rate)
 		fmt.Printf("Request concurrency: %d\n", exp.Concurrency)
+		fmt.Printf("Request source: %s\n", source.Name())
 		fmt.Println("Targets:")
 		for _, t := range exp.Targets {
 			fmt.Printf("  %s (%s://%s)\n", t.Name, t.URLScheme, t.HostPort())

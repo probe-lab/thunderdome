@@ -39,6 +39,8 @@ type RequestSource interface {
 
 	// Err returns any error that was encountered while processing the stream.
 	Err() error
+
+	Name() string
 }
 
 // StdinRequestSource is a request source that reads a stream of JSON requests
@@ -58,6 +60,10 @@ func NewStdinRequestSource() *StdinRequestSource {
 		done: make(chan struct{}),
 		ch:   make(chan Request),
 	}
+}
+
+func (s *StdinRequestSource) Name() string {
+	return "stdin"
 }
 
 func (s *StdinRequestSource) Chan() <-chan Request {
@@ -102,18 +108,23 @@ func (s *StdinRequestSource) Err() error {
 // RandomRequestSource is a request source that provides a random request
 // from a list of requests.
 type RandomRequestSource struct {
+	name string
 	reqs []*Request
 	rng  *rand.Rand
 	ch   chan Request
 	done chan struct{}
 }
 
-func NewRandomRequestSource(reqs []*Request) *RandomRequestSource {
+func NewRandomRequestSource(name string, reqs []*Request) *RandomRequestSource {
 	return &RandomRequestSource{
 		reqs: reqs,
 		rng:  rand.New(rand.NewSource(time.Now().UnixNano())),
 		ch:   make(chan Request),
 	}
+}
+
+func (s *RandomRequestSource) Name() string {
+	return s.name
 }
 
 func (r *RandomRequestSource) Chan() <-chan Request {
@@ -185,7 +196,7 @@ func NewNginxLogRequestSource(fname string) (*RandomRequestSource, error) {
 		return nil, fmt.Errorf("scanner: %w", scanner.Err())
 	}
 
-	return NewRandomRequestSource(reqs), nil
+	return NewRandomRequestSource("nginxlog", reqs), nil
 }
 
 var samplePathsIPFS = []string{
@@ -307,6 +318,10 @@ func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter) (*LokiRequestSo
 		cfg: *cfg,
 		ch:  make(chan Request, 500),
 	}, nil
+}
+
+func (l *LokiRequestSource) Name() string {
+	return "loki"
 }
 
 func (l *LokiRequestSource) Chan() <-chan Request {
