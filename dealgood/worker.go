@@ -150,9 +150,13 @@ func newRequest(ctx context.Context, t *Target, r *Request) (*http.Request, erro
 		req.Header.Set(k, v)
 	}
 
-	if t.HostName != "" {
-		req.Host = t.HostName
+	host := req.Header.Get("Host")
+	// The live request log uses a hostname of backend to refer to the orginal host
+	if host == "backend" || host == "" {
+		host = t.HostName
+		req.Header.Set("Host", t.HostName)
 	}
+	req.Host = host
 
 	return req, nil
 }

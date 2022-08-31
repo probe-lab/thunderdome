@@ -92,7 +92,7 @@ var app = &cli.App{
 			Name:        "host",
 			Usage:       "Force a host header to be sent with each request (if not using an experiment file)",
 			Value:       "",
-			Destination: &flags.host,
+			Destination: &flags.hostHeader,
 			EnvVars:     []string{"DEALGOOD_HOST"},
 		},
 		&cli.BoolFlag{
@@ -175,7 +175,7 @@ var flags struct {
 	sourceParam    string
 	nogui          bool
 	targets        cli.StringSlice
-	host           string
+	hostHeader     string
 	rate           int
 	concurrency    int
 	duration       int
@@ -249,7 +249,7 @@ func Run(cc *cli.Context) error {
 		for _, be := range flags.targets.Value() {
 			bej := &TargetJSON{
 				BaseURL: be,
-				Host:    flags.host,
+				Host:    flags.hostHeader,
 			}
 			if name, base, found := strings.Cut(be, "::"); found {
 				bej.Name = name

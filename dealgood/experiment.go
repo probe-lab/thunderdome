@@ -29,10 +29,10 @@ type Experiment struct {
 }
 
 type Target struct {
-	Name      string // short name of the target to be used in reports and metrics
-	BaseURL   string // base URL of the target (without a path)
-	HostName  string
-	URLScheme string
+	Name      string        // short name of the target to be used in reports and metrics
+	BaseURL   string        // base URL of the target (without a path)
+	HostName  string        // the name of the host to be sent in the Host header of requests (may be different to the target's own host name)
+	URLScheme string        // http or https
 	Requests  chan *Request // channel used to receive requests to be issued to the target
 
 	mu       sync.Mutex // guards accesses to hostPort which may change over time
