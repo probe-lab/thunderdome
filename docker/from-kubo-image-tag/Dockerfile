@@ -1,5 +1,5 @@
-FROM ipfs/kubo:v0.14.0
-
+ARG TAG
+FROM ipfs/kubo:$TAG
 ADD /container-init.d/* /container-init.d/
 RUN chmod a+x /container-init.d/*
 
