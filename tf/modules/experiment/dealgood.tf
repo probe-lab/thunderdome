@@ -55,7 +55,8 @@ resource "aws_ecs_task_definition" "dealgood" {
         { name = "DEALGOOD_SOURCE", value = "loki" },
         { name = "DEALGOOD_LOKI_URI", value = "https://logs-prod-us-central1.grafana.net" },
         { name = "DEALGOOD_LOKI_QUERY", value = "{job=\"nginx\",app=\"gateway\",team=\"bifrost\"}" },
-        { name = "DEALGOOD_RATE", value = "20" }
+        { name = "DEALGOOD_RATE", value = "30" },
+        { name = "DEALGOOD_CONCURRENCY", value = "100" }
       ]
 
       secrets = var.dealgood_secrets
