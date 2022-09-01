@@ -28,6 +28,10 @@ data "aws_secretsmanager_secret" "grafana-push-secret" {
   arn = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:grafana-push-MxjNiv"
 }
 
+data "aws_secretsmanager_secret" "dealgood-loki-secret" {
+  arn = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:dealgood-loki-aQaPqD"
+}
+
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
@@ -67,20 +71,6 @@ resource "aws_service_discovery_private_dns_namespace" "main" {
 resource "aws_eip" "nat" {
   count = 3
   vpc   = true
-}
-
-module "ecs" {
-  source = "terraform-aws-modules/ecs/aws"
-
-  cluster_name = "thunderdome"
-
-  fargate_capacity_providers = {
-    FARGATE = {
-      default_capacity_provider_strategy = {
-        weight = 50
-      }
-    }
-  }
 }
 
 resource "aws_ecr_repository" "thunderdome" {

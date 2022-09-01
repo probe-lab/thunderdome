@@ -51,8 +51,15 @@ resource "aws_ecs_task_definition" "dealgood" {
         { name = "DEALGOOD_EXPERIMENT", value = var.name },
         { name = "OTEL_TRACES_EXPORTER", value = "otlp" },
         { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://localhost:4317" },
-        { name = "DEALGOOD_TARGETS", value = join(",", [for key, v in var.targets : "${key}::http://${var.name}-${key}.thunder.dome:8080"]) }
+        { name = "DEALGOOD_TARGETS", value = join(",", [for key, v in var.targets : "${key}::http://${var.name}-${key}.thunder.dome"]) },
+        { name = "DEALGOOD_SOURCE", value = "loki" },
+        { name = "DEALGOOD_LOKI_URI", value = "https://logs-prod-us-central1.grafana.net" },
+        { name = "DEALGOOD_LOKI_QUERY", value = "{job=\"nginx\",app=\"gateway\",team=\"bifrost\"}" },
+        { name = "DEALGOOD_RATE", value = "20" }
       ]
+
+      secrets = var.dealgood_secrets
+
 
       logConfiguration = {
         logDriver = "awslogs",

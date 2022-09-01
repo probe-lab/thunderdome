@@ -7,18 +7,14 @@ resource "aws_ecs_service" "target" {
   enable_execute_command = true
 
   service_registries {
-    registry_arn = aws_service_discovery_service.target[each.key].arn
-  }
-
-  network_configuration {
-    subnets          = var.vpc_subnets
-    security_groups  = var.target_security_groups
-    assign_public_ip = true
+    registry_arn   = aws_service_discovery_service.target[each.key].arn
+    container_port = 8080
+    container_name = "gateway"
   }
 
   capacity_provider_strategy {
     base              = 0
-    capacity_provider = "FARGATE"
+    capacity_provider = "one"
     weight            = 1
   }
 }
@@ -32,7 +28,7 @@ resource "aws_service_discovery_service" "target" {
 
     dns_records {
       ttl  = 10
-      type = "A"
+      type = "SRV"
     }
 
     routing_policy = "MULTIVALUE"
@@ -43,21 +39,16 @@ resource "aws_service_discovery_service" "target" {
 resource "aws_ecs_task_definition" "target" {
   for_each                 = var.targets
   family                   = "${var.name}-${each.key}"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
+  requires_compatibilities = ["EC2"]
+  network_mode             = "host"
   execution_role_arn       = var.execution_role_arn
   task_role_arn            = aws_iam_role.experiment.arn
 
-  cpu    = 4 * 1024
-  memory = 30 * 1024
+  memory = 50 * 1024
 
   tags = {
     "experiment" = var.name
     "target"     = each.key
-  }
-
-  ephemeral_storage {
-    size_in_gib = 200
   }
 
   volume {
