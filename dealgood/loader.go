@@ -74,7 +74,11 @@ loop:
 		select {
 		case <-ctx.Done():
 			break loop
-		case req := <-l.Source.Chan():
+		case req, ok := <-l.Source.Chan():
+			if !ok {
+				// Channel was closed so source is terminated
+				break loop
+			}
 
 			timeSinceLast := time.Since(lastRequestDone)
 			if timeSinceLast < requestInterval {
@@ -101,6 +105,8 @@ loop:
 			}
 		}
 	}
+	// Make sure context is cancelled
+	cancel()
 
 	for _, be := range l.Targets {
 		close(be.Requests)

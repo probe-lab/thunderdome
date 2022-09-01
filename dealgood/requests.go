@@ -35,6 +35,7 @@ type RequestSource interface {
 	Stop()
 
 	// Chan is a channel that can be used to read requests produced by the source.
+	// This channel will be closed when the stream ends.
 	Chan() <-chan Request
 
 	// Err returns any error that was encountered while processing the stream.
@@ -72,6 +73,8 @@ func (s *StdinRequestSource) Chan() <-chan Request {
 
 func (s *StdinRequestSource) Start() error {
 	go func() {
+		defer close(s.ch)
+
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			data := scanner.Bytes()
@@ -133,6 +136,8 @@ func (r *RandomRequestSource) Chan() <-chan Request {
 
 func (r *RandomRequestSource) Start() error {
 	go func() {
+		defer close(r.ch)
+
 		for {
 			idx := r.rng.Intn(len(r.reqs))
 			req := *r.reqs[idx]
@@ -363,6 +368,8 @@ func (l *LokiRequestSource) Start() error {
 	}
 
 	go func() {
+		defer close(l.ch)
+
 		for {
 			tr, ok := l.readTailResponse()
 			if !ok {
