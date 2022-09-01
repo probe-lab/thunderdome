@@ -12,4 +12,4 @@ COPY *.go ./
 
 RUN go build
 
-CMD [ "/app/dealgood", "--nogui=true", "--source=random", "--host=ipfs.io", "--duration=-1", "--prometheus-addr=:9090"]
+CMD [ "/app/dealgood", "--nogui=true", "--host=ipfs.io", "--duration=-1", "--prometheus-addr=:9090"]

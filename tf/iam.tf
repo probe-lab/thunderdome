@@ -23,6 +23,7 @@ data "aws_iam_policy_document" "ecsTaskExecutionRole_secretsmanager" {
     actions = ["kms:Decrypt", "secretsmanager:GetSecretValue"]
     resources = [
       data.aws_secretsmanager_secret.grafana-push-secret.arn,
+      data.aws_secretsmanager_secret.dealgood-loki-secret.arn,
       data.aws_kms_key.default_secretsmanager_key.arn,
     ]
   }
