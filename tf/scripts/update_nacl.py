@@ -5,8 +5,11 @@ from pprint import pp
 
 ec2 = boto3.resource("ec2")
 ecs = boto3.client("ecs")
+autoscaling = boto3.client("autoscaling")
 
-NACL_ID = os.environ['NACL_ID']
+NACL_ID = os.environ["NACL_ID"]
+ASG_NAMES = os.environ["ASG_NAMES"].split(',')
+
 network_acl = ec2.NetworkAcl(NACL_ID)
 
 
@@ -33,6 +36,20 @@ def ip_from_eni_id(eni_id: str):
     return eni.association_attribute["PublicIp"]
 
 
+def get_asg_instance_ips():
+    result = autoscaling.describe_auto_scaling_groups(AutoScalingGroupNames=ASG_NAMES)
+    instance_ids = []
+    if "AutoScalingGroups" in result:
+        for group_details in result["AutoScalingGroups"]:
+            instance_ids.extend(
+                [
+                    instance["InstanceId"]
+                    for instance in group_details["Instances"]
+                    if instance["LifecycleState"] == "InService"
+                ]
+            )
+    return [ec2.Instance(id).public_ip_address for id in instance_ids]
+
 def get_tasks():
     by_name = {}
     paginator = ecs.get_paginator("list_tasks")
@@ -57,8 +74,9 @@ def get_tasks():
 
 
 def cidrs_to_block():
-    ips = [spec["ip"] for spec in get_tasks().values()]
-    return {f"{ip}/32" for ip in ips}
+    task_ips = {spec["ip"] for spec in get_tasks().values()}
+    asg_ips = set(get_asg_instance_ips())
+    return {f"{ip}/32" for ip in task_ips.union(asg_ips)}
 
 
 def get_block_rules():
@@ -96,8 +114,10 @@ def main():
     else:
         print("Nothing to update")
 
+
 def lambda_handler(event, context):
     main()
+
 
 if __name__ == "__main__":
     main()

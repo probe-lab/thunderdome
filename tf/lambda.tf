@@ -24,8 +24,10 @@ data "aws_iam_policy_document" "edit_nacl" {
       "ec2:DescribeNetworkAcls",
       "ec2:DescribeNetworkInterfaces",
       "ec2:DescribeNetworkInterfaceAttribute",
+      "ec2:DescribeInstances",
       "ecs:ListTasks",
-      "ecs:DescribeTasks"
+      "ecs:DescribeTasks",
+      "autoscaling:DescribeAutoScalingGroups"
     ]
     resources = ["*"]
   }
@@ -86,7 +88,8 @@ resource "aws_lambda_function" "update_nacl" {
 
   environment {
     variables = {
-      NACL_ID = module.vpc.default_network_acl_id
+      NACL_ID   = module.vpc.default_network_acl_id,
+      ASG_NAMES = join(",", [for asg in module.autoscaling : asg.autoscaling_group_name])
     }
   }
 }
