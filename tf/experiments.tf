@@ -1,6 +1,6 @@
 module "tracing" {
   source = "./modules/experiment"
-  name   = "tracing"
+  name   = "tracing-2022-09-01"
 
   ecs_cluster_id                                 = module.ecs-asg.cluster_id
   vpc_subnets                                    = module.vpc.public_subnets
@@ -31,35 +31,35 @@ module "tracing" {
   ]
 
   targets = {
-    "0" = {
+    "000" = {
       environment = [
         { name = "OTEL_TRACES_SAMPLER_ARG", value = "0" }
       ],
-      image = "ipfs/kubo:v0.14.0"
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
     },
-    "25" = {
+    "025" = {
       environment = [
         { name = "OTEL_TRACES_SAMPLER_ARG", value = "0.25" }
       ]
-      image = "ipfs/kubo:v0.14.0"
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
     }
-    "50" = {
+    "050" = {
       environment = [
         { name = "OTEL_TRACES_SAMPLER_ARG", value = "0.5" }
       ]
-      image = "ipfs/kubo:v0.14.0"
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
     }
-    "75" = {
+    "075" = {
       environment = [
         { name = "OTEL_TRACES_SAMPLER_ARG", value = "0.75" }
       ]
-      image = "ipfs/kubo:v0.14.0"
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
     }
     "100" = {
       environment = [
         { name = "OTEL_TRACES_SAMPLER_ARG", value = "1" }
       ]
-      image = "ipfs/kubo:v0.14.0"
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
     }
   }
 }
