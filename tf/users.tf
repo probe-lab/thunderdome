@@ -23,7 +23,8 @@ resource "aws_instance" "testbox" {
   key_name      = each.key
   vpc_security_group_ids = [
     aws_security_group.dealgood.id,
-    aws_security_group.allow_ssh.id
+    aws_security_group.allow_ssh.id,
+    aws_security_group.allow_ipfs.id
   ]
   subnet_id = module.vpc.public_subnets[0]
   tags = {
