@@ -398,23 +398,19 @@ func (g *Gui) StartLoader(ctx context.Context) error {
 		return fmt.Errorf("new collector: %w", err)
 	}
 
+	g.infoMu.Lock()
+	l, err := NewLoader(g.experimentName, g.targets, g.source, timings, g.requestRate, g.requestConcurrency, g.duration)
+	g.infoMu.Unlock()
+	if err != nil {
+		return fmt.Errorf("new loader: %w", err)
+	}
+
+	go coll.Run(ctx)
+
+	go g.Update(ctx, coll)
+
 	go func() {
 		defer func() { close(timings) }()
-		g.infoMu.Lock()
-		l := &Loader{
-			Source:         g.source,
-			ExperimentName: g.experimentName,
-			Targets:        g.targets,
-			Rate:           g.requestRate,
-			Concurrency:    g.requestConcurrency,
-			Duration:       g.duration,
-			Timings:        timings,
-		}
-		g.infoMu.Unlock()
-
-		go coll.Run(ctx)
-
-		go g.Update(ctx, coll)
 
 		if err := l.Send(ctx); err != nil {
 			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {

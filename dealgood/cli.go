@@ -39,16 +39,11 @@ func nogui(ctx context.Context, source RequestSource, exp *Experiment, printHead
 		go printCollectedTimings(ctx, coll, exp)
 	}
 
-	l := &Loader{
-		Source:         source,
-		ExperimentName: exp.Name,
-		Rate:           exp.Rate,
-		Concurrency:    exp.Concurrency,
-		Duration:       exp.Duration,
-		Timings:        timings,
-		PrintFailures:  printFailures,
-		Targets:        exp.Targets,
+	l, err := NewLoader(exp.Name, exp.Targets, source, timings, exp.Rate, exp.Concurrency, exp.Duration)
+	if err != nil {
+		return fmt.Errorf("new loader: %w", err)
 	}
+	l.PrintFailures = printFailures
 
 	if err := l.Send(ctx); err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {

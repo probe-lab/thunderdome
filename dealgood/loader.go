@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/http2"
 )
 
@@ -20,6 +21,42 @@ type Loader struct {
 	Concurrency    int                 // number of workers per target
 	Duration       int
 	PrintFailures  bool
+
+	streamLagGauge      *prometheus.GaugeVec
+	streamIntervalGauge *prometheus.GaugeVec
+}
+
+func NewLoader(experimentName string, targets []*Target, source RequestSource, timings chan *RequestTiming, maxRate int, maxConcurrency int, duration int) (*Loader, error) {
+	l := &Loader{
+		Source:         source,
+		ExperimentName: experimentName,
+		Targets:        targets,
+		Rate:           maxRate,
+		Concurrency:    maxConcurrency,
+		Duration:       duration,
+		Timings:        timings,
+	}
+
+	var err error
+	l.streamLagGauge, err = newGaugeMetric(
+		"stream_lag_seconds",
+		"The number of seconds between a request being placed in the stream before being sent to targets. Increasing values indicate the targets are falling behind the stream.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
+	l.streamIntervalGauge, err = newGaugeMetric(
+		"stream_interval_seconds",
+		"The number of seconds between a request being read from the incoming stream and being send to targets. Higher values indicate the stream is falling behind the targets, leading to starvation.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
+	return l, nil
 }
 
 // Send sends requests to each target until the duration has passed or the context is canceled.
@@ -84,6 +121,12 @@ loop:
 			if timeSinceLast < requestInterval {
 				time.Sleep(requestInterval - timeSinceLast)
 			}
+
+			// report how far behind the stream we are
+			l.streamLagGauge.WithLabelValues(l.ExperimentName).Set(time.Since(req.Timestamp).Seconds())
+
+			// report how far ahead of the stream we are
+			l.streamIntervalGauge.WithLabelValues(l.ExperimentName).Set(time.Since(lastRequestDone).Seconds())
 
 			select {
 			case <-ctx.Done():

@@ -351,3 +351,23 @@ func newCounterMetric(name string, help string, labels []string) (*prometheus.Co
 	}
 	return m, nil
 }
+
+func newGaugeMetric(name string, help string, labels []string) (*prometheus.GaugeVec, error) {
+	m := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "thunderdome",
+			Subsystem: "dealgood",
+			Name:      name,
+			Help:      help,
+		},
+		labels,
+	)
+	if err := prometheus.Register(m); err != nil {
+		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			m = are.ExistingCollector.(*prometheus.GaugeVec)
+		} else {
+			return nil, fmt.Errorf("register %s gauge: %w", name, err)
+		}
+	}
+	return m, nil
+}

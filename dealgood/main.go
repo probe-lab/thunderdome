@@ -207,34 +207,6 @@ func Run(cc *cli.Context) error {
 		flags.failures = false
 	}
 
-	var err error
-	var source RequestSource
-	switch flags.source {
-	case "random":
-		source = NewRandomRequestSource("random", sampleRequests())
-	case "nginxlog":
-		source, err = NewNginxLogRequestSource(flags.sourceParam)
-		if err != nil {
-			return fmt.Errorf("nginx source: %w", err)
-		}
-	case "loki":
-		cfg := &LokiConfig{
-			URI:      flags.lokiURI,
-			Username: flags.lokiUsername,
-			Password: flags.lokiPassword,
-			Query:    flags.lokiQuery,
-		}
-
-		source, err = NewLokiRequestSource(cfg, PathRequestFilter)
-		if err != nil {
-			return fmt.Errorf("loki source: %w", err)
-		}
-	case "-":
-		source = NewStdinRequestSource()
-	default:
-		return fmt.Errorf("unsupported source: %s", flags.source)
-	}
-
 	// Load the experiment definition or use a default one
 	var expjson ExperimentJSON
 	if flags.experimentFile != "" {
@@ -266,7 +238,33 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("experiment: %w", err)
 	}
 
-	_ = exp
+	var source RequestSource
+	switch flags.source {
+	case "random":
+		source = NewRandomRequestSource("random", sampleRequests())
+	case "nginxlog":
+		source, err = NewNginxLogRequestSource(flags.sourceParam)
+		if err != nil {
+			return fmt.Errorf("nginx source: %w", err)
+		}
+	case "loki":
+		cfg := &LokiConfig{
+			URI:      flags.lokiURI,
+			Username: flags.lokiUsername,
+			Password: flags.lokiPassword,
+			Query:    flags.lokiQuery,
+		}
+
+		source, err = NewLokiRequestSource(cfg, PathRequestFilter, exp.Name)
+		if err != nil {
+			return fmt.Errorf("loki source: %w", err)
+		}
+	case "-":
+		source = NewStdinRequestSource()
+	default:
+		return fmt.Errorf("unsupported source: %s", flags.source)
+	}
+
 	if flags.prometheusAddr != "" {
 		if err := startPrometheusServer(flags.prometheusAddr); err != nil {
 			return fmt.Errorf("start prometheus: %w", err)

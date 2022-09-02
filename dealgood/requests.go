@@ -16,14 +16,16 @@ import (
 	"github.com/grafana/loki/pkg/logcli/query"
 	"github.com/grafana/loki/pkg/loghttp"
 	"github.com/grafana/loki/pkg/util/unmarshal"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/config"
 )
 
 type Request struct {
-	Method string            `json:"method"`
-	URI    string            `json:"uri"`
-	Body   []byte            `json:"body,omitempty"`
-	Header map[string]string `json:"header"`
+	Method    string            `json:"method"`
+	URI       string            `json:"uri"`
+	Body      []byte            `json:"body,omitempty"`
+	Header    map[string]string `json:"header"`
+	Timestamp time.Time         `json:"ts"` // time the request was created
 }
 
 // A RequestSource is a provider of a stream of requests that can be sent to workers.
@@ -141,6 +143,7 @@ func (r *RandomRequestSource) Start() error {
 		for {
 			idx := r.rng.Intn(len(r.reqs))
 			req := *r.reqs[idx]
+			req.Timestamp = time.Now()
 
 			select {
 			case <-r.done:
@@ -298,10 +301,13 @@ func permutePaths(paths []string) []*Request {
 
 // LokiRequestSource is a request source that reads a stream of nginx logs from Loki
 type LokiRequestSource struct {
-	cfg    LokiConfig
-	ch     chan Request
-	done   chan struct{}
-	filter RequestFilter
+	cfg                     LokiConfig
+	ch                      chan Request
+	done                    chan struct{}
+	filter                  RequestFilter
+	requestsDroppedCounter  *prometheus.CounterVec
+	requestsFilteredCounter *prometheus.CounterVec
+	experimentName          string
 
 	mu   sync.Mutex // guards following fields
 	conn *websocket.Conn
@@ -315,14 +321,37 @@ type LokiConfig struct {
 	Query    string // the query to use to obtain logs
 }
 
-func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter) (*LokiRequestSource, error) {
+func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, experimentName string) (*LokiRequestSource, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
-	return &LokiRequestSource{
-		cfg: *cfg,
-		ch:  make(chan Request, 500),
-	}, nil
+	l := &LokiRequestSource{
+		cfg:            *cfg,
+		ch:             make(chan Request, 500),
+		experimentName: experimentName,
+		filter:         filter,
+	}
+
+	var err error
+	l.requestsDroppedCounter, err = newCounterMetric(
+		"loki_requests_dropped_total",
+		"The total number of requests dropped by loki due to targets falling behind.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	l.requestsFilteredCounter, err = newCounterMetric(
+		"loki_requests_filtered_total",
+		"The total number of requests ignored by loki due to filter rules.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	return l, nil
 }
 
 func (l *LokiRequestSource) Name() string {
@@ -378,15 +407,20 @@ func (l *LokiRequestSource) Start() error {
 			for _, stream := range tr.Streams {
 				for _, entry := range stream.Entries {
 					var line logline
-					json.Unmarshal([]byte(entry.Line), &line)
+					err := json.Unmarshal([]byte(entry.Line), &line)
+					if err != nil {
+						continue
+					}
 
 					req := Request{
-						Method: line.Method,
-						URI:    line.URI,
-						Header: line.Headers,
+						Method:    line.Method,
+						URI:       line.URI,
+						Header:    line.Headers,
+						Timestamp: line.Time,
 					}
 
 					if l.filter != nil && !l.filter(&req) {
+						l.requestsFilteredCounter.WithLabelValues(l.experimentName).Add(1)
 						continue
 					}
 
@@ -396,6 +430,7 @@ func (l *LokiRequestSource) Start() error {
 					case l.ch <- req:
 
 					default:
+						l.requestsDroppedCounter.WithLabelValues(l.experimentName).Add(1)
 					}
 
 				}
