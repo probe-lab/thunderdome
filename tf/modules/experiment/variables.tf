@@ -46,7 +46,7 @@ variable "dealgood_agent_tag" {
 }
 
 variable "dealgood_tag" {
-  default = "2022-09-02__1159"
+  default = "2022-09-02__1712"
 }
 
 variable "ssm_exec_policy_arn" {
