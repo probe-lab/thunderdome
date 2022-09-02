@@ -148,8 +148,6 @@ loop:
 			}
 		}
 	}
-	// Make sure context is cancelled
-	cancel()
 
 	for _, be := range l.Targets {
 		close(be.Requests)
