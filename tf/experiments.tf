@@ -140,6 +140,26 @@ module "releases" {
   ]
 
   targets = {
+    "v0_08_0" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.8.0"
+      environment = []
+    },
+    "v0_09_1" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.9.1"
+      environment = []
+    },
+    "v0_10_0" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.10.0"
+      environment = []
+    },
+    "v0_11_0" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.11.0"
+      environment = []
+    },
+    "v0_12_2" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.12.2"
+      environment = []
+    },
     "v0_13_1" = {
       image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.13.1"
       environment = []
