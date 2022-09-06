@@ -1,6 +1,6 @@
 ARG TAG
 ARG REPO_NAME
-FROM ipfs/$REPO_NAME:$TAG
+FROM $REPO_NAME:$TAG
 
 # Create the init scripts directory (needed for pre 0.13 releases)
 RUN mkdir -p /container-init.d \

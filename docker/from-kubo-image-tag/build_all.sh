@@ -24,7 +24,7 @@ go_ipfs_releases=(
 )
 
 
-export REPO_NAME=go-ipfs
+export REPO_NAME=ipfs/go-ipfs
 for release in "${go_ipfs_releases[@]}"; do
     ./build.sh "$release"
 done
