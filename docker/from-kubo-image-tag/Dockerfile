@@ -17,3 +17,4 @@ ADD /container-init.d/* /container-init.d/
 RUN chmod a+x /container-init.d/*
 
 EXPOSE 8080
+CMD ["daemon", "--enable-gc", "--migrate=true", "--agent-version-suffix=docker"]
