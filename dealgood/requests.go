@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -378,14 +379,9 @@ func (l *LokiRequestSource) Start() error {
 		BatchSize:   1000,
 	}
 
-	conn, err := client.LiveTailQueryConn(q.QueryString, 0, q.Limit, q.Start, q.Quiet)
-	if err != nil {
-		l.err = fmt.Errorf("tailing logs failed: %w", err)
-		return l.err
+	if err := l.connect(client, q); err != nil {
+		return err
 	}
-	l.mu.Lock()
-	l.conn = conn
-	l.mu.Unlock()
 
 	type logline struct {
 		Server  string            `json:"server"`
@@ -402,7 +398,12 @@ func (l *LokiRequestSource) Start() error {
 		for {
 			tr, ok := l.readTailResponse()
 			if !ok {
-				return
+				log.Printf("failed to read tail from loki: %v", l.err)
+				if err := l.connect(client, q); err != nil {
+					log.Printf("failed to connect to loki: %v", err)
+					time.Sleep(30 * time.Second)
+				}
+				continue
 			}
 			for _, stream := range tr.Streams {
 				for _, entry := range stream.Entries {
@@ -439,6 +440,27 @@ func (l *LokiRequestSource) Start() error {
 		}
 	}()
 
+	return nil
+}
+
+func (l *LokiRequestSource) connect(c *client.DefaultClient, q *query.Query) error {
+	// Clean up if we were previously connected
+	l.mu.Lock()
+	if l.conn != nil {
+		l.conn.Close()
+	}
+	l.conn = nil
+	l.mu.Unlock()
+
+	conn, err := c.LiveTailQueryConn(q.QueryString, 0, q.Limit, q.Start, q.Quiet)
+	if err != nil {
+		l.err = fmt.Errorf("tailing logs failed: %w", err)
+		return l.err
+	}
+	l.mu.Lock()
+	l.conn = conn
+	l.mu.Unlock()
+	log.Printf("connected to loki: %s", l.cfg.URI)
 	return nil
 }
 

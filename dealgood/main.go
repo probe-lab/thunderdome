@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -192,6 +193,7 @@ var flags struct {
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.LUTC | log.Lshortfile)
 	ctx := context.Background()
 	if err := app.RunContext(ctx, os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
