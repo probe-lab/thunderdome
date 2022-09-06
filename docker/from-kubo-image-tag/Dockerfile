@@ -1,6 +1,6 @@
 ARG TAG
 ARG REPO_NAME
-FROM ipfs/$REPO_NAME:$TAG
+FROM $REPO_NAME:$TAG
 
 # Create the init scripts directory (needed for pre 0.13 releases)
 RUN mkdir -p /container-init.d \
@@ -17,3 +17,4 @@ ADD /container-init.d/* /container-init.d/
 RUN chmod a+x /container-init.d/*
 
 EXPOSE 8080
+CMD ["daemon", "--enable-gc", "--migrate=true", "--agent-version-suffix=docker"]
