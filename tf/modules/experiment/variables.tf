@@ -10,11 +10,6 @@ variable "ecs_cluster_id" {
 variable "vpc_subnets" {
   type = list(string)
 }
-
-variable "target_security_groups" {
-  type = list(string)
-}
-
 variable "dealgood_security_groups" {
   type = list(string)
 }

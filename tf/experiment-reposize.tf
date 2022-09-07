@@ -4,7 +4,6 @@ module "reposize" {
 
   ecs_cluster_id                                 = module.ecs-asg.cluster_id
   vpc_subnets                                    = module.vpc.public_subnets
-  target_security_groups                         = [aws_security_group.target.id]
   dealgood_security_groups                       = [aws_security_group.dealgood.id]
   execution_role_arn                             = aws_iam_role.ecsTaskExecutionRole.arn
   dealgood_task_role_arn                         = aws_iam_role.dealgood.arn
