@@ -59,6 +59,13 @@ resource "aws_ecs_task_definition" "target" {
     name = "grafana-agent-data"
   }
 
+  volume {
+    name = "efs"
+    efs_volume_configuration {
+      file_system_id = var.efs_file_system_id
+    }
+  }
+
   container_definitions = jsonencode([
     {
       name      = "gateway"
@@ -68,10 +75,16 @@ resource "aws_ecs_task_definition" "target" {
 
       environment = concat(var.shared_env, each.value.environment)
 
-      mountPoints = [{
-        sourceVolume  = "ipfs-data",
-        containerPath = "/data/ipfs"
-      }]
+      mountPoints = [
+        {
+          sourceVolume  = "ipfs-data",
+          containerPath = "/data/ipfs"
+        },
+        {
+          sourceVolume  = "efs"
+          containerPath = "/mnt/efs"
+        }
+      ]
 
       logConfiguration = {
         logDriver = "awslogs",
@@ -112,10 +125,16 @@ resource "aws_ecs_task_definition" "target" {
           awslogs-stream-prefix = "ecs"
         }
       }
-      mountPoints = [{
-        sourceVolume  = "grafana-agent-data",
-        containerPath = "/data/grafana-agent"
-      }]
+      mountPoints = [
+        {
+          sourceVolume  = "grafana-agent-data",
+          containerPath = "/data/grafana-agent"
+        },
+        {
+          sourceVolume  = "efs"
+          containerPath = "/mnt/efs"
+        }
+      ]
       name         = "grafana-agent"
       portMappings = []
       secrets      = var.grafana_secrets

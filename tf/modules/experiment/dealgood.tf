@@ -40,6 +40,13 @@ resource "aws_ecs_task_definition" "dealgood" {
     name = "grafana-agent-data"
   }
 
+  volume {
+    name = "efs"
+    efs_volume_configuration {
+      file_system_id = var.efs_file_system_id
+    }
+  }
+
   container_definitions = jsonencode([
     {
       name      = "dealgood"
@@ -71,6 +78,11 @@ resource "aws_ecs_task_definition" "dealgood" {
         }
       }
 
+      mountPoints = [{
+        sourceVolume  = "efs"
+        containerPath = "/mnt/efs"
+      }]
+
       portMappings = [
         { containerPort = 8080, hostPort = 8080, protocol = "tcp" },
       ]
@@ -101,10 +113,16 @@ resource "aws_ecs_task_definition" "dealgood" {
           awslogs-stream-prefix = "ecs"
         }
       }
-      mountPoints = [{
-        sourceVolume  = "grafana-agent-data",
-        containerPath = "/data/grafana-agent"
-      }]
+      mountPoints = [
+        {
+          sourceVolume  = "grafana-agent-data",
+          containerPath = "/data/grafana-agent"
+        },
+        {
+          sourceVolume  = "efs"
+          containerPath = "/mnt/efs"
+        }
+      ]
       portMappings = []
       secrets      = var.grafana_secrets
       volumesFrom  = []
