@@ -17,13 +17,31 @@ resource "aws_security_group" "efs" {
   vpc_id = module.vpc.vpc_id
 }
 
-resource "aws_security_group_rule" "efs-allow" {
+resource "aws_security_group_rule" "efs-allow-use_efs" {
   security_group_id        = aws_security_group.efs.id
   type                     = "ingress"
   from_port                = 2049
   to_port                  = 2049
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.use_efs.id
+}
+
+resource "aws_security_group_rule" "efs-allow-target" {
+  security_group_id        = aws_security_group.efs.id
+  type                     = "ingress"
+  from_port                = 2049
+  to_port                  = 2049
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.target.id
+}
+
+resource "aws_security_group_rule" "efs-allow-dealgood" {
+  security_group_id        = aws_security_group.efs.id
+  type                     = "ingress"
+  from_port                = 2049
+  to_port                  = 2049
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.dealgood.id
 }
 
 resource "aws_security_group" "use_efs" {
