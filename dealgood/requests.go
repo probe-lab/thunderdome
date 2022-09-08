@@ -308,6 +308,8 @@ type LokiRequestSource struct {
 	filter                  RequestFilter
 	requestsDroppedCounter  *prometheus.CounterVec
 	requestsFilteredCounter *prometheus.CounterVec
+	requestsIncomingCounter *prometheus.CounterVec
+	errorCounter            *prometheus.CounterVec
 	experimentName          string
 
 	mu   sync.Mutex // guards following fields
@@ -336,7 +338,7 @@ func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, experimentName 
 	var err error
 	l.requestsDroppedCounter, err = newCounterMetric(
 		"loki_requests_dropped_total",
-		"The total number of requests dropped by loki due to targets falling behind.",
+		"The total number of requests dropped by the loki source due to targets falling behind.",
 		[]string{"experiment"},
 	)
 	if err != nil {
@@ -346,6 +348,24 @@ func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, experimentName 
 	l.requestsFilteredCounter, err = newCounterMetric(
 		"loki_requests_filtered_total",
 		"The total number of requests ignored by loki due to filter rules.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	l.requestsIncomingCounter, err = newCounterMetric(
+		"loki_requests_incoming_total",
+		"The total number of requests read from loki.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	l.errorCounter, err = newCounterMetric(
+		"loki_error_total",
+		"The total number of errors encountered when reading from loki.",
 		[]string{"experiment"},
 	)
 	if err != nil {
@@ -400,6 +420,7 @@ func (l *LokiRequestSource) Start() error {
 			if !ok {
 				log.Printf("failed to read tail from loki: %v", l.err)
 				if err := l.connect(client, q); err != nil {
+					l.errorCounter.WithLabelValues(l.experimentName).Add(1)
 					log.Printf("failed to connect to loki: %v", err)
 					time.Sleep(30 * time.Second)
 				}
@@ -407,9 +428,12 @@ func (l *LokiRequestSource) Start() error {
 			}
 			for _, stream := range tr.Streams {
 				for _, entry := range stream.Entries {
+					l.requestsIncomingCounter.WithLabelValues(l.experimentName).Add(1)
+
 					var line logline
 					err := json.Unmarshal([]byte(entry.Line), &line)
 					if err != nil {
+						l.errorCounter.WithLabelValues(l.experimentName).Add(1)
 						continue
 					}
 
