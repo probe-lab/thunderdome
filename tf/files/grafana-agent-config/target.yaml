@@ -1,7 +1,7 @@
 metrics:
   global:
-    scrape_interval: 5s
-    scrape_timeout: 3s
+    scrape_interval: 30s
+    scrape_timeout: 30s
     remote_write:
       - url: https://prometheus-us-central1.grafana.net/api/prom/push
         basic_auth:
@@ -11,14 +11,16 @@ metrics:
     - name: thunderdome
       host_filter: false
       scrape_configs:
-        - job_name: thunderdome-dealgood
+        - job_name: thunderdome-target
           honor_timestamps: true
           honor_labels: true
+          metrics_path: /debug/metrics/prometheus
           scheme: http
           static_configs:
-            - targets: ['localhost:9090']
+            - targets: ['localhost:5001']
               labels:
                 experiment: ${THUNDERDOME_EXPERIMENT}
+                target: ${THUNDERDOME_TARGET}
           metric_relabel_configs:
             - target_label: instance
               replacement: ""
@@ -37,6 +39,12 @@ traces:
         - action: upsert
           key: project
           value: thunderdome
+        - action: upsert
+          key: experiment
+          value: ${THUNDERDOME_EXPERIMENT}
+        - action: upsert
+          key: target
+          value: ${THUNDERDOME_TARGET}
     remote_write:
       - endpoint: tempo-eu-west-0.grafana.net:443
         basic_auth:

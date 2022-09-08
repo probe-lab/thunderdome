@@ -1,3 +1,9 @@
+locals {
+  agent_configs = toset([
+    "dealgood",
+    "target"
+  ])
+}
 resource "aws_iam_user" "grafana" {
   name = "grafana"
 }
@@ -57,4 +63,16 @@ data "aws_iam_policy_document" "grafana" {
     actions   = ["tag:GetResources"]
     resources = ["*"]
   }
+}
+
+
+module "object" {
+  for_each = local.agent_configs
+  source   = "terraform-aws-modules/s3-bucket/aws//modules/object"
+
+  acl    = "public-read"
+  bucket = module.s3_bucket_public.s3_bucket_id
+  key    = "grafana-agent-config/${each.key}.yaml"
+
+  file_source = "./files/grafana-agent-config/${each.key}.yaml"
 }
