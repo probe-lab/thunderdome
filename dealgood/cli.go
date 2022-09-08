@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func nogui(ctx context.Context, source RequestSource, exp *Experiment, printHeader bool, printTimings bool, printFailures bool) error {
+func nogui(ctx context.Context, source RequestSource, exp *Experiment, printHeader bool, printTimings bool, printFailures bool, interactive bool) error {
 	timings := make(chan *RequestTiming, 10000)
 	defer func() {
 		close(timings)
@@ -36,7 +36,7 @@ func nogui(ctx context.Context, source RequestSource, exp *Experiment, printHead
 	}
 
 	if printTimings {
-		go printCollectedTimings(ctx, coll, exp)
+		go printCollectedTimings(ctx, coll, exp, interactive)
 	}
 
 	l, err := NewLoader(exp.Name, exp.Targets, source, timings, exp.Rate, exp.Concurrency, exp.Duration)
@@ -57,9 +57,14 @@ func nogui(ctx context.Context, source RequestSource, exp *Experiment, printHead
 	return nil
 }
 
-func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment) {
+func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment, interactive bool) {
+	timingInterval := 300 * time.Second
+	if interactive {
+		timingInterval = 1 * time.Second
+	}
+
 	start := time.Now()
-	t := time.NewTicker(300 * time.Second)
+	t := time.NewTicker(timingInterval)
 	defer t.Stop()
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)

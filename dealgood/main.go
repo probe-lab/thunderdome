@@ -166,6 +166,13 @@ var app = &cli.App{
 			Destination: &flags.lokiQuery,
 			EnvVars:     []string{"DEALGOOD_LOKI_QUERY"},
 		},
+		&cli.BoolFlag{
+			Name:        "interactive",
+			Usage:       "Reduce all wait times and log timings more frequently.",
+			Value:       false,
+			Destination: &flags.interactive,
+			EnvVars:     []string{"DEALGOOD_INTERACTIVE"},
+		},
 	},
 }
 
@@ -190,6 +197,7 @@ var flags struct {
 	lokiUsername   string
 	lokiPassword   string
 	lokiQuery      string
+	interactive    bool
 }
 
 func main() {
@@ -287,12 +295,12 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("set tracer provider: %w", err)
 	}
 
-	if err := targetsReady(ctx, exp.Targets, flags.quiet); err != nil {
+	if err := targetsReady(ctx, exp.Targets, flags.quiet, flags.interactive); err != nil {
 		return fmt.Errorf("targets ready check: %w", err)
 	}
 
 	if flags.nogui {
-		return nogui(ctx, source, exp, !flags.quiet, flags.timings, flags.failures)
+		return nogui(ctx, source, exp, !flags.quiet, flags.timings, flags.failures, flags.interactive)
 	}
 
 	g, err := NewGui(source, exp)
