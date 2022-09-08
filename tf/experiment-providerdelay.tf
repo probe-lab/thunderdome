@@ -1,6 +1,6 @@
 module "providerdelay" {
   source = "./modules/experiment"
-  name   = "providerdelay"
+  name   = "providerdelay-2022-09-08"
 
   ecs_cluster_id                                 = module.ecs-asg.cluster_id
   efs_file_system_id                             = aws_efs_file_system.thunderdome.id
@@ -27,43 +27,43 @@ module "providerdelay" {
   ]
 
   targets = {
-    "0ms" = {
+    "---0ms" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
         { name = "SEARCH_DELAY", value = "0" }
       ]
     }
-    "20ms" = {
+    "--20ms" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
         { name = "SEARCH_DELAY", value = "20ms" }
       ]
     }
-    "50ms" = {
+    "--50ms" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
         { name = "SEARCH_DELAY", value = "50ms" }
       ]
     }
-    "100ms" = {
+    "-100ms" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
         { name = "SEARCH_DELAY", value = "100ms" }
       ]
     }
-    "200ms" = {
+    "-200ms" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
         { name = "SEARCH_DELAY", value = "200ms" }
       ]
     }
-    "500ms" = {
+    "-500ms" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
         { name = "SEARCH_DELAY", value = "500ms" }
       ]
     }
-    "750ms" = {
+    "-750ms" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
         { name = "SEARCH_DELAY", value = "750ms" }
