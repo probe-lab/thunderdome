@@ -1,6 +1,6 @@
 module "releases" {
   source = "./modules/experiment"
-  name   = "releases"
+  name   = "releases-2022-09-08"
 
   ecs_cluster_id                                 = module.ecs-asg.cluster_id
   efs_file_system_id                             = aws_efs_file_system.thunderdome.id

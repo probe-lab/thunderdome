@@ -1,6 +1,6 @@
 module "tweedles" {
   source = "./modules/experiment"
-  name   = "tweedles"
+  name   = "tweedles-2022-09-08"
 
   ecs_cluster_id                                 = module.ecs-asg.cluster_id
   efs_file_system_id                             = aws_efs_file_system.thunderdome.id
