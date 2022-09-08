@@ -52,3 +52,7 @@ variable "dealgood_task_role_arn" {
 
 variable "dealgood_secrets" {
 }
+
+variable "efs_file_system_id" {
+
+}
