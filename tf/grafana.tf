@@ -66,7 +66,7 @@ data "aws_iam_policy_document" "grafana" {
 }
 
 
-module "object" {
+module "grafana_agent_config" {
   for_each = local.agent_configs
   source   = "terraform-aws-modules/s3-bucket/aws//modules/object"
 
