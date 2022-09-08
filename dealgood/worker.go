@@ -163,6 +163,12 @@ func newRequest(ctx context.Context, t *Target, r *Request) (*http.Request, erro
 
 // targetsReady
 func targetsReady(ctx context.Context, targets []*Target, quiet bool) error {
+	const preProbeWait = 30
+	if !quiet {
+		fmt.Printf("waiting %s for targets to be start before probing\n", durationDesc(preProbeWait))
+	}
+	time.Sleep(preProbeWait * time.Second)
+
 	const readyTimeout = 60
 	var lastErr error
 
