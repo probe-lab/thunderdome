@@ -59,11 +59,12 @@ func nogui(ctx context.Context, source RequestSource, exp *Experiment, printHead
 
 func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment) {
 	start := time.Now()
-	t := time.NewTicker(1 * time.Second)
+	t := time.NewTicker(300 * time.Second)
 	defer t.Stop()
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
 	fmt.Fprintln(w, "time\ttarget\trequests\tconn errs\tdropped\t5xx errs\tTTFB P50\tTTFB P90\tTTFB P90")
+	w.Flush()
 	for {
 		select {
 		case <-ctx.Done():
@@ -78,7 +79,6 @@ func printCollectedTimings(ctx context.Context, coll *Collector, exp *Experiment
 					continue
 				}
 
-				_ = st
 				fmt.Fprintf(w, "% 5d\t%12s\t% 9d\t% 9d\t% 9d\t% 9d\t%9.3f\t%9.3f\t%9.3f\n", now.Sub(start)/time.Second, be.Name, st.TotalRequests, st.TotalConnectErrors, st.TotalDropped, st.TotalHttp5XX, st.TTFB.P50*1000, st.TTFB.P90*1000, st.TTFB.P99*1000)
 
 			}
