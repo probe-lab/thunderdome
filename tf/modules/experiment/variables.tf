@@ -54,5 +54,12 @@ variable "dealgood_secrets" {
 }
 
 variable "efs_file_system_id" {
-
 }
+
+variable "grafana_agent_dealgood_config_url" {
+}
+
+variable "grafana_agent_target_config_url" {
+}
+
+

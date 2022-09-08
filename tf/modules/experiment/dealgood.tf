@@ -99,7 +99,13 @@ resource "aws_ecs_task_definition" "dealgood" {
     {
       name  = "grafana-agent"
       cpu   = 0
-      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/grafana-agent:${var.dealgood_agent_tag}"
+      image = "grafana/agent:v0.26.1"
+      command = [
+        "-metrics.wal-directory=/data/grafana-agent",
+        "-config.expand-env",
+        "-enable-features=remote-configs",
+        "-config.file=${var.grafana_agent_dealgood_config_url}"
+      ]
       environment = [
         # we use these for setting labels on metrics
         { name = "THUNDERDOME_EXPERIMENT", value = var.name },
