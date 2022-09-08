@@ -3,6 +3,7 @@ module "reposize" {
   name   = "reposize"
 
   ecs_cluster_id                                 = module.ecs-asg.cluster_id
+  efs_file_system_id                             = aws_efs_file_system.thunderdome.id
   vpc_subnets                                    = module.vpc.public_subnets
   dealgood_security_groups                       = [aws_security_group.dealgood.id]
   execution_role_arn                             = aws_iam_role.ecsTaskExecutionRole.arn
