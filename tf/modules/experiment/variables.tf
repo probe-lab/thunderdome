@@ -33,7 +33,7 @@ variable "grafana_secrets" {
 }
 
 variable "dealgood_tag" {
-  default = "2022-09-09__1455"
+  default = "2022-09-09__1609"
 }
 
 variable "ssm_exec_policy_arn" {
