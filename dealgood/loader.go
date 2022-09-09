@@ -22,8 +22,10 @@ type Loader struct {
 	Duration       int
 	PrintFailures  bool
 
-	streamLagGauge      *prometheus.GaugeVec
-	streamIntervalGauge *prometheus.GaugeVec
+	streamLagGauge            *prometheus.GaugeVec
+	streamIntervalGauge       *prometheus.GaugeVec
+	streamRequestsSentCounter *prometheus.CounterVec
+	streamWaitCounter         *prometheus.CounterVec
 }
 
 func NewLoader(experimentName string, targets []*Target, source RequestSource, timings chan *RequestTiming, maxRate int, maxConcurrency int, duration int) (*Loader, error) {
@@ -50,6 +52,24 @@ func NewLoader(experimentName string, targets []*Target, source RequestSource, t
 	l.streamIntervalGauge, err = newGaugeMetric(
 		"stream_interval_seconds",
 		"The number of seconds between a request being read from the incoming stream and being send to targets. Higher values indicate the stream is falling behind the targets, leading to starvation.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
+	l.streamWaitCounter, err = newCounterMetric(
+		"stream_wait_total",
+		"The number of times the loader had to wait for an incoming request from the stream. This indicates starvation.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
+	l.streamRequestsSentCounter, err = newCounterMetric(
+		"stream_requests_sent_total",
+		"The number of requests sent to at least one target.",
 		[]string{"experiment"},
 	)
 	if err != nil {
@@ -120,12 +140,15 @@ loop:
 			timeSinceLast := time.Since(lastRequestDone)
 			if timeSinceLast < requestInterval {
 				time.Sleep(requestInterval - timeSinceLast)
+			} else if timeSinceLast > requestInterval {
+				// we had to wait for the request stream
+				l.streamWaitCounter.WithLabelValues(l.ExperimentName).Add(1)
 			}
 
 			// report how far behind the stream we are
 			l.streamLagGauge.WithLabelValues(l.ExperimentName).Set(time.Since(req.Timestamp).Seconds())
 
-			// report how far ahead of the stream we are
+			// report how long we had to wait for an incoming request
 			l.streamIntervalGauge.WithLabelValues(l.ExperimentName).Set(time.Since(lastRequestDone).Seconds())
 
 			select {
@@ -134,10 +157,12 @@ loop:
 			default:
 			}
 
+			targetAcceptedRequest := false
 			for _, be := range l.Targets {
 				select {
 				case be.Requests <- &req:
 					lastRequestDone = time.Now()
+					targetAcceptedRequest = true
 				default:
 					l.Timings <- &RequestTiming{
 						ExperimentName: l.ExperimentName,
@@ -145,6 +170,10 @@ loop:
 						Dropped:        true,
 					}
 				}
+			}
+
+			if targetAcceptedRequest {
+				l.streamRequestsSentCounter.WithLabelValues(l.ExperimentName).Add(1)
 			}
 		}
 	}
