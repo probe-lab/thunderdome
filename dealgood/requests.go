@@ -324,13 +324,13 @@ type LokiConfig struct {
 	Query    string // the query to use to obtain logs
 }
 
-func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, experimentName string) (*LokiRequestSource, error) {
+func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, experimentName string, rps int) (*LokiRequestSource, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
 	l := &LokiRequestSource{
 		cfg:            *cfg,
-		ch:             make(chan Request, 500),
+		ch:             make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
 		experimentName: experimentName,
 		filter:         filter,
 	}

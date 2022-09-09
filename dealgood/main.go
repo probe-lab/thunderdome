@@ -265,7 +265,7 @@ func Run(cc *cli.Context) error {
 			Query:    flags.lokiQuery,
 		}
 
-		source, err = NewLokiRequestSource(cfg, PathRequestFilter, exp.Name)
+		source, err = NewLokiRequestSource(cfg, PathRequestFilter, exp.Name, exp.Rate)
 		if err != nil {
 			return fmt.Errorf("loki source: %w", err)
 		}
