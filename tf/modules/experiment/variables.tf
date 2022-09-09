@@ -32,14 +32,6 @@ variable "grafana_secrets" {
   default = []
 }
 
-variable "target_agent_tag" {
-  default = "target-75858d9"
-}
-
-variable "dealgood_agent_tag" {
-  default = "dealgood-d881af7"
-}
-
 variable "dealgood_tag" {
   default = "2022-09-08__1330"
 }
@@ -54,5 +46,12 @@ variable "dealgood_secrets" {
 }
 
 variable "efs_file_system_id" {
-
 }
+
+variable "grafana_agent_dealgood_config_url" {
+}
+
+variable "grafana_agent_target_config_url" {
+}
+
+
