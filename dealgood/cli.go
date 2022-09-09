@@ -111,6 +111,7 @@ func printSampleTimings(ctx context.Context, sample map[string]MetricSample, exp
 
 		fmt.Printf("Issued:          %9d\n", st.TotalRequests)
 		fmt.Printf("Connect Errors:  %9d (%6.2f%%)\n", st.TotalConnectErrors, 100*float64(st.TotalConnectErrors)/float64(st.TotalRequests))
+		fmt.Printf("Timeout Errors:  %9d (%6.2f%%)\n", st.TotalTimeoutErrors, 100*float64(st.TotalTimeoutErrors)/float64(st.TotalRequests))
 		fmt.Printf("Dropped:         %9d (%6.2f%%)\n", st.TotalDropped, 100*float64(st.TotalDropped)/float64(st.TotalRequests))
 		fmt.Printf("Connected:       %9d (%6.2f%%)\n", connectedRequests, 100*float64(connectedRequests)/float64(st.TotalRequests))
 		fmt.Println()

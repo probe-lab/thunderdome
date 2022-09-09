@@ -537,6 +537,7 @@ var statsFormatters = []StatsFormatter{
 			writeStat(t, name,
 				formatStatLineInt(t, "Requests", s.TotalRequests),
 				formatStatLineInt(t, "Conn Errs", s.TotalConnectErrors),
+				formatStatLineInt(t, "Timeouts", s.TotalTimeoutErrors),
 				formatStatLineInt(t, "Dropped", s.TotalDropped),
 				formatStatLineInt(t, "Server Errs", s.TotalHttp5XX),
 			)
@@ -594,6 +595,7 @@ var statsFormatters = []StatsFormatter{
 		Fn: func(name string, s *MetricSample, t *text.Text) {
 			writeStat(t, name,
 				formatStatLineFloat(t, "Conn Err %", 100*(float64(s.TotalConnectErrors)/float64(s.TotalRequests))),
+				formatStatLineFloat(t, "Timeout %", 100*(float64(s.TotalTimeoutErrors)/float64(s.TotalRequests))),
 				formatStatLineFloat(t, "Dropped %", 100*(float64(s.TotalDropped)/float64(s.TotalRequests))),
 				formatStatLineFloat(t, "Serv. Err %", 100*(float64(s.TotalHttp5XX)/float64(s.TotalRequests))),
 			)

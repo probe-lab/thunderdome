@@ -100,6 +100,13 @@ func (w *Worker) timeRequest(ctx context.Context, r *Request) *RequestTiming {
 		if w.PrintFailures {
 			fmt.Fprintf(os.Stderr, "%s %s => error %v\n", req.Method, req.URL, err)
 		}
+		if os.IsTimeout(err) {
+			return &RequestTiming{
+				ExperimentName: w.ExperimentName,
+				TargetName:     w.Target.Name,
+				TimeoutError:   true,
+			}
+		}
 		return &RequestTiming{
 			ExperimentName: w.ExperimentName,
 			TargetName:     w.Target.Name,

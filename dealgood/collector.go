@@ -16,6 +16,7 @@ type RequestTiming struct {
 	ExperimentName string
 	TargetName     string
 	ConnectError   bool
+	TimeoutError   bool
 	Dropped        bool
 	StatusCode     int
 	ConnectTime    time.Duration
@@ -32,6 +33,7 @@ type Collector struct {
 	requestsCounter     *prometheus.CounterVec
 	droppedCounter      *prometheus.CounterVec
 	connectErrorCounter *prometheus.CounterVec
+	timeoutErrorCounter *prometheus.CounterVec
 	responsesCounter    *prometheus.CounterVec
 
 	mu      sync.Mutex // guards access to samples
@@ -94,7 +96,7 @@ func NewCollector(timings chan *RequestTiming, sampleInterval time.Duration) (*C
 
 	coll.connectErrorCounter, err = newCounterMetric(
 		"connect_error_total",
-		"The total number of requests that unable to connect to the target.",
+		"The total number of requests that were unable to connect to the target.",
 		[]string{"experiment", "target"},
 	)
 	if err != nil {
@@ -105,6 +107,15 @@ func NewCollector(timings chan *RequestTiming, sampleInterval time.Duration) (*C
 		"responses_total",
 		"The total number of responses received.",
 		[]string{"experiment", "target", "code"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	coll.timeoutErrorCounter, err = newCounterMetric(
+		"timeout_error_total",
+		"The total number of requests that timed out waiting for a response from the target.",
+		[]string{"experiment", "target"},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
@@ -141,6 +152,9 @@ func (c *Collector) Run(ctx context.Context) {
 			if res.ConnectError {
 				st.TotalConnectErrors++
 				c.connectErrorCounter.WithLabelValues(res.ExperimentName, res.TargetName).Add(1)
+			} else if res.TimeoutError {
+				st.TotalTimeoutErrors++
+				c.timeoutErrorCounter.WithLabelValues(res.ExperimentName, res.TargetName).Add(1)
 			} else if res.Dropped {
 				st.TotalDropped++
 				c.droppedCounter.WithLabelValues(res.ExperimentName, res.TargetName).Add(1)
@@ -174,6 +188,7 @@ func (c *Collector) Run(ctx context.Context) {
 				samples[k] = MetricSample{
 					TotalRequests:      st.TotalRequests,
 					TotalConnectErrors: st.TotalConnectErrors,
+					TotalTimeoutErrors: st.TotalTimeoutErrors,
 					TotalDropped:       st.TotalDropped,
 					TotalHttp2XX:       st.TotalHttp2XX,
 					TotalHttp3XX:       st.TotalHttp3XX,
@@ -240,6 +255,7 @@ func (c *Collector) Latest() map[string]MetricSample {
 type TargetStats struct {
 	TotalRequests      int
 	TotalConnectErrors int
+	TotalTimeoutErrors int
 	TotalDropped       int
 	TotalHttp2XX       int
 	TotalHttp3XX       int
@@ -288,6 +304,7 @@ func (t *TimeMetric) Mean() float64 {
 type MetricSample struct {
 	TotalRequests      int
 	TotalConnectErrors int
+	TotalTimeoutErrors int
 	TotalDropped       int
 	TotalHttp2XX       int
 	TotalHttp3XX       int
