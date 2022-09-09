@@ -22,10 +22,10 @@ type Loader struct {
 	Duration       int
 	PrintFailures  bool
 
-	streamLagGauge            *prometheus.GaugeVec
-	streamIntervalGauge       *prometheus.GaugeVec
-	streamRequestsSentCounter *prometheus.CounterVec
-	streamWaitCounter         *prometheus.CounterVec
+	streamLagGauge        *prometheus.GaugeVec
+	streamIntervalGauge   *prometheus.GaugeVec
+	streamRequestsCounter *prometheus.CounterVec
+	streamWaitCounter     *prometheus.CounterVec
 }
 
 func NewLoader(experimentName string, targets []*Target, source RequestSource, timings chan *RequestTiming, maxRate int, maxConcurrency int, duration int) (*Loader, error) {
@@ -67,9 +67,9 @@ func NewLoader(experimentName string, targets []*Target, source RequestSource, t
 		return nil, fmt.Errorf("new gauge: %w", err)
 	}
 
-	l.streamRequestsSentCounter, err = newCounterMetric(
-		"stream_requests_sent_total",
-		"The number of requests sent to at least one target.",
+	l.streamRequestsCounter, err = newCounterMetric(
+		"stream_requests_total",
+		"The number of requests read from the stream.",
 		[]string{"experiment"},
 	)
 	if err != nil {
@@ -136,6 +136,7 @@ loop:
 				// Channel was closed so source is terminated
 				break loop
 			}
+			l.streamRequestsCounter.WithLabelValues(l.ExperimentName).Add(1)
 
 			timeSinceLast := time.Since(lastRequestDone)
 			if timeSinceLast < requestInterval {
@@ -157,12 +158,10 @@ loop:
 			default:
 			}
 
-			targetAcceptedRequest := false
 			for _, be := range l.Targets {
 				select {
 				case be.Requests <- &req:
 					lastRequestDone = time.Now()
-					targetAcceptedRequest = true
 				default:
 					l.Timings <- &RequestTiming{
 						ExperimentName: l.ExperimentName,
@@ -170,10 +169,6 @@ loop:
 						Dropped:        true,
 					}
 				}
-			}
-
-			if targetAcceptedRequest {
-				l.streamRequestsSentCounter.WithLabelValues(l.ExperimentName).Add(1)
 			}
 		}
 	}
