@@ -124,44 +124,49 @@ func (l *Loader) Send(ctx context.Context) error {
 	}
 
 	requestInterval := time.Duration(float64(time.Second) / float64(l.Rate))
-	lastRequestDone := time.Now()
+
+	tick := time.NewTicker(requestInterval)
+	defer tick.Stop()
 
 loop:
 	for {
 		select {
 		case <-ctx.Done():
 			break loop
-		case req, ok := <-l.Source.Chan():
+		case <-tick.C:
+
+			var req Request
+			var ok bool
+
+			// Do we have a request available
+			select {
+			case <-ctx.Done():
+				break loop
+			case req, ok = <-l.Source.Chan():
+			default:
+				// No request ready so report that
+				l.streamWaitCounter.WithLabelValues(l.ExperimentName).Add(1)
+
+				// Now wait for the request
+				select {
+				case <-ctx.Done():
+					break loop
+				case req, ok = <-l.Source.Chan():
+				}
+			}
 			if !ok {
 				// Channel was closed so source is terminated
 				break loop
 			}
+			// Report that we got a request
 			l.streamRequestsCounter.WithLabelValues(l.ExperimentName).Add(1)
-
-			timeSinceLast := time.Since(lastRequestDone)
-			if timeSinceLast < requestInterval {
-				time.Sleep(requestInterval - timeSinceLast)
-			} else if timeSinceLast > requestInterval {
-				// we had to wait for the request stream
-				l.streamWaitCounter.WithLabelValues(l.ExperimentName).Add(1)
-			}
 
 			// report how far behind the stream we are
 			l.streamLagGauge.WithLabelValues(l.ExperimentName).Set(time.Since(req.Timestamp).Seconds())
 
-			// report how long we had to wait for an incoming request
-			l.streamIntervalGauge.WithLabelValues(l.ExperimentName).Set(time.Since(lastRequestDone).Seconds())
-
-			select {
-			case <-ctx.Done():
-				break loop
-			default:
-			}
-
 			for _, be := range l.Targets {
 				select {
 				case be.Requests <- &req:
-					lastRequestDone = time.Now()
 				default:
 					l.Timings <- &RequestTiming{
 						ExperimentName: l.ExperimentName,
