@@ -26,6 +26,9 @@ type Loader struct {
 	streamIntervalGauge   *prometheus.GaugeVec
 	streamRequestsCounter *prometheus.CounterVec
 	streamWaitCounter     *prometheus.CounterVec
+	targetsGauge          *prometheus.GaugeVec
+	rateGauge             *prometheus.GaugeVec
+	concurrencyGauge      *prometheus.GaugeVec
 }
 
 func NewLoader(experimentName string, targets []*Target, source RequestSource, timings chan *RequestTiming, maxRate int, maxConcurrency int, duration int) (*Loader, error) {
@@ -70,6 +73,33 @@ func NewLoader(experimentName string, targets []*Target, source RequestSource, t
 	l.streamRequestsCounter, err = newCounterMetric(
 		"stream_requests_total",
 		"The number of requests read from the stream.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
+	l.targetsGauge, err = newGaugeMetric(
+		"experiment_targets",
+		"The number of targets specified for the experiment.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
+	l.rateGauge, err = newGaugeMetric(
+		"experiment_request_rate",
+		"The maximum request rate specified for the experiment.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
+	l.concurrencyGauge, err = newGaugeMetric(
+		"experiment_concurrency",
+		"The maximum number of concurrent requests specified for the experiment.",
 		[]string{"experiment"},
 	)
 	if err != nil {
@@ -134,6 +164,9 @@ loop:
 		case <-ctx.Done():
 			break loop
 		case <-tick.C:
+			l.targetsGauge.WithLabelValues(l.ExperimentName).Set(float64(len(l.Targets)))
+			l.rateGauge.WithLabelValues(l.ExperimentName).Set(float64(l.Rate))
+			l.concurrencyGauge.WithLabelValues(l.ExperimentName).Set(float64(l.Concurrency))
 
 			var req Request
 			var ok bool
