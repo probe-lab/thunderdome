@@ -29,26 +29,27 @@ type Experiment struct {
 }
 
 type Target struct {
-	Name      string        // short name of the target to be used in reports and metrics
-	BaseURL   string        // base URL of the target (without a path)
-	HostName  string        // the name of the host to be sent in the Host header of requests (may be different to the target's own host name)
-	URLScheme string        // http or https
-	Requests  chan *Request // channel used to receive requests to be issued to the target
+	Name        string        // short name of the target to be used in reports and metrics
+	BaseURL     string        // base URL of the target (without a path)
+	HostName    string        // the name of the host to be sent in the Host header of requests (may be different to the target's own host name)
+	URLScheme   string        // http or https
+	RawHostPort string        // hostname and port of target as derived from the URL
+	Requests    chan *Request // channel used to receive requests to be issued to the target
 
-	mu       sync.Mutex // guards accesses to hostPort which may change over time
-	hostPort string
+	mu               sync.Mutex // guards accesses to hostPort which may change over time
+	resolvedHostPort string
 }
 
 func (t *Target) HostPort() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.hostPort
+	return t.resolvedHostPort
 }
 
 func (t *Target) SetHostPort(hostport string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.hostPort = hostport
+	t.resolvedHostPort = hostport
 }
 
 func newExperiment(expjson *ExperimentJSON) (*Experiment, error) {
@@ -101,13 +102,20 @@ func newExperiment(expjson *ExperimentJSON) (*Experiment, error) {
 		seenNames[tj.Name] = true
 
 		t := &Target{
-			Name:      tj.Name,
-			BaseURL:   tj.BaseURL,
-			HostName:  tj.Host,
-			URLScheme: u.Scheme,
-			Requests:  make(chan *Request),
-			hostPort:  u.Host,
+			Name:             tj.Name,
+			BaseURL:          tj.BaseURL,
+			HostName:         u.Hostname(),
+			URLScheme:        u.Scheme,
+			RawHostPort:      u.Host,
+			resolvedHostPort: u.Host,
+			Requests:         make(chan *Request),
 		}
+
+		// allow host to be overridden
+		if tj.Host != "" {
+			t.HostName = tj.Host
+		}
+
 		exp.Targets = append(exp.Targets, t)
 
 	}

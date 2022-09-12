@@ -107,6 +107,10 @@ func (w *Worker) timeRequest(ctx context.Context, r *Request) *RequestTiming {
 				TimeoutError:   true,
 			}
 		}
+		if err := resolveTarget(w.Target, !w.PrintFailures); err != nil {
+			fmt.Fprintf(os.Stderr, "resolve %s => error %v\n", w.Target.RawHostPort, err)
+		}
+
 		return &RequestTiming{
 			ExperimentName: w.ExperimentName,
 			TargetName:     w.Target.Name,
@@ -192,17 +196,8 @@ func targetsReady(ctx context.Context, targets []*Target, quiet bool, interactiv
 		for _, target := range targets {
 			target := target // avoid shadowing
 			g.Go(func() error {
-				// Resolve target host
-				origHostport := target.HostPort()
-				hostport, err := resolve(origHostport)
-				if err != nil {
-					return fmt.Errorf("unable to resolve target %q: %w", origHostport, err)
-				}
-				if origHostport != hostport {
-					target.SetHostPort(hostport)
-					if !quiet {
-						fmt.Printf("resolved %s to %s\n", origHostport, hostport)
-					}
+				if err := resolveTarget(target, quiet); err != nil {
+					return err
 				}
 
 				tr := &http.Transport{
@@ -318,4 +313,19 @@ func resolve(name string) (string, error) {
 
 	// attempt to resolve
 	return resolve(fmt.Sprintf("%s:%d", host, recs[0].Port))
+}
+
+func resolveTarget(target *Target, quiet bool) error {
+	hostport, err := resolve(target.RawHostPort)
+	if err != nil {
+		return fmt.Errorf("unable to resolve target %q: %w", target.RawHostPort, err)
+	}
+	if target.RawHostPort != hostport {
+		target.SetHostPort(hostport)
+		if !quiet {
+			fmt.Printf("resolved %s to %s\n", target.RawHostPort, hostport)
+		}
+	}
+
+	return nil
 }

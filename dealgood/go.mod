@@ -250,7 +250,6 @@ replace github.com/pkg/profile => github.com/iand/profile v0.0.0-20220825113751-
 
 // We need to define these replaces because loki imports cortex which uses an old version of prometheus
 replace (
-
 	// Same as Cortex
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86
 	github.com/bradfitz/gomemcache => github.com/owen-d/gomemcache v0.0.0-20220719101501-ce4268ea75ae
