@@ -60,6 +60,10 @@ resource "aws_ecs_task_definition" "target" {
   }
 
   volume {
+    name = "ecs-exporter-data"
+  }
+
+  volume {
     name = "efs"
     efs_volume_configuration {
       file_system_id = var.efs_file_system_id
@@ -144,6 +148,36 @@ resource "aws_ecs_task_definition" "target" {
       name         = "grafana-agent"
       portMappings = []
       secrets      = var.grafana_secrets
+      volumesFrom  = []
+    },
+    {
+      cpu       = 0
+      environment = []
+      essential = true
+      # v0.2.0 is broken see https://github.com/prometheus-community/ecs_exporter/issues/40
+      image     = "quay.io/prometheuscommunity/ecs-exporter:v0.1.1"
+      logConfiguration = {
+        logDriver = "awslogs",
+        options = {
+          awslogs-group         = var.log_group_name,
+          awslogs-region        = "${data.aws_region.current.name}",
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+      mountPoints = [
+        {
+          sourceVolume  = "ecs-exporter-data",
+          containerPath = "/data/ecs-exporter"
+        },
+        {
+          sourceVolume  = "efs"
+          containerPath = "/mnt/efs"
+        }
+      ]
+      name      = "ecs-exporter"
+      portMappings = [
+        { containerPort = 9779, hostPort = 9779, protocol = "tcp" },
+      ]
       volumesFrom  = []
     }
   ])
