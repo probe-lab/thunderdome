@@ -39,6 +39,16 @@ terraform apply
 
 As usual
 
+
+### Grafana Agent Config
+
+The Grafana agent sidecar is configured for targets and dealgood using separate config files held in an S3 bucket:
+
+	http://pl-thunderdome-public.s3.amazonaws.com/grafana-agent-config/
+
+The config files can be found in ./tf/files/grafana-agent-config
+
+
 ## Getting a console on a running container
 
 ECS can inject an SSM agent into any running container so that you can

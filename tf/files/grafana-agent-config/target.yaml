@@ -26,6 +26,21 @@ metrics:
               replacement: ""
             - target_label: __address__
               replacement: ""
+        - job_name: thunderdome-target-ecs
+          honor_timestamps: true
+          honor_labels: true
+          metrics_path: /metrics
+          scheme: http
+          static_configs:
+            - targets: ['localhost:9779']
+              labels:
+                experiment: ${THUNDERDOME_EXPERIMENT}
+                target: ${THUNDERDOME_TARGET}
+          metric_relabel_configs:
+            - target_label: instance
+              replacement: ""
+            - target_label: __address__
+              replacement: ""
 traces:
   configs:
   - name: thunderdome
