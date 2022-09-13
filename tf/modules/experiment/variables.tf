@@ -56,3 +56,8 @@ variable "grafana_agent_target_config_url" {
 
 variable "request_rate" {
 }
+
+variable "request_filter" {
+  type    = string
+  default = "pathonly"
+}

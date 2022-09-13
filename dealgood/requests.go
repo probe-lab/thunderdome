@@ -50,8 +50,9 @@ type RequestSource interface {
 // StdinRequestSource is a request source that reads a stream of JSON requests
 // from stdin.
 type StdinRequestSource struct {
-	ch   chan Request
-	done chan struct{}
+	ch     chan Request
+	done   chan struct{}
+	filter RequestFilter
 
 	mu  sync.Mutex // guards following fields
 	err error
@@ -59,10 +60,11 @@ type StdinRequestSource struct {
 
 var _ RequestSource = (*StdinRequestSource)(nil)
 
-func NewStdinRequestSource() *StdinRequestSource {
+func NewStdinRequestSource(filter RequestFilter) *StdinRequestSource {
 	return &StdinRequestSource{
-		done: make(chan struct{}),
-		ch:   make(chan Request),
+		done:   make(chan struct{}),
+		ch:     make(chan Request),
+		filter: filter,
 	}
 }
 
@@ -90,6 +92,10 @@ func (s *StdinRequestSource) Start() error {
 				return
 			}
 
+			if s.filter != nil && !s.filter(&req) {
+				continue
+			}
+
 			select {
 			case <-s.done:
 				return
@@ -114,18 +120,20 @@ func (s *StdinRequestSource) Err() error {
 // RandomRequestSource is a request source that provides a random request
 // from a list of requests.
 type RandomRequestSource struct {
-	name string
-	reqs []*Request
-	rng  *rand.Rand
-	ch   chan Request
-	done chan struct{}
+	name   string
+	reqs   []*Request
+	rng    *rand.Rand
+	ch     chan Request
+	done   chan struct{}
+	filter RequestFilter
 }
 
-func NewRandomRequestSource(name string, reqs []*Request) *RandomRequestSource {
+func NewRandomRequestSource(name string, filter RequestFilter, reqs []*Request) *RandomRequestSource {
 	return &RandomRequestSource{
-		reqs: reqs,
-		rng:  rand.New(rand.NewSource(time.Now().UnixNano())),
-		ch:   make(chan Request),
+		reqs:   reqs,
+		rng:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		ch:     make(chan Request),
+		filter: filter,
 	}
 }
 
@@ -145,6 +153,10 @@ func (r *RandomRequestSource) Start() error {
 			idx := r.rng.Intn(len(r.reqs))
 			req := *r.reqs[idx]
 			req.Timestamp = time.Now()
+
+			if r.filter != nil && !r.filter(&req) {
+				continue
+			}
 
 			select {
 			case <-r.done:
@@ -169,7 +181,7 @@ func (r *RandomRequestSource) Err() error {
 // from an nginx formatted access log file and returns a RandomRequestSource
 // that will serve the requests at random. Requests are filtered to GET
 // and paths /ipfs and /ipns
-func NewNginxLogRequestSource(fname string) (*RandomRequestSource, error) {
+func NewNginxLogRequestSource(fname string, filter RequestFilter) (*RandomRequestSource, error) {
 	var reqs []*Request
 
 	f, err := os.Open(fname)
@@ -205,7 +217,7 @@ func NewNginxLogRequestSource(fname string) (*RandomRequestSource, error) {
 		return nil, fmt.Errorf("scanner: %w", scanner.Err())
 	}
 
-	return NewRandomRequestSource("nginxlog", reqs), nil
+	return NewRandomRequestSource("nginxlog", filter, reqs), nil
 }
 
 var samplePathsIPFS = []string{
@@ -527,20 +539,4 @@ func (l *LokiRequestSource) readTailResponse() (*loghttp.TailResponse, bool) {
 	}
 
 	return tr, true
-}
-
-type RequestFilter func(*Request) bool
-
-func NullRequestFilter(*Request) bool {
-	return true
-}
-
-func PathRequestFilter(req *Request) bool {
-	if req.Method != "GET" {
-		return false
-	}
-	if !strings.HasPrefix(req.URI, "/ipfs") && !strings.HasPrefix(req.URI, "/ipns") {
-		return false
-	}
-	return true
 }

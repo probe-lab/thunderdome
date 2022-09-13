@@ -63,6 +63,7 @@ resource "aws_ecs_task_definition" "dealgood" {
         { name = "DEALGOOD_LOKI_URI", value = "https://logs-prod-us-central1.grafana.net" },
         { name = "DEALGOOD_LOKI_QUERY", value = "{job=\"nginx\",app=\"gateway\",team=\"bifrost\"}" },
         { name = "DEALGOOD_RATE", value = tostring(var.request_rate) },
+        { name = "DEALGOOD_FILTER", value = var.request_filter },
         { name = "DEALGOOD_CONCURRENCY", value = "100" }
       ]
 
