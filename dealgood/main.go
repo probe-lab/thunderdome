@@ -173,6 +173,13 @@ var app = &cli.App{
 			Destination: &flags.interactive,
 			EnvVars:     []string{"DEALGOOD_INTERACTIVE"},
 		},
+		&cli.StringFlag{
+			Name:        "filter",
+			Usage:       "Filter to apply to requests from the request source (all, pathonly, validpathonly)",
+			Value:       "pathonly",
+			Destination: &flags.filter,
+			EnvVars:     []string{"DEALGOOD_FILTER"},
+		},
 	},
 }
 
@@ -198,6 +205,7 @@ var flags struct {
 	lokiPassword   string
 	lokiQuery      string
 	interactive    bool
+	filter         string
 }
 
 func main() {
@@ -248,12 +256,24 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("experiment: %w", err)
 	}
 
+	var filter RequestFilter
+	switch flags.filter {
+	case "all":
+		filter = NullRequestFilter
+	case "pathonly":
+		filter = PathRequestFilter
+	case "validpathonly":
+		filter = ValidPathRequestFilter
+	default:
+		return fmt.Errorf("unsupported filter: %s", flags.filter)
+	}
+
 	var source RequestSource
 	switch flags.source {
 	case "random":
-		source = NewRandomRequestSource("random", sampleRequests())
+		source = NewRandomRequestSource("random", filter, sampleRequests())
 	case "nginxlog":
-		source, err = NewNginxLogRequestSource(flags.sourceParam)
+		source, err = NewNginxLogRequestSource(flags.sourceParam, filter)
 		if err != nil {
 			return fmt.Errorf("nginx source: %w", err)
 		}
@@ -265,12 +285,12 @@ func Run(cc *cli.Context) error {
 			Query:    flags.lokiQuery,
 		}
 
-		source, err = NewLokiRequestSource(cfg, PathRequestFilter, exp.Name, exp.Rate)
+		source, err = NewLokiRequestSource(cfg, filter, exp.Name, exp.Rate)
 		if err != nil {
 			return fmt.Errorf("loki source: %w", err)
 		}
 	case "-":
-		source = NewStdinRequestSource()
+		source = NewStdinRequestSource(filter)
 	default:
 		return fmt.Errorf("unsupported source: %s", flags.source)
 	}
