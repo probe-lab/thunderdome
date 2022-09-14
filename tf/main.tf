@@ -88,6 +88,11 @@ resource "aws_ecr_repository" "dealgood" {
   image_tag_mutability = "MUTABLE"
 }
 
+resource "aws_ecr_repository" "skyfish" {
+  name                 = "skyfish"
+  image_tag_mutability = "MUTABLE"
+}
+
 resource "aws_cloudwatch_log_group" "logs" {
   name = "thunderdome"
 }
