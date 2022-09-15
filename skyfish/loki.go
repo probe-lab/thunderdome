@@ -59,14 +59,14 @@ type LokiConfig struct {
 	TLSConfig config.TLSConfig
 }
 
-func NewLokiTailer(cfg *LokiConfig, experimentName string, rps int) (*LokiTailer, error) {
+func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
 	l := &LokiTailer{
 		cfg:      *cfg,
 		shutdown: make(chan struct{}, 0),
-		ch:       make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
+		ch:       make(chan Request, 100*60*30),
 	}
 
 	var err error
@@ -166,9 +166,6 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 					l.Shutdown(context.Background())
 					return ctx.Err()
 				case l.ch <- req:
-
-				default:
-					l.requestsDroppedCounter.Add(1)
 				}
 
 			}

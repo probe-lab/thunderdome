@@ -1,6 +1,7 @@
 locals {
   agent_configs = toset([
     "dealgood",
+    "skyfish",
     "target"
   ])
 }

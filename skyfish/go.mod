@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.1
+	github.com/aws/aws-sdk-go v1.44.98
 	github.com/gorilla/websocket v1.4.2
 	github.com/pkg/profile v1.2.1
 	github.com/prometheus/client_golang v1.13.0
@@ -21,6 +22,7 @@ require (
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect

@@ -44,6 +44,15 @@ resource "aws_security_group_rule" "efs-allow-dealgood" {
   source_security_group_id = aws_security_group.dealgood.id
 }
 
+resource "aws_security_group_rule" "efs-allow-skyfish" {
+  security_group_id        = aws_security_group.efs.id
+  type                     = "ingress"
+  from_port                = 2049
+  to_port                  = 2049
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.skyfish.id
+}
+
 resource "aws_security_group" "use_efs" {
   name   = "use_efs"
   vpc_id = module.vpc.vpc_id

@@ -23,34 +23,6 @@ var app = &cli.App{
 	Name:   appName,
 	Action: Run,
 	Flags: []cli.Flag{
-		&cli.IntFlag{
-			Name:        "rate",
-			Usage:       "Number of requests per second to send (if not using an experiment file)",
-			Value:       5,
-			Destination: &flags.rate,
-			EnvVars:     []string{"SKYFISH_RATE"},
-		},
-		&cli.StringFlag{
-			Name:        "prometheus-addr",
-			Usage:       "Network address to start a prometheus metric exporter server on (example: :9991)",
-			Value:       "",
-			Destination: &flags.prometheusAddr,
-			EnvVars:     []string{"SKYFISH_PROMETHEUS_ADDR"},
-		},
-		&cli.StringFlag{
-			Name:        "cpuprofile",
-			Usage:       "Write a CPU profile to the specified file before exiting.",
-			Value:       "",
-			Destination: &flags.cpuprofile,
-			EnvVars:     []string{"SKYFISH_CPUPROFILE"},
-		},
-		&cli.StringFlag{
-			Name:        "memprofile",
-			Usage:       "Write an allocation profile to the file before exiting.",
-			Value:       "",
-			Destination: &flags.memprofile,
-			EnvVars:     []string{"SKYFISH_MEMPROFILE"},
-		},
 		&cli.StringFlag{
 			Name:        "loki-uri",
 			Usage:       "URI of the loki server when using loki as a request source.",
@@ -93,11 +65,31 @@ var app = &cli.App{
 			Destination: &flags.snsRegion,
 			EnvVars:     []string{"SKYFISH_SNS_REGION"},
 		},
+		&cli.StringFlag{
+			Name:        "prometheus-addr",
+			Usage:       "Network address to start a prometheus metric exporter server on (example: :9991)",
+			Value:       "",
+			Destination: &flags.prometheusAddr,
+			EnvVars:     []string{"SKYFISH_PROMETHEUS_ADDR"},
+		},
+		&cli.StringFlag{
+			Name:        "cpuprofile",
+			Usage:       "Write a CPU profile to the specified file before exiting.",
+			Value:       "",
+			Destination: &flags.cpuprofile,
+			EnvVars:     []string{"SKYFISH_CPUPROFILE"},
+		},
+		&cli.StringFlag{
+			Name:        "memprofile",
+			Usage:       "Write an allocation profile to the file before exiting.",
+			Value:       "",
+			Destination: &flags.memprofile,
+			EnvVars:     []string{"SKYFISH_MEMPROFILE"},
+		},
 	},
 }
 
 var flags struct {
-	rate           int
 	prometheusAddr string
 	cpuprofile     string
 	memprofile     string
@@ -130,7 +122,7 @@ func Run(cc *cli.Context) error {
 
 	rg := &RunGroup{}
 
-	source, err := NewLokiTailer(cfg, "TODO", flags.rate)
+	source, err := NewLokiTailer(cfg)
 	if err != nil {
 		return fmt.Errorf("loki source: %w", err)
 	}

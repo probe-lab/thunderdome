@@ -387,15 +387,11 @@ func permutePaths(paths []string) []*Request {
 
 // LokiRequestSource is a request source that reads a stream of nginx logs from Loki
 type LokiRequestSource struct {
-	cfg                     LokiConfig
-	ch                      chan Request
-	done                    chan struct{}
-	filter                  RequestFilter
-	requestsDroppedCounter  *prometheus.CounterVec
-	requestsFilteredCounter *prometheus.CounterVec
-	requestsIncomingCounter *prometheus.CounterVec
-	errorCounter            *prometheus.CounterVec
-	metrics                 *RequestSourceMetrics
+	cfg     LokiConfig
+	ch      chan Request
+	done    chan struct{}
+	filter  RequestFilter
+	metrics *RequestSourceMetrics
 
 	mu   sync.Mutex // guards following fields
 	conn *websocket.Conn
