@@ -241,6 +241,9 @@ func Run(cc *cli.Context) error {
 		flags.timings = false
 		flags.failures = false
 	}
+	if flags.source == "-" {
+		flags.source = "stdin"
+	}
 
 	// Load the experiment definition or use a default one
 	var expjson ExperimentJSON
@@ -285,12 +288,21 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("unsupported filter: %s", flags.filter)
 	}
 
+	metricLabels := map[string]string{
+		"experiment": exp.Name,
+		"source":     flags.source,
+	}
+	metrics, err := NewRequestSourceMetrics(metricLabels)
+	if err != nil {
+		return fmt.Errorf("new request source metrics: %w", err)
+	}
+
 	var source RequestSource
 	switch flags.source {
 	case "random":
-		source = NewRandomRequestSource("random", filter, sampleRequests())
+		source = NewRandomRequestSource(filter, metrics, sampleRequests())
 	case "nginxlog":
-		source, err = NewNginxLogRequestSource(flags.sourceParam, filter)
+		source, err = NewNginxLogRequestSource(flags.sourceParam, filter, metrics)
 		if err != nil {
 			return fmt.Errorf("nginx source: %w", err)
 		}
@@ -302,7 +314,7 @@ func Run(cc *cli.Context) error {
 			Query:    flags.lokiQuery,
 		}
 
-		source, err = NewLokiRequestSource(cfg, filter, exp.Name, exp.Rate)
+		source, err = NewLokiRequestSource(cfg, filter, metrics, exp.Rate)
 		if err != nil {
 			return fmt.Errorf("loki source: %w", err)
 		}
@@ -321,12 +333,12 @@ func Run(cc *cli.Context) error {
 			Queue:     flags.sqsQueue,
 		}
 
-		source, err = NewSQSRequestSource(cfg, filter, exp.Name, exp.Rate)
+		source, err = NewSQSRequestSource(cfg, filter, metrics, exp.Rate)
 		if err != nil {
 			return fmt.Errorf("sqs source: %w", err)
 		}
-	case "-":
-		source = NewStdinRequestSource(filter)
+	case "stdin":
+		source = NewStdinRequestSource(filter, metrics)
 	default:
 		return fmt.Errorf("unsupported source: %s", flags.source)
 	}

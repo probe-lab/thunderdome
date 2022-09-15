@@ -61,7 +61,12 @@ resource "aws_ecs_task_definition" "dealgood" {
         { name = "DEALGOOD_TARGETS", value = join(",", [for key, v in var.targets : "${key}::http://${var.name}-${key}.thunder.dome"]) },
         { name = "DEALGOOD_RATE", value = tostring(var.request_rate) },
         { name = "DEALGOOD_FILTER", value = var.request_filter },
-        { name = "DEALGOOD_CONCURRENCY", value = "100" }
+        { name = "DEALGOOD_CONCURRENCY", value = "100" },
+        { name = "DEALGOOD_SOURCE", value = var.request_source },
+        { name = "DEALGOOD_LOKI_URI", value = "https://logs-prod-us-central1.grafana.net" },
+        { name = "DEALGOOD_LOKI_QUERY", value = "{job=\"nginx\",app=\"gateway\",team=\"bifrost\"}" },
+        { name = "DEALGOOD_SQS_REGION", value = "${data.aws_region.current.name}" },
+        { name = "DEALGOOD_SQS_QUEUE", value = "${aws_sqs_queue.requests.name}" },
       ], var.dealgood_environment)
 
       secrets = var.dealgood_secrets

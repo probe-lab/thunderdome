@@ -1,7 +1,8 @@
 module "tweedles" {
-  source       = "./modules/experiment"
-  name         = "tweedles-2022-09-08"
-  request_rate = 10
+  source         = "./modules/experiment"
+  name           = "tweedles-2022-09-08"
+  request_rate   = 10
+  request_source = "sqs"
 
   ecs_cluster_id                                 = module.ecs-asg.cluster_id
   efs_file_system_id                             = aws_efs_file_system.thunderdome.id
@@ -19,12 +20,6 @@ module "tweedles" {
   grafana_secrets = [
     { name = "GRAFANA_USER", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:username::" },
     { name = "GRAFANA_PASS", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:password::" }
-  ]
-
-  dealgood_environment = [
-    { name = "DEALGOOD_SOURCE", value = "loki" },
-    { name = "DEALGOOD_LOKI_URI", value = "https://logs-prod-us-central1.grafana.net" },
-    { name = "DEALGOOD_LOKI_QUERY", value = "{job=\"nginx\",app=\"gateway\",team=\"bifrost\"}" },
   ]
 
   dealgood_secrets = [

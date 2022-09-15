@@ -47,6 +47,7 @@ variable "dealgood_secrets" {
 
 variable "dealgood_environment" {
   type = list(map(string))
+  default = []
 }
 
 variable "efs_file_system_id" {
@@ -64,6 +65,10 @@ variable "request_rate" {
 variable "request_filter" {
   type    = string
   default = "pathonly"
+}
+
+variable "request_source" {
+  type    = string
 }
 
 variable "request_sns_topic_arn" {

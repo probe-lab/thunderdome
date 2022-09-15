@@ -50,12 +50,63 @@ type RequestSource interface {
 	Name() string
 }
 
+type RequestSourceMetrics struct {
+	requestsDropped  prometheus.Counter
+	requestsFiltered prometheus.Counter
+	requestsIncoming prometheus.Counter
+	errors           prometheus.Counter
+}
+
+func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, error) {
+	s := &RequestSourceMetrics{}
+
+	var err error
+	s.requestsDropped, err = newPrometheusCounter(
+		"source_requests_dropped_total",
+		"The total number of requests dropped by the request source due to targets falling behind.",
+		labels,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	s.requestsFiltered, err = newPrometheusCounter(
+		"source_requests_filtered_total",
+		"The total number of requests ignored by the request source due to filter rules.",
+		labels,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	s.requestsIncoming, err = newPrometheusCounter(
+		"source_requests_incoming_total",
+		"The total number of requests read from the request source.",
+		labels,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	s.errors, err = newPrometheusCounter(
+		"source_error_total",
+		"The total number of errors encountered when reading from request source.",
+		labels,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	return s, nil
+}
+
 // StdinRequestSource is a request source that reads a stream of JSON requests
 // from stdin.
 type StdinRequestSource struct {
-	ch     chan Request
-	done   chan struct{}
-	filter RequestFilter
+	ch      chan Request
+	done    chan struct{}
+	filter  RequestFilter
+	metrics *RequestSourceMetrics
 
 	mu  sync.Mutex // guards following fields
 	err error
@@ -63,11 +114,12 @@ type StdinRequestSource struct {
 
 var _ RequestSource = (*StdinRequestSource)(nil)
 
-func NewStdinRequestSource(filter RequestFilter) *StdinRequestSource {
+func NewStdinRequestSource(filter RequestFilter, metrics *RequestSourceMetrics) *StdinRequestSource {
 	return &StdinRequestSource{
-		done:   make(chan struct{}),
-		ch:     make(chan Request),
-		filter: filter,
+		done:    make(chan struct{}),
+		ch:      make(chan Request),
+		filter:  filter,
+		metrics: metrics,
 	}
 }
 
@@ -85,17 +137,17 @@ func (s *StdinRequestSource) Start() error {
 
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
+			s.metrics.requestsIncoming.Add(1)
 			data := scanner.Bytes()
 			var req Request
 			if err := json.Unmarshal(data, &req); err != nil {
-				s.mu.Lock()
-				s.err = err
-				s.mu.Unlock()
-				s.Stop()
-				return
+				s.metrics.errors.Add(1)
+				log.Printf("failed to unmarshal request: %v", err)
+				continue
 			}
 
 			if s.filter != nil && !s.filter(&req) {
+				s.metrics.requestsFiltered.Add(1)
 				continue
 			}
 
@@ -123,20 +175,22 @@ func (s *StdinRequestSource) Err() error {
 // RandomRequestSource is a request source that provides a random request
 // from a list of requests.
 type RandomRequestSource struct {
-	name   string
-	reqs   []*Request
-	rng    *rand.Rand
-	ch     chan Request
-	done   chan struct{}
-	filter RequestFilter
+	name    string
+	reqs    []*Request
+	rng     *rand.Rand
+	ch      chan Request
+	done    chan struct{}
+	filter  RequestFilter
+	metrics *RequestSourceMetrics
 }
 
-func NewRandomRequestSource(name string, filter RequestFilter, reqs []*Request) *RandomRequestSource {
+func NewRandomRequestSource(filter RequestFilter, metrics *RequestSourceMetrics, reqs []*Request) *RandomRequestSource {
 	return &RandomRequestSource{
-		reqs:   reqs,
-		rng:    rand.New(rand.NewSource(time.Now().UnixNano())),
-		ch:     make(chan Request),
-		filter: filter,
+		reqs:    reqs,
+		rng:     rand.New(rand.NewSource(time.Now().UnixNano())),
+		ch:      make(chan Request),
+		filter:  filter,
+		metrics: metrics,
 	}
 }
 
@@ -153,11 +207,13 @@ func (r *RandomRequestSource) Start() error {
 		defer close(r.ch)
 
 		for {
+			r.metrics.requestsIncoming.Add(1)
 			idx := r.rng.Intn(len(r.reqs))
 			req := *r.reqs[idx]
 			req.Timestamp = time.Now()
 
 			if r.filter != nil && !r.filter(&req) {
+				r.metrics.requestsFiltered.Add(1)
 				continue
 			}
 
@@ -184,7 +240,7 @@ func (r *RandomRequestSource) Err() error {
 // from an nginx formatted access log file and returns a RandomRequestSource
 // that will serve the requests at random. Requests are filtered to GET
 // and paths /ipfs and /ipns
-func NewNginxLogRequestSource(fname string, filter RequestFilter) (*RandomRequestSource, error) {
+func NewNginxLogRequestSource(fname string, filter RequestFilter, metrics *RequestSourceMetrics) (*RandomRequestSource, error) {
 	var reqs []*Request
 
 	f, err := os.Open(fname)
@@ -220,7 +276,7 @@ func NewNginxLogRequestSource(fname string, filter RequestFilter) (*RandomReques
 		return nil, fmt.Errorf("scanner: %w", scanner.Err())
 	}
 
-	return NewRandomRequestSource("nginxlog", filter, reqs), nil
+	return NewRandomRequestSource(filter, metrics, reqs), nil
 }
 
 var samplePathsIPFS = []string{
@@ -325,7 +381,7 @@ type LokiRequestSource struct {
 	requestsFilteredCounter *prometheus.CounterVec
 	requestsIncomingCounter *prometheus.CounterVec
 	errorCounter            *prometheus.CounterVec
-	experimentName          string
+	metrics                 *RequestSourceMetrics
 
 	mu   sync.Mutex // guards following fields
 	conn *websocket.Conn
@@ -339,53 +395,16 @@ type LokiConfig struct {
 	Query    string // the query to use to obtain logs
 }
 
-func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, experimentName string, rps int) (*LokiRequestSource, error) {
+func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, metrics *RequestSourceMetrics, rps int) (*LokiRequestSource, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
 	l := &LokiRequestSource{
-		cfg:            *cfg,
-		ch:             make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
-		done:           make(chan struct{}, 0),
-		experimentName: experimentName,
-		filter:         filter,
-	}
-
-	var err error
-	l.requestsDroppedCounter, err = newCounterMetric(
-		"loki_requests_dropped_total",
-		"The total number of requests dropped by the loki source due to targets falling behind.",
-		[]string{"experiment"},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new counter: %w", err)
-	}
-
-	l.requestsFilteredCounter, err = newCounterMetric(
-		"loki_requests_filtered_total",
-		"The total number of requests ignored by loki due to filter rules.",
-		[]string{"experiment"},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new counter: %w", err)
-	}
-
-	l.requestsIncomingCounter, err = newCounterMetric(
-		"loki_requests_incoming_total",
-		"The total number of requests read from loki.",
-		[]string{"experiment"},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new counter: %w", err)
-	}
-
-	l.errorCounter, err = newCounterMetric(
-		"loki_error_total",
-		"The total number of errors encountered when reading from loki.",
-		[]string{"experiment"},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new counter: %w", err)
+		cfg:     *cfg,
+		ch:      make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
+		done:    make(chan struct{}, 0),
+		filter:  filter,
+		metrics: metrics,
 	}
 
 	return l, nil
@@ -436,7 +455,7 @@ func (l *LokiRequestSource) Start() error {
 			if !ok {
 				log.Printf("failed to read tail from loki: %v", l.err)
 				if err := l.connect(client, q); err != nil {
-					l.errorCounter.WithLabelValues(l.experimentName).Add(1)
+					l.metrics.errors.Add(1)
 					log.Printf("failed to connect to loki: %v", err)
 					time.Sleep(30 * time.Second)
 				}
@@ -444,12 +463,12 @@ func (l *LokiRequestSource) Start() error {
 			}
 			for _, stream := range tr.Streams {
 				for _, entry := range stream.Entries {
-					l.requestsIncomingCounter.WithLabelValues(l.experimentName).Add(1)
+					l.metrics.requestsIncoming.Add(1)
 
 					var line logline
 					err := json.Unmarshal([]byte(entry.Line), &line)
 					if err != nil {
-						l.errorCounter.WithLabelValues(l.experimentName).Add(1)
+						l.metrics.errors.Add(1)
 						continue
 					}
 
@@ -461,7 +480,7 @@ func (l *LokiRequestSource) Start() error {
 					}
 
 					if l.filter != nil && !l.filter(&req) {
-						l.requestsFilteredCounter.WithLabelValues(l.experimentName).Add(1)
+						l.metrics.requestsFiltered.Add(1)
 						continue
 					}
 
@@ -471,7 +490,7 @@ func (l *LokiRequestSource) Start() error {
 					case l.ch <- req:
 
 					default:
-						l.requestsDroppedCounter.WithLabelValues(l.experimentName).Add(1)
+						l.metrics.requestsDropped.Add(1)
 					}
 
 				}
@@ -551,15 +570,11 @@ type SQSConfig struct {
 }
 
 type SQSRequestSource struct {
-	cfg                     SQSConfig
-	ch                      chan Request
-	done                    chan struct{}
-	filter                  RequestFilter
-	requestsDroppedCounter  *prometheus.CounterVec
-	requestsFilteredCounter *prometheus.CounterVec
-	requestsIncomingCounter *prometheus.CounterVec
-	errorCounter            *prometheus.CounterVec
-	experimentName          string
+	cfg     SQSConfig
+	ch      chan Request
+	done    chan struct{}
+	filter  RequestFilter
+	metrics *RequestSourceMetrics
 
 	mu       sync.Mutex
 	svc      *sqs.SQS
@@ -567,53 +582,16 @@ type SQSRequestSource struct {
 	err      error
 }
 
-func NewSQSRequestSource(cfg *SQSConfig, filter RequestFilter, experimentName string, rps int) (*SQSRequestSource, error) {
+func NewSQSRequestSource(cfg *SQSConfig, filter RequestFilter, metrics *RequestSourceMetrics, rps int) (*SQSRequestSource, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
 	s := &SQSRequestSource{
-		cfg:            *cfg,
-		ch:             make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
-		done:           make(chan struct{}, 0),
-		experimentName: experimentName,
-		filter:         filter,
-	}
-
-	var err error
-	s.requestsDroppedCounter, err = newCounterMetric(
-		"sws_requests_dropped_total",
-		"The total number of requests dropped by the sqs source due to targets falling behind.",
-		[]string{"experiment"},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new counter: %w", err)
-	}
-
-	s.requestsFilteredCounter, err = newCounterMetric(
-		"sqs_requests_filtered_total",
-		"The total number of requests ignored by the sqs source due to filter rules.",
-		[]string{"experiment"},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new counter: %w", err)
-	}
-
-	s.requestsIncomingCounter, err = newCounterMetric(
-		"sqs_requests_incoming_total",
-		"The total number of requests read from the sqs source.",
-		[]string{"experiment"},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new counter: %w", err)
-	}
-
-	s.errorCounter, err = newCounterMetric(
-		"sqs_error_total",
-		"The total number of errors encountered when reading from the sqs source.",
-		[]string{"experiment"},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new counter: %w", err)
+		cfg:     *cfg,
+		ch:      make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
+		done:    make(chan struct{}, 0),
+		filter:  filter,
+		metrics: metrics,
 	}
 
 	return s, nil
@@ -667,14 +645,14 @@ func (s *SQSRequestSource) Start() error {
 				WaitTimeSeconds:     aws.Int64(10),
 			})
 			if err != nil {
-				s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+				s.metrics.errors.Add(1)
 				log.Printf("failed to receive message: %v", err)
 				continue
 			}
 
 			for _, msg := range msgResult.Messages {
 				if msg.Body == nil {
-					s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+					s.metrics.errors.Add(1)
 					log.Printf("message body was nil: %s", *msg.MessageId)
 					continue
 				}
@@ -683,30 +661,30 @@ func (s *SQSRequestSource) Start() error {
 					ReceiptHandle: msg.ReceiptHandle,
 				})
 				if err != nil {
-					s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+					s.metrics.errors.Add(1)
 					log.Printf("failed to delete message: %v", err)
 				}
 
 				var smsg SNSMessage
 				if err := json.Unmarshal([]byte(*msg.Body), &smsg); err != nil {
-					s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+					s.metrics.errors.Add(1)
 					log.Printf("failed to unmarshal message: %v", err)
 					continue
 				}
 
 				scanner := bufio.NewScanner(strings.NewReader(smsg.Message))
 				for scanner.Scan() {
-					s.requestsIncomingCounter.WithLabelValues(s.experimentName).Add(1)
+					s.metrics.requestsIncoming.Add(1)
 					data := scanner.Bytes()
 					var req Request
 					if err := json.Unmarshal(data, &req); err != nil {
-						s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+						s.metrics.errors.Add(1)
 						log.Printf("failed to unmarshal request: %v", err)
 						continue
 					}
 
 					if s.filter != nil && !s.filter(&req) {
-						s.requestsFilteredCounter.WithLabelValues(s.experimentName).Add(1)
+						s.metrics.requestsFiltered.Add(1)
 						continue
 					}
 
@@ -715,7 +693,7 @@ func (s *SQSRequestSource) Start() error {
 						return
 					case s.ch <- req:
 					default:
-						s.requestsDroppedCounter.WithLabelValues(s.experimentName).Add(1)
+						s.metrics.requestsDropped.Add(1)
 					}
 				}
 
