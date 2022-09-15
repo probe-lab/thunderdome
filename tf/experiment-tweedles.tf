@@ -21,6 +21,12 @@ module "tweedles" {
     { name = "GRAFANA_PASS", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:password::" }
   ]
 
+  dealgood_environment = [
+    { name = "DEALGOOD_SOURCE", value = "loki" },
+    { name = "DEALGOOD_LOKI_URI", value = "https://logs-prod-us-central1.grafana.net" },
+    { name = "DEALGOOD_LOKI_QUERY", value = "{job=\"nginx\",app=\"gateway\",team=\"bifrost\"}" },
+  ]
+
   dealgood_secrets = [
     { name = "DEALGOOD_LOKI_USERNAME", valueFrom = "${data.aws_secretsmanager_secret.dealgood-loki-secret.arn}:username::" },
     { name = "DEALGOOD_LOKI_PASSWORD", valueFrom = "${data.aws_secretsmanager_secret.dealgood-loki-secret.arn}:password::" },

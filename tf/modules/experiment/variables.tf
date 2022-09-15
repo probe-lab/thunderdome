@@ -45,6 +45,10 @@ variable "dealgood_task_role_arn" {
 variable "dealgood_secrets" {
 }
 
+variable "dealgood_environment" {
+  type = list(map(string))
+}
+
 variable "efs_file_system_id" {
 }
 
