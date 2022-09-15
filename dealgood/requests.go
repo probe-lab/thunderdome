@@ -55,6 +55,7 @@ type RequestSourceMetrics struct {
 	requestsFiltered prometheus.Counter
 	requestsIncoming prometheus.Counter
 	errors           prometheus.Counter
+	connected        prometheus.Gauge
 }
 
 func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, error) {
@@ -97,6 +98,15 @@ func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, e
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
+	s.connected, err = newPrometheusGauge(
+		"source_connected",
+		"Indicates whether the request source is connected to its provider of requests.",
+		labels,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
 	return s, nil
 }
 
@@ -133,6 +143,8 @@ func (s *StdinRequestSource) Chan() <-chan Request {
 
 func (s *StdinRequestSource) Start() error {
 	go func() {
+		s.metrics.connected.Set(1)
+		defer s.metrics.connected.Set(0)
 		defer close(s.ch)
 
 		scanner := bufio.NewScanner(os.Stdin)
@@ -204,6 +216,8 @@ func (r *RandomRequestSource) Chan() <-chan Request {
 
 func (r *RandomRequestSource) Start() error {
 	go func() {
+		r.metrics.connected.Set(1)
+		defer r.metrics.connected.Set(0)
 		defer close(r.ch)
 
 		for {
@@ -437,6 +451,7 @@ func (l *LokiRequestSource) Start() error {
 	if err := l.connect(client, q); err != nil {
 		return err
 	}
+	defer l.metrics.connected.Set(0)
 
 	type logline struct {
 		Server  string            `json:"server"`
@@ -509,6 +524,7 @@ func (l *LokiRequestSource) connect(c *client.DefaultClient, q *query.Query) err
 		l.conn.Close()
 	}
 	l.conn = nil
+	l.metrics.connected.Set(0)
 	l.mu.Unlock()
 
 	conn, err := c.LiveTailQueryConn(q.QueryString, 0, q.Limit, q.Start, q.Quiet)
@@ -519,6 +535,7 @@ func (l *LokiRequestSource) connect(c *client.DefaultClient, q *query.Query) err
 	l.mu.Lock()
 	l.conn = conn
 	l.mu.Unlock()
+	l.metrics.connected.Set(1)
 	log.Printf("connected to loki: %s", l.cfg.URI)
 	return nil
 }
@@ -623,7 +640,8 @@ func (s *SQSRequestSource) Start() error {
 	}
 	s.queueURL = *urlResult.QueueUrl
 	log.Printf("found queue url %s", s.queueURL)
-
+	s.metrics.connected.Set(1)
+	defer s.metrics.connected.Set(0)
 	go func() {
 		for {
 			select {
