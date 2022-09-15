@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pkg/profile"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
@@ -25,56 +28,70 @@ var app = &cli.App{
 			Usage:       "Number of requests per second to send (if not using an experiment file)",
 			Value:       5,
 			Destination: &flags.rate,
-			EnvVars:     []string{"DEALGOOD_RATE"},
+			EnvVars:     []string{"SKYFISH_RATE"},
 		},
 		&cli.StringFlag{
 			Name:        "prometheus-addr",
 			Usage:       "Network address to start a prometheus metric exporter server on (example: :9991)",
 			Value:       "",
 			Destination: &flags.prometheusAddr,
-			EnvVars:     []string{"DEALGOOD_PROMETHEUS_ADDR"},
+			EnvVars:     []string{"SKYFISH_PROMETHEUS_ADDR"},
 		},
 		&cli.StringFlag{
 			Name:        "cpuprofile",
 			Usage:       "Write a CPU profile to the specified file before exiting.",
 			Value:       "",
 			Destination: &flags.cpuprofile,
-			EnvVars:     []string{"DEALGOOD_CPUPROFILE"},
+			EnvVars:     []string{"SKYFISH_CPUPROFILE"},
 		},
 		&cli.StringFlag{
 			Name:        "memprofile",
 			Usage:       "Write an allocation profile to the file before exiting.",
 			Value:       "",
 			Destination: &flags.memprofile,
-			EnvVars:     []string{"DEALGOOD_MEMPROFILE"},
+			EnvVars:     []string{"SKYFISH_MEMPROFILE"},
 		},
 		&cli.StringFlag{
 			Name:        "loki-uri",
 			Usage:       "URI of the loki server when using loki as a request source.",
 			Value:       "",
 			Destination: &flags.lokiURI,
-			EnvVars:     []string{"DEALGOOD_LOKI_URI"},
+			EnvVars:     []string{"SKYFISH_LOKI_URI"},
 		},
 		&cli.StringFlag{
 			Name:        "loki-username",
 			Usage:       "Username to use when using loki as a request source.",
 			Value:       "",
 			Destination: &flags.lokiUsername,
-			EnvVars:     []string{"DEALGOOD_LOKI_USERNAME"},
+			EnvVars:     []string{"SKYFISH_LOKI_USERNAME"},
 		},
 		&cli.StringFlag{
 			Name:        "loki-password",
 			Usage:       "Password to use when using loki as a request source.",
 			Value:       "",
 			Destination: &flags.lokiPassword,
-			EnvVars:     []string{"DEALGOOD_LOKI_PASSWORD"},
+			EnvVars:     []string{"SKYFISH_LOKI_PASSWORD"},
 		},
 		&cli.StringFlag{
 			Name:        "loki-query",
 			Usage:       "Query to use when using loki as a request source.",
 			Value:       "",
 			Destination: &flags.lokiQuery,
-			EnvVars:     []string{"DEALGOOD_LOKI_QUERY"},
+			EnvVars:     []string{"SKYFISH_LOKI_QUERY"},
+		},
+		&cli.StringFlag{
+			Name:        "sns-topic",
+			Usage:       "ARN of sns topic to publish to.",
+			Value:       "",
+			Destination: &flags.topicArn,
+			EnvVars:     []string{"SKYFISH_TOPIC"},
+		},
+		&cli.StringFlag{
+			Name:        "sns-region",
+			Usage:       "AWS region to use when connecting to sns.",
+			Value:       "eu-west-1",
+			Destination: &flags.snsRegion,
+			EnvVars:     []string{"SKYFISH_SNS_REGION"},
 		},
 	},
 }
@@ -88,6 +105,8 @@ var flags struct {
 	lokiUsername   string
 	lokiPassword   string
 	lokiQuery      string
+	topicArn       string
+	snsRegion      string
 }
 
 func main() {
@@ -125,11 +144,21 @@ func Run(cc *cli.Context) error {
 		rg.Add(Restartable{ps})
 	}
 
-	publisher, err := NewPublisher(source.Chan())
+	awscfg := aws.NewConfig()
+	awscfg.Region = aws.String(flags.snsRegion)
+	awscfg.WithHTTPClient(&http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+		},
+		Timeout: 10 * time.Second,
+	})
+	publisher, err := NewPublisher(awscfg, flags.topicArn, source.Chan())
 	if err != nil {
 		return fmt.Errorf("new publisher: %w", err)
 	}
 	rg.Add(publisher)
+
+	rg.Add(new(Health))
 
 	if flags.cpuprofile != "" {
 		defer profile.Start(profile.CPUProfile, profile.ProfileFilename(flags.cpuprofile)).Stop()

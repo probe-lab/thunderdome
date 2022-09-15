@@ -21,10 +21,12 @@ resource "aws_instance" "testbox" {
   ami           = "ami-030802ad6e5ffb009"
   instance_type = "m6i.xlarge"
   key_name      = each.key
+  iam_instance_profile = aws_iam_instance_profile.testbox_profile.name
   vpc_security_group_ids = [
     aws_security_group.dealgood.id,
     aws_security_group.allow_ssh.id,
-    aws_security_group.allow_ipfs.id
+    aws_security_group.allow_ipfs.id,
+    aws_security_group.allow_8000.id
   ]
   subnet_id = module.vpc.public_subnets[0]
   tags = {

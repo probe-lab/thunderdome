@@ -14,6 +14,7 @@ module "tweedles" {
   ssm_exec_policy_arn                            = aws_iam_policy.ssm-exec.arn
   grafana_agent_dealgood_config_url              = "http://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["dealgood"].s3_object_id}"
   grafana_agent_target_config_url                = "http://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["target"].s3_object_id}"
+  request_sns_topic_arn                          = aws_sns_topic.gateway_requests.arn
 
   grafana_secrets = [
     { name = "GRAFANA_USER", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:username::" },

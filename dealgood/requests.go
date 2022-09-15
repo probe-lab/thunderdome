@@ -12,6 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/gorilla/websocket"
 	"github.com/grafana/loki/pkg/logcli/client"
 	"github.com/grafana/loki/pkg/logcli/query"
@@ -343,6 +346,7 @@ func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, experimentName 
 	l := &LokiRequestSource{
 		cfg:            *cfg,
 		ch:             make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
+		done:           make(chan struct{}, 0),
 		experimentName: experimentName,
 		filter:         filter,
 	}
@@ -539,4 +543,212 @@ func (l *LokiRequestSource) readTailResponse() (*loghttp.TailResponse, bool) {
 	}
 
 	return tr, true
+}
+
+type SQSConfig struct {
+	AWSConfig *aws.Config
+	Queue     string
+}
+
+type SQSRequestSource struct {
+	cfg                     SQSConfig
+	ch                      chan Request
+	done                    chan struct{}
+	filter                  RequestFilter
+	requestsDroppedCounter  *prometheus.CounterVec
+	requestsFilteredCounter *prometheus.CounterVec
+	requestsIncomingCounter *prometheus.CounterVec
+	errorCounter            *prometheus.CounterVec
+	experimentName          string
+
+	mu       sync.Mutex
+	svc      *sqs.SQS
+	queueURL string
+	err      error
+}
+
+func NewSQSRequestSource(cfg *SQSConfig, filter RequestFilter, experimentName string, rps int) (*SQSRequestSource, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config must not be nil")
+	}
+	s := &SQSRequestSource{
+		cfg:            *cfg,
+		ch:             make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
+		done:           make(chan struct{}, 0),
+		experimentName: experimentName,
+		filter:         filter,
+	}
+
+	var err error
+	s.requestsDroppedCounter, err = newCounterMetric(
+		"sws_requests_dropped_total",
+		"The total number of requests dropped by the sqs source due to targets falling behind.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	s.requestsFilteredCounter, err = newCounterMetric(
+		"sqs_requests_filtered_total",
+		"The total number of requests ignored by the sqs source due to filter rules.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	s.requestsIncomingCounter, err = newCounterMetric(
+		"sqs_requests_incoming_total",
+		"The total number of requests read from the sqs source.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	s.errorCounter, err = newCounterMetric(
+		"sqs_error_total",
+		"The total number of errors encountered when reading from the sqs source.",
+		[]string{"experiment"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	return s, nil
+}
+
+func (s *SQSRequestSource) Name() string {
+	return "sns"
+}
+
+func (s *SQSRequestSource) Chan() <-chan Request {
+	return s.ch
+}
+
+func (s *SQSRequestSource) Start() error {
+	sess, err := session.NewSession(s.cfg.AWSConfig)
+	if err != nil {
+		return fmt.Errorf("new session: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.svc = sqs.New(sess)
+
+	urlResult, err := s.svc.GetQueueUrl(&sqs.GetQueueUrlInput{
+		QueueName: aws.String(s.cfg.Queue),
+	})
+	if err != nil {
+		return fmt.Errorf("get queue url: %w", err)
+	}
+	s.queueURL = *urlResult.QueueUrl
+	log.Printf("found queue url %s", s.queueURL)
+
+	go func() {
+		for {
+			select {
+			case <-s.done:
+				return
+			default:
+			}
+
+			msgResult, err := s.svc.ReceiveMessage(&sqs.ReceiveMessageInput{
+				AttributeNames: []*string{
+					aws.String(sqs.MessageSystemAttributeNameSentTimestamp),
+				},
+				MessageAttributeNames: []*string{
+					aws.String(sqs.QueueAttributeNameAll),
+				},
+				QueueUrl:            aws.String(s.queueURL),
+				MaxNumberOfMessages: aws.Int64(10),
+				VisibilityTimeout:   aws.Int64(5),
+				WaitTimeSeconds:     aws.Int64(10),
+			})
+			if err != nil {
+				s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+				log.Printf("failed to receive message: %v", err)
+				continue
+			}
+
+			for _, msg := range msgResult.Messages {
+				if msg.Body == nil {
+					s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+					log.Printf("message body was nil: %s", *msg.MessageId)
+					continue
+				}
+				_, err = s.svc.DeleteMessage(&sqs.DeleteMessageInput{
+					QueueUrl:      aws.String(s.queueURL),
+					ReceiptHandle: msg.ReceiptHandle,
+				})
+				if err != nil {
+					s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+					log.Printf("failed to delete message: %v", err)
+				}
+
+				var smsg SNSMessage
+				if err := json.Unmarshal([]byte(*msg.Body), &smsg); err != nil {
+					s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+					log.Printf("failed to unmarshal message: %v", err)
+					continue
+				}
+
+				scanner := bufio.NewScanner(strings.NewReader(smsg.Message))
+				for scanner.Scan() {
+					s.requestsIncomingCounter.WithLabelValues(s.experimentName).Add(1)
+					data := scanner.Bytes()
+					var req Request
+					if err := json.Unmarshal(data, &req); err != nil {
+						s.errorCounter.WithLabelValues(s.experimentName).Add(1)
+						log.Printf("failed to unmarshal request: %v", err)
+						continue
+					}
+
+					if s.filter != nil && !s.filter(&req) {
+						s.requestsFilteredCounter.WithLabelValues(s.experimentName).Add(1)
+						continue
+					}
+
+					select {
+					case <-s.done:
+						return
+					case s.ch <- req:
+					default:
+						s.requestsDroppedCounter.WithLabelValues(s.experimentName).Add(1)
+					}
+				}
+
+			}
+
+		}
+	}()
+
+	return nil
+}
+
+func (s *SQSRequestSource) Stop() {
+	close(s.done)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.svc == nil {
+		return
+	}
+
+	s.svc = nil
+}
+
+func (s *SQSRequestSource) Err() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.err
+}
+
+type SNSMessage struct {
+	Type      string `json:"Type"`
+	MessageId string `json:"MessageId"`
+	TopicArn  string `json:"TopicArn"`
+	Message   string `json:"Message"`
 }

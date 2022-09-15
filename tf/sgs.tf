@@ -101,3 +101,35 @@ resource "aws_security_group_rule" "allow_ipfs_udp" {
   cidr_blocks       = ["0.0.0.0/0"]
   ipv6_cidr_blocks  = ["::/0"]
 }
+
+resource "aws_security_group" "allow_8000" {
+  name   = "allow_8000"
+  vpc_id = module.vpc.vpc_id
+}
+
+resource "aws_security_group_rule" "allow_8000" {
+  security_group_id = aws_security_group.allow_8000.id
+  type              = "ingress"
+  from_port         = 8000
+  to_port           = 8000
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  ipv6_cidr_blocks  = ["::/0"]
+}
+
+resource "aws_security_group" "allow_http" {
+  name   = "allow_http"
+  vpc_id = module.vpc.vpc_id
+}
+
+
+resource "aws_security_group_rule" "allow_http" {
+  security_group_id = aws_security_group.allow_http.id
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  ipv6_cidr_blocks  = ["::/0"]
+}
+

@@ -12,6 +12,8 @@ import (
 	"go.opencensus.io/stats/view"
 )
 
+var commonLabels = map[string]string{}
+
 type PrometheusServer struct {
 	addr string
 	pe   *promexp.Exporter
@@ -50,13 +52,14 @@ func (p *PrometheusServer) Run(ctx context.Context) error {
 	return server.ListenAndServe()
 }
 
-func newCounterMetric(name string, help string, labels []string) (prometheus.Counter, error) {
+func newPrometheusCounter(name string, help string) (prometheus.Counter, error) {
 	m := prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Namespace: "thunderdome",
-			Subsystem: "dealgood",
-			Name:      name,
-			Help:      help,
+			Namespace:   "thunderdome",
+			Subsystem:   appName,
+			Name:        name,
+			Help:        help,
+			ConstLabels: commonLabels,
 		},
 	)
 	if err := prometheus.Register(m); err != nil {
@@ -64,6 +67,26 @@ func newCounterMetric(name string, help string, labels []string) (prometheus.Cou
 			m = are.ExistingCollector.(prometheus.Counter)
 		} else {
 			return nil, fmt.Errorf("register %s counter: %w", name, err)
+		}
+	}
+	return m, nil
+}
+
+func newPrometheusGauge(name string, help string) (prometheus.Gauge, error) {
+	m := prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace:   "thunderdome",
+			Subsystem:   appName,
+			Name:        name,
+			Help:        help,
+			ConstLabels: commonLabels,
+		},
+	)
+	if err := prometheus.Register(m); err != nil {
+		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			m = are.ExistingCollector.(prometheus.Gauge)
+		} else {
+			return nil, fmt.Errorf("register %s gauge: %w", name, err)
 		}
 	}
 	return m, nil

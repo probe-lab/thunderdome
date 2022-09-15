@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pkg/profile"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/urfave/cli/v2"
@@ -166,6 +167,13 @@ var app = &cli.App{
 			Destination: &flags.lokiQuery,
 			EnvVars:     []string{"DEALGOOD_LOKI_QUERY"},
 		},
+		&cli.StringFlag{
+			Name:        "sqs-queue",
+			Usage:       "Name of the queue to subscribe to when using sqs as a request source.",
+			Value:       "",
+			Destination: &flags.sqsQueue,
+			EnvVars:     []string{"DEALGOOD_SQS_QUEUE"},
+		},
 		&cli.BoolFlag{
 			Name:        "interactive",
 			Usage:       "Reduce all wait times and log timings more frequently.",
@@ -179,6 +187,13 @@ var app = &cli.App{
 			Value:       "pathonly",
 			Destination: &flags.filter,
 			EnvVars:     []string{"DEALGOOD_FILTER"},
+		},
+		&cli.StringFlag{
+			Name:        "sqs-region",
+			Usage:       "AWS region to use when connecting to sqs.",
+			Value:       "eu-west-1",
+			Destination: &flags.sqsRegion,
+			EnvVars:     []string{"DEALGOOD_SQS_REGION"},
 		},
 	},
 }
@@ -204,6 +219,8 @@ var flags struct {
 	lokiUsername   string
 	lokiPassword   string
 	lokiQuery      string
+	sqsQueue       string
+	sqsRegion      string
 	interactive    bool
 	filter         string
 }
@@ -288,6 +305,25 @@ func Run(cc *cli.Context) error {
 		source, err = NewLokiRequestSource(cfg, filter, exp.Name, exp.Rate)
 		if err != nil {
 			return fmt.Errorf("loki source: %w", err)
+		}
+	case "sqs":
+		awscfg := aws.NewConfig()
+		awscfg.Region = aws.String(flags.sqsRegion)
+		awscfg.WithHTTPClient(&http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+			},
+			Timeout: 10 * time.Second,
+		})
+
+		cfg := &SQSConfig{
+			AWSConfig: awscfg,
+			Queue:     flags.sqsQueue,
+		}
+
+		source, err = NewSQSRequestSource(cfg, filter, exp.Name, exp.Rate)
+		if err != nil {
+			return fmt.Errorf("sqs source: %w", err)
 		}
 	case "-":
 		source = NewStdinRequestSource(filter)

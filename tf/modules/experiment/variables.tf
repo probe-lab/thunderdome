@@ -61,3 +61,7 @@ variable "request_filter" {
   type    = string
   default = "pathonly"
 }
+
+variable "request_sns_topic_arn" {
+  description = "arn of an sns topic to subscribe to"
+}

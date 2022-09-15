@@ -20,12 +20,19 @@ import (
 	"github.com/prometheus/common/config"
 )
 
+const (
+	tailPath = "/loki/api/v1/tail"
+)
+
+var userAgent = fmt.Sprintf("%s/0.1", appName)
+
 type Request struct {
 	Method    string            `json:"method"`
 	URI       string            `json:"uri"`
 	Body      []byte            `json:"body,omitempty"`
 	Header    map[string]string `json:"header"`
-	Timestamp time.Time         `json:"ts"` // time the request was created
+	Status    int               `json:"status"` // status as reported by original server
+	Timestamp time.Time         `json:"ts"`     // time the request was created
 }
 
 // LokiTailer reads a stream of nginx logs from Loki
@@ -36,6 +43,7 @@ type LokiTailer struct {
 	requestsDroppedCounter  prometheus.Counter
 	requestsIncomingCounter prometheus.Counter
 	errorCounter            prometheus.Counter
+	connectedGauge          prometheus.Gauge
 
 	mu   sync.Mutex // guards following fields
 	conn *websocket.Conn
@@ -63,22 +71,36 @@ func NewLokiTailer(cfg *LokiConfig, experimentName string, rps int) (*LokiTailer
 
 	var err error
 
-	l.requestsIncomingCounter, err = newCounterMetric(
+	l.requestsIncomingCounter, err = newPrometheusCounter(
 		"loki_requests_incoming_total",
 		"The total number of requests read from loki.",
-		[]string{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	l.errorCounter, err = newCounterMetric(
-		"loki_error_total",
-		"The total number of errors encountered when reading from loki.",
-		[]string{},
+	l.requestsDroppedCounter, err = newPrometheusCounter(
+		"loki_requests_dropped_total",
+		"The total number of requests that could not be sent to the publisher.",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	l.errorCounter, err = newPrometheusCounter(
+		"loki_error_total",
+		"The total number of errors encountered when reading from loki.",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	l.connectedGauge, err = newPrometheusGauge(
+		"loki_connected",
+		"Indicates whether the tailer is connected to loki.",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
 	}
 
 	return l, nil
@@ -92,6 +114,7 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 	if err := l.connect(); err != nil {
 		return err
 	}
+	defer l.connectedGauge.Set(0)
 
 	type logline struct {
 		Server  string            `json:"server"`
@@ -118,6 +141,7 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 		for _, stream := range tr.Streams {
 			for _, entry := range stream.Values {
 				l.requestsIncomingCounter.Add(1)
+				totalRequestsReceived.Add(1)
 
 				var line logline
 				err := json.Unmarshal([]byte(entry.Line()), &line)
@@ -130,6 +154,7 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 					Method:    line.Method,
 					URI:       line.URI,
 					Header:    line.Headers,
+					Status:    line.Status,
 					Timestamp: line.Time,
 				}
 
@@ -157,6 +182,7 @@ func (l *LokiTailer) connect() error {
 	l.mu.Lock()
 	if l.conn != nil {
 		l.conn.Close()
+		l.connectedGauge.Set(0)
 	}
 	l.conn = nil
 	l.mu.Unlock()
@@ -207,12 +233,14 @@ func (l *LokiTailer) connect() error {
 	l.mu.Lock()
 	l.conn = conn
 	l.mu.Unlock()
-	log.Printf("connected to loki: %s", l.cfg.URI)
+	l.connectedGauge.Set(1)
+	log.Printf("connected to loki using %s", l.cfg.URI)
 	return nil
 }
 
 func (l *LokiTailer) Shutdown(ctx context.Context) error {
 	close(l.shutdown)
+	defer l.connectedGauge.Set(0)
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -287,12 +315,6 @@ type ValueTuple [2]string
 func (v ValueTuple) Line() string {
 	return v[1]
 }
-
-const (
-	tailPath = "/loki/api/v1/tail"
-)
-
-var userAgent = fmt.Sprintf("%s/0.1", appName)
 
 func buildURL(u, p, q string) (string, error) {
 	url, err := url.Parse(u)
