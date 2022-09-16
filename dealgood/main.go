@@ -56,11 +56,10 @@ var app = &cli.App{
 			EnvVars:     []string{"DEALGOOD_SOURCE_PARAM"},
 		},
 		&cli.BoolFlag{
-			Name:        "nogui",
-			Usage:       "Disable GUI",
-			Value:       false,
-			Destination: &flags.nogui,
-			EnvVars:     []string{"DEALGOOD_NOGUI"},
+			Name:    "nogui",
+			Usage:   "Disable GUI (deprecated and ignored)",
+			Value:   true,
+			EnvVars: []string{"DEALGOOD_NOGUI"},
 		},
 		&cli.StringSliceFlag{
 			Name:        "targets",
@@ -203,7 +202,6 @@ var flags struct {
 	experimentFile string
 	source         string
 	sourceParam    string
-	nogui          bool
 	targets        cli.StringSlice
 	hostHeader     string
 	rate           int
@@ -367,16 +365,7 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("targets ready check: %w", err)
 	}
 
-	if flags.nogui {
-		return nogui(ctx, source, exp, !flags.quiet, flags.timings, flags.failures, flags.interactive)
-	}
-
-	g, err := NewGui(source, exp)
-	if err != nil {
-		return fmt.Errorf("gui: %w", err)
-	}
-	defer g.Close()
-	return g.Show(ctx, 100*time.Millisecond)
+	return nogui(ctx, source, exp, !flags.quiet, flags.timings, flags.failures, flags.interactive)
 }
 
 func readExperimentFile(fname string, exp *ExperimentJSON) error {
