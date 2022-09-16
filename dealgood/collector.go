@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -387,4 +388,19 @@ func newGaugeMetric(name string, help string, labels []string) (*prometheus.Gaug
 		}
 	}
 	return m, nil
+}
+
+func durationDesc(d int) string {
+	if d == -1 {
+		return "forever"
+	}
+
+	s := (time.Duration(d) * time.Second).String()
+	if strings.HasSuffix(s, "m0s") {
+		s = s[:len(s)-2]
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = s[:len(s)-2]
+	}
+	return s
 }
