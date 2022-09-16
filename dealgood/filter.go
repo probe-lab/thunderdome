@@ -38,7 +38,6 @@ func ValidPathRequestFilter(req *Request) bool {
 		path = path[:p]
 	}
 	if _, err := ipfspath.ParsePath(path); err != nil {
-		println("FILTERED: ", err.Error())
 		return false
 	}
 

@@ -110,7 +110,9 @@ func NewLoader(experimentName string, targets []*Target, source RequestSource, t
 }
 
 // Send sends requests to each target until the duration has passed or the context is canceled.
-func (l *Loader) Send(ctx context.Context) error {
+func (l *Loader) Run(ctx context.Context) error {
+	defer close(l.Timings)
+
 	var cancel func()
 	if l.Duration > 0 {
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(l.Duration)*time.Second)
@@ -147,10 +149,6 @@ func (l *Loader) Send(ctx context.Context) error {
 	wg.Add(len(workers))
 	for _, w := range workers {
 		go w.Run(ctx, &wg, l.Timings)
-	}
-
-	if err := l.Source.Start(); err != nil {
-		return fmt.Errorf("start source: %w", err)
 	}
 
 	requestInterval := time.Duration(float64(time.Second) / float64(l.Rate))
@@ -215,10 +213,6 @@ loop:
 		close(be.Requests)
 	}
 	wg.Wait()
-
-	if err := l.Source.Err(); err != nil {
-		return fmt.Errorf("source: %w", err)
-	}
 
 	return nil
 }

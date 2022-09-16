@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -26,8 +27,10 @@ type RequestTiming struct {
 }
 
 type Collector struct {
-	timings             chan *RequestTiming
-	sampleInterval      time.Duration
+	timings        chan *RequestTiming
+	sampleInterval time.Duration
+	printer        SummaryPrinter
+
 	ttfbHist            *prometheus.HistogramVec
 	connectHist         *prometheus.HistogramVec
 	totalHist           *prometheus.HistogramVec
@@ -41,7 +44,7 @@ type Collector struct {
 	samples map[string]MetricSample
 }
 
-func NewCollector(timings chan *RequestTiming, sampleInterval time.Duration) (*Collector, error) {
+func NewCollector(timings chan *RequestTiming, sampleInterval time.Duration, printer SummaryPrinter) (*Collector, error) {
 	if sampleInterval <= 0 {
 		sampleInterval = 1 * time.Second
 	}
@@ -49,6 +52,7 @@ func NewCollector(timings chan *RequestTiming, sampleInterval time.Duration) (*C
 	coll := &Collector{
 		timings:        timings,
 		sampleInterval: sampleInterval,
+		printer:        printer,
 	}
 
 	var err error
@@ -125,19 +129,23 @@ func NewCollector(timings chan *RequestTiming, sampleInterval time.Duration) (*C
 	return coll, nil
 }
 
-func (c *Collector) Run(ctx context.Context) {
+func (c *Collector) Run(ctx context.Context) error {
 	stats := make(map[string]*TargetStats)
 
-	sampleTicker := time.NewTicker(c.sampleInterval)
-	defer sampleTicker.Stop()
+	var sampleChan <-chan time.Time
+	if c.sampleInterval > 0 && c.printer != nil {
+		sampleTicker := time.NewTicker(c.sampleInterval)
+		sampleChan = sampleTicker.C
+		defer sampleTicker.Stop()
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		case res, ok := <-c.timings:
 			if !ok {
-				return
+				return nil
 			}
 
 			st, ok := stats[res.TargetName]
@@ -182,75 +190,69 @@ func (c *Collector) Run(ctx context.Context) {
 
 			stats[res.TargetName] = st
 
-		case <-sampleTicker.C:
-			samples := map[string]MetricSample{}
-			for k, v := range stats {
+		case <-sampleChan:
+			if c.printer == nil {
+				continue
+			}
+			var summary Summary
+			for target, v := range stats {
 				st := *v
-				samples[k] = MetricSample{
-					TotalRequests:      st.TotalRequests,
-					TotalConnectErrors: st.TotalConnectErrors,
-					TotalTimeoutErrors: st.TotalTimeoutErrors,
-					TotalDropped:       st.TotalDropped,
-					TotalHttp2XX:       st.TotalHttp2XX,
-					TotalHttp3XX:       st.TotalHttp3XX,
-					TotalHttp4XX:       st.TotalHttp4XX,
-					TotalHttp5XX:       st.TotalHttp5XX,
-					ConnectTime: MetricValues{
-						Mean: st.ConnectTime.Mean(),
-						Max:  st.ConnectTime.Max,
-						Min:  st.ConnectTime.Min,
-						P50:  st.ConnectTime.Digest.Quantile(0.50),
-						P75:  st.ConnectTime.Digest.Quantile(0.75),
-						P90:  st.ConnectTime.Digest.Quantile(0.90),
-						P95:  st.ConnectTime.Digest.Quantile(0.95),
-						P99:  st.ConnectTime.Digest.Quantile(0.99),
-						P999: st.ConnectTime.Digest.Quantile(0.999),
-					},
-					TTFB: MetricValues{
-						Mean: st.TTFB.Mean(),
-						Max:  st.TTFB.Max,
-						Min:  st.TTFB.Min,
-						P50:  st.TTFB.Digest.Quantile(0.50),
-						P75:  st.TTFB.Digest.Quantile(0.75),
-						P90:  st.TTFB.Digest.Quantile(0.90),
-						P95:  st.TTFB.Digest.Quantile(0.95),
-						P99:  st.TTFB.Digest.Quantile(0.99),
-						P999: st.TTFB.Digest.Quantile(0.999),
-					},
-					TotalTime: MetricValues{
-						Mean: st.TotalTime.Mean(),
-						Max:  st.TotalTime.Max,
-						Min:  st.TotalTime.Min,
-						P50:  st.TotalTime.Digest.Quantile(0.50),
-						P75:  st.TotalTime.Digest.Quantile(0.75),
-						P90:  st.TotalTime.Digest.Quantile(0.90),
-						P95:  st.TotalTime.Digest.Quantile(0.95),
-						P99:  st.TotalTime.Digest.Quantile(0.99),
-						P999: st.TotalTime.Digest.Quantile(0.999),
+				ts := TargetSummary{
+					Target: target,
+					Measurements: MetricSample{
+						TotalRequests:      st.TotalRequests,
+						TotalConnectErrors: st.TotalConnectErrors,
+						TotalTimeoutErrors: st.TotalTimeoutErrors,
+						TotalDropped:       st.TotalDropped,
+						TotalHttp2XX:       st.TotalHttp2XX,
+						TotalHttp3XX:       st.TotalHttp3XX,
+						TotalHttp4XX:       st.TotalHttp4XX,
+						TotalHttp5XX:       st.TotalHttp5XX,
+						ConnectTime: MetricValues{
+							Mean: st.ConnectTime.Mean(),
+							Max:  st.ConnectTime.Max,
+							Min:  st.ConnectTime.Min,
+							P50:  st.ConnectTime.Digest.Quantile(0.50),
+							P75:  st.ConnectTime.Digest.Quantile(0.75),
+							P90:  st.ConnectTime.Digest.Quantile(0.90),
+							P95:  st.ConnectTime.Digest.Quantile(0.95),
+							P99:  st.ConnectTime.Digest.Quantile(0.99),
+							P999: st.ConnectTime.Digest.Quantile(0.999),
+						},
+						TTFB: MetricValues{
+							Mean: st.TTFB.Mean(),
+							Max:  st.TTFB.Max,
+							Min:  st.TTFB.Min,
+							P50:  st.TTFB.Digest.Quantile(0.50),
+							P75:  st.TTFB.Digest.Quantile(0.75),
+							P90:  st.TTFB.Digest.Quantile(0.90),
+							P95:  st.TTFB.Digest.Quantile(0.95),
+							P99:  st.TTFB.Digest.Quantile(0.99),
+							P999: st.TTFB.Digest.Quantile(0.999),
+						},
+						TotalTime: MetricValues{
+							Mean: st.TotalTime.Mean(),
+							Max:  st.TotalTime.Max,
+							Min:  st.TotalTime.Min,
+							P50:  st.TotalTime.Digest.Quantile(0.50),
+							P75:  st.TotalTime.Digest.Quantile(0.75),
+							P90:  st.TotalTime.Digest.Quantile(0.90),
+							P95:  st.TotalTime.Digest.Quantile(0.95),
+							P99:  st.TotalTime.Digest.Quantile(0.99),
+							P999: st.TotalTime.Digest.Quantile(0.999),
+						},
 					},
 				}
-				_ = fmt.Printf
-				// fmt.Printf("requests: %d, dropped: %d, errored: %d, 5xx: %d, TTFB 50th: %.5f, TTFB 90th: %.5f, TTFB 99th: %.5f\n", st.TotalRequests, st.TotalDropped, st.TotalConnectErrors, st.TotalServerErrors, st.TTFB.Quantile(0.5), st.TTFB.Quantile(0.9), st.TTFB.Quantile(0.99))
+
+				summary.Targets = append(summary.Targets, ts)
 			}
-			c.mu.Lock()
-			c.samples = samples
-			c.mu.Unlock()
+
+			if err := c.printer(&summary); err != nil {
+				log.Printf("error printing summary: %v", err)
+			}
 
 		}
 	}
-}
-
-func (c *Collector) Latest() map[string]MetricSample {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if len(c.samples) == 0 {
-		return map[string]MetricSample{}
-	}
-	samples := map[string]MetricSample{}
-	for k, v := range c.samples {
-		samples[k] = v
-	}
-	return samples
 }
 
 type TargetStats struct {
@@ -302,100 +304,53 @@ func (t *TimeMetric) Mean() float64 {
 	return t.Sum / float64(t.Count)
 }
 
+type SummaryPrinter func(*Summary) error
+
+type Summary struct {
+	Targets []TargetSummary `json:"targets"`
+}
+
+type TargetSummary struct {
+	Target       string       `json:"target"`
+	Measurements MetricSample `json:"measurements"`
+}
+
 type MetricSample struct {
-	TotalRequests      int
-	TotalConnectErrors int
-	TotalTimeoutErrors int
-	TotalDropped       int
-	TotalHttp2XX       int
-	TotalHttp3XX       int
-	TotalHttp4XX       int
-	TotalHttp5XX       int
-	ConnectTime        MetricValues
-	TTFB               MetricValues
-	TotalTime          MetricValues
+	TotalRequests      int          `json:"total_requests"`
+	TotalConnectErrors int          `json:"total_connect_errors"`
+	TotalTimeoutErrors int          `json:"total_timeout_errors"`
+	TotalDropped       int          `json:"total_dropped"`
+	TotalHttp2XX       int          `json:"total_http_2xx"`
+	TotalHttp3XX       int          `json:"total_http_3xx"`
+	TotalHttp4XX       int          `json:"total_http_4xx"`
+	TotalHttp5XX       int          `json:"total_http_5xx"`
+	ConnectTime        MetricValues `json:"connect_time"`
+	TTFB               MetricValues `json:"ttfb"`
+	TotalTime          MetricValues `json:"total_time"`
 }
 
 // MetricValues contains timings in seconds
 type MetricValues struct {
-	Mean float64
-	Max  float64
-	Min  float64
-	P50  float64
-	P75  float64
-	P90  float64
-	P95  float64
-	P99  float64
-	P999 float64
+	Mean float64 `json:"mean"`
+	Max  float64 `json:"max"`
+	Min  float64 `json:"min"`
+	P50  float64 `json:"p50"`
+	P75  float64 `json:"p75"`
+	P90  float64 `json:"p90"`
+	P95  float64 `json:"p95"`
+	P99  float64 `json:"p99"`
+	P999 float64 `json:"p999"`
 }
 
-func newHistogramMetric(name string, help string, labels []string) (*prometheus.HistogramVec, error) {
-	m := prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "thunderdome",
-			Subsystem: "dealgood",
-			Name:      name,
-			Help:      help,
-			Buckets:   []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 240},
-		},
-		labels,
-	)
-	if err := prometheus.Register(m); err != nil {
-		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			m = are.ExistingCollector.(*prometheus.HistogramVec)
-		} else {
-			return nil, fmt.Errorf("register %s histogram: %w", name, err)
-		}
-	}
-	return m, nil
-}
-
-func newCounterMetric(name string, help string, labels []string) (*prometheus.CounterVec, error) {
-	m := prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "thunderdome",
-			Subsystem: "dealgood",
-			Name:      name,
-			Help:      help,
-		},
-		labels,
-	)
-	if err := prometheus.Register(m); err != nil {
-		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			m = are.ExistingCollector.(*prometheus.CounterVec)
-		} else {
-			return nil, fmt.Errorf("register %s counter: %w", name, err)
-		}
-	}
-	return m, nil
-}
-
-func newGaugeMetric(name string, help string, labels []string) (*prometheus.GaugeVec, error) {
-	m := prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "thunderdome",
-			Subsystem: "dealgood",
-			Name:      name,
-			Help:      help,
-		},
-		labels,
-	)
-	if err := prometheus.Register(m); err != nil {
-		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			m = are.ExistingCollector.(*prometheus.GaugeVec)
-		} else {
-			return nil, fmt.Errorf("register %s gauge: %w", name, err)
-		}
-	}
-	return m, nil
-}
-
-func durationDesc(d int) string {
+func secondsDesc(d int) string {
 	if d == -1 {
 		return "forever"
 	}
+	return durationDesc(time.Duration(d) * time.Second)
+}
 
-	s := (time.Duration(d) * time.Second).String()
+func durationDesc(d time.Duration) string {
+	s := d.String()
 	if strings.HasSuffix(s, "m0s") {
 		s = s[:len(s)-2]
 	}

@@ -3,25 +3,21 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
-	"contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pkg/profile"
-	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/urfave/cli/v2"
-	"go.opencensus.io/stats/view"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/exporters/zipkin"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/trace"
+	"golang.org/x/sync/errgroup"
 )
 
 const appName = "dealgood"
@@ -175,7 +171,7 @@ var app = &cli.App{
 		},
 		&cli.BoolFlag{
 			Name:        "interactive",
-			Usage:       "Reduce all wait times and log timings more frequently.",
+			Usage:       "Reduce all wait times and log summaries more frequently.",
 			Value:       false,
 			Destination: &flags.interactive,
 			EnvVars:     []string{"DEALGOOD_INTERACTIVE"},
@@ -194,37 +190,68 @@ var app = &cli.App{
 			Destination: &flags.sqsRegion,
 			EnvVars:     []string{"DEALGOOD_SQS_REGION"},
 		},
+		&cli.IntFlag{
+			Name:        "summary-interval",
+			Usage:       "Interval between printing measurement summaries.",
+			Value:       300,
+			Destination: &flags.summaryInterval,
+			EnvVars:     []string{"DEALGOOD_SUMMARY_INTERVAL"},
+		},
+		&cli.StringFlag{
+			Name:        "summary-type",
+			Usage:       "Type of measurement summary to print (none, logbrief, dumpbrief, dumpfull).",
+			Value:       "logbrief",
+			Destination: &flags.summaryType,
+			EnvVars:     []string{"DEALGOOD_SUMMARY_TYPE"},
+		},
+		&cli.IntFlag{
+			Name:        "probe-timeout",
+			Usage:       "Number of seconds to wait for targets to become ready.",
+			Value:       300,
+			Destination: &flags.probeTimeout,
+			EnvVars:     []string{"DEALGOOD_PROBE_TIMEOUT"},
+		},
+		&cli.IntFlag{
+			Name:        "pre-probe-wait",
+			Usage:       "Number of seconds to wait for targets to start before probing readiness.",
+			Value:       300,
+			Destination: &flags.preProbeWait,
+			EnvVars:     []string{"DEALGOOD_PRE_PROBE_WAIT"},
+		},
 	},
 }
 
 var flags struct {
-	experimentName string
-	experimentFile string
-	source         string
-	sourceParam    string
-	targets        cli.StringSlice
-	hostHeader     string
-	rate           int
-	concurrency    int
-	duration       int
-	timings        bool
-	failures       bool
-	quiet          bool
-	prometheusAddr string
-	cpuprofile     string
-	memprofile     string
-	lokiURI        string
-	lokiUsername   string
-	lokiPassword   string
-	lokiQuery      string
-	sqsQueue       string
-	sqsRegion      string
-	interactive    bool
-	filter         string
+	experimentName  string
+	experimentFile  string
+	source          string
+	sourceParam     string
+	targets         cli.StringSlice
+	hostHeader      string
+	rate            int
+	concurrency     int
+	duration        int
+	timings         bool
+	failures        bool
+	quiet           bool
+	prometheusAddr  string
+	cpuprofile      string
+	memprofile      string
+	lokiURI         string
+	lokiUsername    string
+	lokiPassword    string
+	lokiQuery       string
+	sqsQueue        string
+	sqsRegion       string
+	interactive     bool
+	filter          string
+	preProbeWait    int // seconds
+	probeTimeout    int // seconds
+	summaryInterval int // seconds
+	summaryType     string
 }
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.LUTC | log.Lshortfile)
 	ctx := context.Background()
 	if err := app.RunContext(ctx, os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -238,9 +265,18 @@ func Run(cc *cli.Context) error {
 	if flags.quiet {
 		flags.timings = false
 		flags.failures = false
+		log.SetOutput(io.Discard)
 	}
 	if flags.source == "-" {
 		flags.source = "stdin"
+	}
+	if flags.interactive {
+		log.SetFlags(0)
+		flags.preProbeWait = 0
+		flags.probeTimeout = 60
+		flags.summaryInterval = 5
+	} else {
+		log.SetFlags(log.LstdFlags | log.LUTC | log.Lshortfile)
 	}
 
 	// Load the experiment definition or use a default one
@@ -285,6 +321,26 @@ func Run(cc *cli.Context) error {
 	default:
 		return fmt.Errorf("unsupported filter: %s", flags.filter)
 	}
+
+	var summaryPrinter SummaryPrinter
+	switch flags.summaryType {
+	case "none":
+		summaryPrinter = NullSummaryPrinter
+	case "logbrief":
+		summaryPrinter = LogBriefSummary
+	case "dumpbrief":
+		summaryPrinter = DumpBriefSummary
+	case "dumpfull":
+		summaryPrinter = DumpFullSummary
+	default:
+		return fmt.Errorf("unsupported summary type: %s", flags.summaryType)
+	}
+
+	if flags.summaryInterval < 0 {
+		return fmt.Errorf("summary interval must be zero or greater")
+	}
+
+	rg := &RunGroup{}
 
 	metricLabels := map[string]string{
 		"experiment": exp.Name,
@@ -340,11 +396,48 @@ func Run(cc *cli.Context) error {
 	default:
 		return fmt.Errorf("unsupported source: %s", flags.source)
 	}
+	rg.Add(Restartable{source})
 
 	if flags.prometheusAddr != "" {
-		if err := startPrometheusServer(flags.prometheusAddr); err != nil {
+		ps, err := NewPrometheusServer(flags.prometheusAddr)
+		if err != nil {
 			return fmt.Errorf("start prometheus: %w", err)
 		}
+		rg.Add(Restartable{ps})
+	}
+
+	if err := setupTracing(ctx); err != nil {
+		return fmt.Errorf("set tracer provider: %w", err)
+	}
+
+	// timings
+	timings := make(chan *RequestTiming, 10000)
+
+	coll, err := NewCollector(timings, time.Duration(flags.summaryInterval)*time.Second, summaryPrinter)
+	if err != nil {
+		return fmt.Errorf("new collector: %w", err)
+	}
+	rg.Add(Restartable{coll})
+
+	loader, err := NewLoader(exp.Name, exp.Targets, source, timings, exp.Rate, exp.Concurrency, exp.Duration)
+	if err != nil {
+		return fmt.Errorf("new loader: %w", err)
+	}
+	loader.PrintFailures = flags.failures
+
+	if flags.probeTimeout > 0 {
+		// Don't start ther loader until target readiness probe has completed
+		rg.Add(Conditional{
+			Pre: func(ctx context.Context) error {
+				if err := targetsReady(ctx, exp.Targets, time.Duration(flags.preProbeWait)*time.Second, time.Duration(flags.probeTimeout)*time.Second); err != nil {
+					return fmt.Errorf("targets ready check: %w", err)
+				}
+				return nil
+			},
+			Runnable: Restartable{loader},
+		})
+	} else {
+		rg.Add(Restartable{loader})
 	}
 
 	if flags.cpuprofile != "" {
@@ -355,17 +448,31 @@ func Run(cc *cli.Context) error {
 		defer profile.Start(profile.MemProfile, profile.ProfileFilename(flags.memprofile)).Stop()
 	}
 
-	tc := propagation.TraceContext{}
-	otel.SetTextMapPropagator(tc)
-	if err := setTracerProvider(ctx); err != nil {
-		return fmt.Errorf("set tracer provider: %w", err)
+	log.Printf("Starting experiment %s", exp.Name)
+	log.Printf("Experiment duration: %s", secondsDesc(exp.Duration))
+	log.Printf("Maximum request rate: %d", exp.Rate)
+	log.Printf("Maximum request concurrency: %d", exp.Concurrency)
+	log.Printf("Request filter: %s", flags.filter)
+	log.Printf("Request source: %s", flags.source)
+	switch flags.source {
+	case "sqs":
+		log.Printf("SQS queue: %s", flags.sqsQueue)
+		log.Printf("SQS region: %s", flags.sqsRegion)
+	case "loki":
+		log.Printf("Loki URI: %s", flags.lokiURI)
+		log.Printf("Loki query: %s", flags.lokiQuery)
+		log.Printf("Loki username set: %v", len(flags.lokiUsername) > 0)
+		log.Printf("Loki password set: %v", len(flags.lokiPassword) > 0)
 	}
 
-	if err := targetsReady(ctx, exp.Targets, flags.quiet, flags.interactive); err != nil {
-		return fmt.Errorf("targets ready check: %w", err)
+	if flags.hostHeader != "" {
+		log.Printf("Forcing host header: %s", flags.hostHeader)
+	}
+	for _, t := range exp.Targets {
+		fmt.Printf("Target %s (%s://%s)\n", t.Name, t.URLScheme, t.HostPort())
 	}
 
-	return nogui(ctx, source, exp, !flags.quiet, flags.timings, flags.failures, flags.interactive)
+	return rg.RunAndWait(ctx)
 }
 
 func readExperimentFile(fname string, exp *ExperimentJSON) error {
@@ -381,76 +488,76 @@ func readExperimentFile(fname string, exp *ExperimentJSON) error {
 	return nil
 }
 
-func startPrometheusServer(addr string) error {
-	pe, err := prometheus.NewExporter(prometheus.Options{
-		Namespace:  appName,
-		Registerer: prom.DefaultRegisterer,
-		Gatherer:   prom.DefaultGatherer,
+type Runnable interface {
+	// Run starts running the component and blocks until the context is canceled, Shutdown is // called or a fatal error is encountered.
+	Run(context.Context) error
+}
+
+type RunGroup struct {
+	runnables []Runnable
+}
+
+func (a *RunGroup) Add(r Runnable) {
+	a.runnables = append(a.runnables, r)
+}
+
+func (a *RunGroup) RunAndWait(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	g, ctx := errgroup.WithContext(ctx)
+
+	for i := range a.runnables {
+		r := a.runnables[i]
+		g.Go(func() error { return r.Run(ctx) })
+	}
+
+	// Ensure components stop if we receive a terminating operating system signal.
+	g.Go(func() error {
+		interrupt := make(chan os.Signal, 1)
+		signal.Notify(interrupt, syscall.SIGTERM, syscall.SIGINT)
+		select {
+		case <-interrupt:
+			log.Print("caught interrupt signal, cancelling all operations")
+			cancel()
+		case <-ctx.Done():
+		}
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("new prometheus exporter: %w", err)
-	}
 
-	// register prometheus with opencensus
-	view.RegisterExporter(pe)
-	view.SetReportingPeriod(2 * time.Second)
-
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", pe)
-	go func() {
-		http.ListenAndServe(addr, mux)
-	}()
-	return nil
-}
-
-func setTracerProvider(ctx context.Context) error {
-	exporters, err := buildTracerExporters(ctx)
-	if err != nil {
-		return err
-	}
-
-	options := []trace.TracerProviderOption{}
-
-	for _, exporter := range exporters {
-		options = append(options, trace.WithBatcher(exporter))
-	}
-
-	tp := trace.NewTracerProvider(options...)
-	otel.SetTracerProvider(tp)
-
-	return nil
-}
-
-func buildTracerExporters(ctx context.Context) ([]trace.SpanExporter, error) {
-	var exporters []trace.SpanExporter
-
-	if os.Getenv("OTEL_TRACES_EXPORTER") == "" {
-		return exporters, nil
-	}
-
-	for _, exporterStr := range strings.Split(os.Getenv("OTEL_TRACES_EXPORTER"), ",") {
-		switch exporterStr {
-		case "otlp":
-			exporter, err := otlptracegrpc.New(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("new OTLP gRPC exporter: %w", err)
-			}
-			exporters = append(exporters, exporter)
-		case "jaeger":
-			exporter, err := jaeger.New(jaeger.WithCollectorEndpoint())
-			if err != nil {
-				return nil, fmt.Errorf("new Jaeger exporter: %w", err)
-			}
-			exporters = append(exporters, exporter)
-		case "zipkin":
-			exporter, err := zipkin.New("")
-			if err != nil {
-				return nil, fmt.Errorf("new Zipkin exporter: %w", err)
-			}
-			exporters = append(exporters, exporter)
-		default:
-			return nil, fmt.Errorf("unknown or unsupported exporter: %q", exporterStr)
+	// Wait for all servers to run to completion.
+	if err := g.Wait(); err != nil {
+		if !errors.Is(err, context.Canceled) {
+			return err
 		}
 	}
-	return exporters, nil
+	return nil
+}
+
+type Restartable struct {
+	Runnable
+}
+
+func (r Restartable) Run(ctx context.Context) error {
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err := r.Runnable.Run(ctx); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return err
+			}
+		}
+	}
+}
+
+// Conditional runs a runnable only if the pre function returns nil
+type Conditional struct {
+	Pre func(ctx context.Context) error
+	Runnable
+}
+
+func (c Conditional) Run(ctx context.Context) error {
+	if err := c.Pre(ctx); err != nil {
+		return err
+	}
+	return c.Runnable.Run(ctx)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -34,20 +35,11 @@ type Request struct {
 
 // A RequestSource is a provider of a stream of requests that can be sent to workers.
 type RequestSource interface {
-	// Start starts the request source, makiing requests available on Chan.
-	Start() error
-
-	// Stop stops sending requests to the channel.
-	Stop()
+	Runnable
 
 	// Chan is a channel that can be used to read requests produced by the source.
 	// This channel will be closed when the stream ends.
 	Chan() <-chan Request
-
-	// Err returns any error that was encountered while processing the stream.
-	Err() error
-
-	Name() string
 }
 
 type RequestSourceMetrics struct {
@@ -133,55 +125,39 @@ func NewStdinRequestSource(filter RequestFilter, metrics *RequestSourceMetrics) 
 	}
 }
 
-func (s *StdinRequestSource) Name() string {
-	return "stdin"
-}
-
 func (s *StdinRequestSource) Chan() <-chan Request {
 	return s.ch
 }
 
-func (s *StdinRequestSource) Start() error {
-	go func() {
-		s.metrics.connected.Set(1)
-		defer s.metrics.connected.Set(0)
-		defer close(s.ch)
+func (s *StdinRequestSource) Run(ctx context.Context) error {
+	s.metrics.connected.Set(1)
+	defer s.metrics.connected.Set(0)
+	defer close(s.ch)
 
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			s.metrics.requestsIncoming.Add(1)
-			data := scanner.Bytes()
-			var req Request
-			if err := json.Unmarshal(data, &req); err != nil {
-				s.metrics.errors.Add(1)
-				log.Printf("failed to unmarshal request: %v", err)
-				continue
-			}
-
-			if s.filter != nil && !s.filter(&req) {
-				s.metrics.requestsFiltered.Add(1)
-				continue
-			}
-
-			select {
-			case <-s.done:
-				return
-			case s.ch <- req:
-			}
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		s.metrics.requestsIncoming.Add(1)
+		data := scanner.Bytes()
+		var req Request
+		if err := json.Unmarshal(data, &req); err != nil {
+			s.metrics.errors.Add(1)
+			log.Printf("failed to unmarshal request: %v", err)
+			continue
 		}
-	}()
 
-	return nil
-}
+		if s.filter != nil && !s.filter(&req) {
+			s.metrics.requestsFiltered.Add(1)
+			continue
+		}
 
-func (s *StdinRequestSource) Stop() {
-	close(s.done)
-}
+		select {
+		case <-s.done:
+			return nil
+		case s.ch <- req:
+		}
+	}
 
-func (s *StdinRequestSource) Err() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.err
+	return scanner.Err()
 }
 
 // RandomRequestSource is a request source that provides a random request
@@ -214,40 +190,28 @@ func (r *RandomRequestSource) Chan() <-chan Request {
 	return r.ch
 }
 
-func (r *RandomRequestSource) Start() error {
-	go func() {
-		r.metrics.connected.Set(1)
-		defer r.metrics.connected.Set(0)
-		defer close(r.ch)
+func (r *RandomRequestSource) Run(ctx context.Context) error {
+	r.metrics.connected.Set(1)
+	defer r.metrics.connected.Set(0)
+	defer close(r.ch)
 
-		for {
-			r.metrics.requestsIncoming.Add(1)
-			idx := r.rng.Intn(len(r.reqs))
-			req := *r.reqs[idx]
-			req.Timestamp = time.Now()
+	for {
+		r.metrics.requestsIncoming.Add(1)
+		idx := r.rng.Intn(len(r.reqs))
+		req := *r.reqs[idx]
+		req.Timestamp = time.Now()
 
-			if r.filter != nil && !r.filter(&req) {
-				r.metrics.requestsFiltered.Add(1)
-				continue
-			}
-
-			select {
-			case <-r.done:
-				return
-			case r.ch <- req:
-			}
+		if r.filter != nil && !r.filter(&req) {
+			r.metrics.requestsFiltered.Add(1)
+			continue
 		}
-	}()
 
-	return nil
-}
-
-func (r *RandomRequestSource) Stop() {
-	close(r.done)
-}
-
-func (r *RandomRequestSource) Err() error {
-	return nil
+		select {
+		case <-r.done:
+			return nil
+		case r.ch <- req:
+		}
+	}
 }
 
 // NewNginxLogRequestSource reads a stream of requests
@@ -395,7 +359,6 @@ type LokiRequestSource struct {
 
 	mu   sync.Mutex // guards following fields
 	conn *websocket.Conn
-	err  error
 }
 
 type LokiConfig struct {
@@ -420,15 +383,11 @@ func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, metrics *Reques
 	return l, nil
 }
 
-func (l *LokiRequestSource) Name() string {
-	return "loki"
-}
-
 func (l *LokiRequestSource) Chan() <-chan Request {
 	return l.ch
 }
 
-func (l *LokiRequestSource) Start() error {
+func (l *LokiRequestSource) Run(ctx context.Context) error {
 	client := &client.DefaultClient{
 		TLSConfig: config.TLSConfig{},
 		Address:   l.cfg.URI,
@@ -458,59 +417,55 @@ func (l *LokiRequestSource) Start() error {
 		Headers map[string]string `json:"headers"`
 	}
 
-	go func() {
-		defer close(l.ch)
+	defer close(l.ch)
 
-		for {
-			tr, ok := l.readTailResponse()
-			if !ok {
-				log.Printf("failed to read tail from loki: %v", l.err)
-				if err := l.connect(client, q); err != nil {
-					l.metrics.errors.Add(1)
-					log.Printf("failed to connect to loki: %v", err)
-					time.Sleep(30 * time.Second)
-				}
-				continue
+	for {
+		tr, err := l.readTailResponse()
+		if err != nil {
+			log.Printf("failed to read tail from loki: %v", err)
+			if err := l.connect(client, q); err != nil {
+				l.metrics.errors.Add(1)
+				log.Printf("failed to connect to loki: %v", err)
+				time.Sleep(30 * time.Second)
 			}
-			for _, stream := range tr.Streams {
-				for _, entry := range stream.Entries {
-					l.metrics.requestsIncoming.Add(1)
-
-					var line logline
-					err := json.Unmarshal([]byte(entry.Line), &line)
-					if err != nil {
-						l.metrics.errors.Add(1)
-						continue
-					}
-
-					req := Request{
-						Method:    line.Method,
-						URI:       line.URI,
-						Header:    line.Headers,
-						Timestamp: line.Time,
-					}
-
-					if l.filter != nil && !l.filter(&req) {
-						l.metrics.requestsFiltered.Add(1)
-						continue
-					}
-
-					select {
-					case <-l.done:
-						return
-					case l.ch <- req:
-
-					default:
-						l.metrics.requestsDropped.Add(1)
-					}
-
-				}
-			}
-
+			continue
 		}
-	}()
+		for _, stream := range tr.Streams {
+			for _, entry := range stream.Entries {
+				l.metrics.requestsIncoming.Add(1)
 
-	return nil
+				var line logline
+				err := json.Unmarshal([]byte(entry.Line), &line)
+				if err != nil {
+					l.metrics.errors.Add(1)
+					continue
+				}
+
+				req := Request{
+					Method:    line.Method,
+					URI:       line.URI,
+					Header:    line.Headers,
+					Timestamp: line.Time,
+				}
+
+				if l.filter != nil && !l.filter(&req) {
+					l.metrics.requestsFiltered.Add(1)
+					continue
+				}
+
+				select {
+				case <-l.done:
+					return nil
+				case l.ch <- req:
+
+				default:
+					l.metrics.requestsDropped.Add(1)
+				}
+
+			}
+		}
+
+	}
 }
 
 func (l *LokiRequestSource) connect(c *client.DefaultClient, q *query.Query) error {
@@ -525,8 +480,7 @@ func (l *LokiRequestSource) connect(c *client.DefaultClient, q *query.Query) err
 
 	conn, err := c.LiveTailQueryConn(q.QueryString, 0, q.Limit, q.Start, q.Quiet)
 	if err != nil {
-		l.err = fmt.Errorf("tailing logs failed: %w", err)
-		return l.err
+		return fmt.Errorf("tailing logs failed: %w", err)
 	}
 	l.mu.Lock()
 	l.conn = conn
@@ -547,34 +501,26 @@ func (l *LokiRequestSource) Stop() {
 	}
 
 	if err := l.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
-		l.err = err
+		log.Printf("failed to write websocket close message: %v", err)
 	}
 	l.conn = nil
 }
 
-func (l *LokiRequestSource) Err() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.err
-}
-
-func (l *LokiRequestSource) readTailResponse() (*loghttp.TailResponse, bool) {
+func (l *LokiRequestSource) readTailResponse() (*loghttp.TailResponse, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if l.conn == nil {
-		l.err = fmt.Errorf("disconnected")
-		return nil, false
+		return nil, fmt.Errorf("disconnected")
 	}
 
 	tr := new(loghttp.TailResponse)
 	err := unmarshal.ReadTailResponseJSON(tr, l.conn)
 	if err != nil {
-		l.err = fmt.Errorf("read tail response json: %w", err)
-		return nil, false
+		return nil, fmt.Errorf("read tail response json: %w", err)
 	}
 
-	return tr, true
+	return tr, nil
 }
 
 type SQSConfig struct {
@@ -592,7 +538,6 @@ type SQSRequestSource struct {
 	mu       sync.Mutex
 	svc      *sqs.SQS
 	queueURL string
-	err      error
 }
 
 func NewSQSRequestSource(cfg *SQSConfig, filter RequestFilter, metrics *RequestSourceMetrics, rps int) (*SQSRequestSource, error) {
@@ -610,15 +555,11 @@ func NewSQSRequestSource(cfg *SQSConfig, filter RequestFilter, metrics *RequestS
 	return s, nil
 }
 
-func (s *SQSRequestSource) Name() string {
-	return "sns"
-}
-
 func (s *SQSRequestSource) Chan() <-chan Request {
 	return s.ch
 }
 
-func (s *SQSRequestSource) Start() error {
+func (s *SQSRequestSource) Run(ctx context.Context) error {
 	sess, err := session.NewSession(s.cfg.AWSConfig)
 	if err != nil {
 		return fmt.Errorf("new session: %w", err)
@@ -638,104 +579,82 @@ func (s *SQSRequestSource) Start() error {
 	log.Printf("found queue url %s", s.queueURL)
 	s.metrics.connected.Set(1)
 	defer s.metrics.connected.Set(0)
-	go func() {
-		for {
-			select {
-			case <-s.done:
-				return
-			default:
-			}
 
-			msgResult, err := s.svc.ReceiveMessage(&sqs.ReceiveMessageInput{
-				AttributeNames: []*string{
-					aws.String(sqs.MessageSystemAttributeNameSentTimestamp),
-				},
-				MessageAttributeNames: []*string{
-					aws.String(sqs.QueueAttributeNameAll),
-				},
-				QueueUrl:            aws.String(s.queueURL),
-				MaxNumberOfMessages: aws.Int64(10),
-				VisibilityTimeout:   aws.Int64(5),
-				WaitTimeSeconds:     aws.Int64(10),
+	for {
+		select {
+		case <-s.done:
+			return nil
+		default:
+		}
+
+		msgResult, err := s.svc.ReceiveMessage(&sqs.ReceiveMessageInput{
+			AttributeNames: []*string{
+				aws.String(sqs.MessageSystemAttributeNameSentTimestamp),
+			},
+			MessageAttributeNames: []*string{
+				aws.String(sqs.QueueAttributeNameAll),
+			},
+			QueueUrl:            aws.String(s.queueURL),
+			MaxNumberOfMessages: aws.Int64(10),
+			VisibilityTimeout:   aws.Int64(5),
+			WaitTimeSeconds:     aws.Int64(10),
+		})
+		if err != nil {
+			s.metrics.errors.Add(1)
+			log.Printf("failed to receive message: %v", err)
+			continue
+		}
+
+		for _, msg := range msgResult.Messages {
+			if msg.Body == nil {
+				s.metrics.errors.Add(1)
+				log.Printf("message body was nil: %s", *msg.MessageId)
+				continue
+			}
+			_, err = s.svc.DeleteMessage(&sqs.DeleteMessageInput{
+				QueueUrl:      aws.String(s.queueURL),
+				ReceiptHandle: msg.ReceiptHandle,
 			})
 			if err != nil {
 				s.metrics.errors.Add(1)
-				log.Printf("failed to receive message: %v", err)
+				log.Printf("failed to delete message: %v", err)
+			}
+
+			var smsg SNSMessage
+			if err := json.Unmarshal([]byte(*msg.Body), &smsg); err != nil {
+				s.metrics.errors.Add(1)
+				log.Printf("failed to unmarshal message: %v", err)
 				continue
 			}
 
-			for _, msg := range msgResult.Messages {
-				if msg.Body == nil {
+			scanner := bufio.NewScanner(strings.NewReader(smsg.Message))
+			for scanner.Scan() {
+				s.metrics.requestsIncoming.Add(1)
+				data := scanner.Bytes()
+				var req Request
+				if err := json.Unmarshal(data, &req); err != nil {
 					s.metrics.errors.Add(1)
-					log.Printf("message body was nil: %s", *msg.MessageId)
-					continue
-				}
-				_, err = s.svc.DeleteMessage(&sqs.DeleteMessageInput{
-					QueueUrl:      aws.String(s.queueURL),
-					ReceiptHandle: msg.ReceiptHandle,
-				})
-				if err != nil {
-					s.metrics.errors.Add(1)
-					log.Printf("failed to delete message: %v", err)
-				}
-
-				var smsg SNSMessage
-				if err := json.Unmarshal([]byte(*msg.Body), &smsg); err != nil {
-					s.metrics.errors.Add(1)
-					log.Printf("failed to unmarshal message: %v", err)
+					log.Printf("failed to unmarshal request: %v", err)
 					continue
 				}
 
-				scanner := bufio.NewScanner(strings.NewReader(smsg.Message))
-				for scanner.Scan() {
-					s.metrics.requestsIncoming.Add(1)
-					data := scanner.Bytes()
-					var req Request
-					if err := json.Unmarshal(data, &req); err != nil {
-						s.metrics.errors.Add(1)
-						log.Printf("failed to unmarshal request: %v", err)
-						continue
-					}
-
-					if s.filter != nil && !s.filter(&req) {
-						s.metrics.requestsFiltered.Add(1)
-						continue
-					}
-
-					select {
-					case <-s.done:
-						return
-					case s.ch <- req:
-					default:
-						s.metrics.requestsDropped.Add(1)
-					}
+				if s.filter != nil && !s.filter(&req) {
+					s.metrics.requestsFiltered.Add(1)
+					continue
 				}
 
+				select {
+				case <-s.done:
+					return nil
+				case s.ch <- req:
+				default:
+					s.metrics.requestsDropped.Add(1)
+				}
 			}
 
 		}
-	}()
 
-	return nil
-}
-
-func (s *SQSRequestSource) Stop() {
-	close(s.done)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.svc == nil {
-		return
 	}
-
-	s.svc = nil
-}
-
-func (s *SQSRequestSource) Err() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.err
 }
 
 type SNSMessage struct {

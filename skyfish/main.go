@@ -197,7 +197,7 @@ func (a *RunGroup) RunAndWait(ctx context.Context) error {
 		return nil
 	})
 
-	// Wait for all servers to run to completion.
+	// Wait for all components to run to completion.
 	if err := g.Wait(); err != nil {
 		if !errors.Is(err, context.Canceled) {
 			return err

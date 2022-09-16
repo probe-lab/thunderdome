@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -61,7 +62,7 @@ func (w *Worker) timeRequest(ctx context.Context, r *Request) *RequestTiming {
 	req, err := newRequest(ctx, w.Target, r)
 	if err != nil {
 		if w.PrintFailures {
-			fmt.Fprintf(os.Stderr, "%s %s => error %v\n", r.Method, w.Target.BaseURL+r.URI, err)
+			log.Printf("%s %s => error %v\n", r.Method, w.Target.BaseURL+r.URI, err)
 		}
 		return &RequestTiming{
 			ExperimentName: w.ExperimentName,
@@ -98,7 +99,7 @@ func (w *Worker) timeRequest(ctx context.Context, r *Request) *RequestTiming {
 	resp, err := w.Client.Do(req)
 	if err != nil {
 		if w.PrintFailures {
-			fmt.Fprintf(os.Stderr, "%s %s => error %v\n", req.Method, req.URL, err)
+			log.Printf("%s %s => error %v\n", req.Method, req.URL, err)
 		}
 		if os.IsTimeout(err) {
 			return &RequestTiming{
@@ -107,8 +108,8 @@ func (w *Worker) timeRequest(ctx context.Context, r *Request) *RequestTiming {
 				TimeoutError:   true,
 			}
 		}
-		if err := resolveTarget(w.Target, !w.PrintFailures); err != nil {
-			fmt.Fprintf(os.Stderr, "resolve %s => error %v\n", w.Target.RawHostPort, err)
+		if err := resolveTarget(w.Target); err != nil {
+			log.Printf("resolve %s => error %v\n", w.Target.RawHostPort, err)
 		}
 
 		return &RequestTiming{
@@ -125,7 +126,7 @@ func (w *Worker) timeRequest(ctx context.Context, r *Request) *RequestTiming {
 
 	if w.PrintFailures {
 		if resp.StatusCode/100 != 2 {
-			fmt.Fprintf(os.Stderr, "%s %s => %s\n", req.Method, req.URL, resp.Status)
+			log.Printf("%s %s => %s\n", req.Method, req.URL, resp.Status)
 		}
 	}
 
@@ -172,31 +173,27 @@ func newRequest(ctx context.Context, t *Target, r *Request) (*http.Request, erro
 	return req, nil
 }
 
-// targetsReady
-func targetsReady(ctx context.Context, targets []*Target, quiet bool, interactive bool) error {
-	if !interactive {
-		const preProbeWait = 300
-		if !quiet {
-			fmt.Printf("waiting %s for targets to be start before probing\n", durationDesc(preProbeWait))
-		}
+func targetsReady(ctx context.Context, targets []*Target, preProbeWait time.Duration, probeTimeout time.Duration) error {
+	log.Printf("waiting for targets to be ready")
+	if preProbeWait > 0 {
+		log.Printf("waiting %s for targets to be started before probing", durationDesc(preProbeWait))
 		time.Sleep(preProbeWait * time.Second)
 	}
 
-	const readyTimeout = 60
 	var lastErr error
 
 	start := time.Now()
 	for {
 		running := time.Since(start)
-		if running > readyTimeout*time.Second {
-			return fmt.Errorf("unable to connect to all targets within %s: %w", durationDesc(readyTimeout), lastErr)
+		if running > probeTimeout {
+			return fmt.Errorf("unable to connect to all targets within %s: %w", durationDesc(probeTimeout), lastErr)
 		}
 
 		g, ctx := errgroup.WithContext(ctx)
 		for _, target := range targets {
 			target := target // avoid shadowing
 			g.Go(func() error {
-				if err := resolveTarget(target, quiet); err != nil {
+				if err := resolveTarget(target); err != nil {
 					return err
 				}
 
@@ -235,16 +232,11 @@ func targetsReady(ctx context.Context, targets []*Target, quiet bool, interactiv
 
 		lastErr = g.Wait()
 		if lastErr == nil {
-			if !quiet {
-				fmt.Printf("all targets ready\n")
-			}
-			// All requests succeeded
+			log.Printf("all targets ready")
 			return nil
 		}
 
-		if !quiet {
-			fmt.Printf("ready check failed: %v\n", lastErr)
-		}
+		log.Printf("ready check failed: %v", lastErr)
 		time.Sleep(5 * time.Second)
 
 	}
@@ -315,16 +307,14 @@ func resolve(name string) (string, error) {
 	return resolve(fmt.Sprintf("%s:%d", host, recs[0].Port))
 }
 
-func resolveTarget(target *Target, quiet bool) error {
+func resolveTarget(target *Target) error {
 	hostport, err := resolve(target.RawHostPort)
 	if err != nil {
 		return fmt.Errorf("unable to resolve target %q: %w", target.RawHostPort, err)
 	}
 	if target.RawHostPort != hostport {
 		target.SetHostPort(hostport)
-		if !quiet {
-			fmt.Printf("resolved %s to %s\n", target.RawHostPort, hostport)
-		}
+		log.Printf("resolved %s to %s\n", target.RawHostPort, hostport)
 	}
 
 	return nil
