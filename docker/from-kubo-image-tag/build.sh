@@ -1,5 +1,7 @@
 #!/bin/bash
 # set -x
+
+# https://hub.docker.com/r/ipfs/kubo/tags
 if [ -z "$1" ]; then
   echo "Need to pass TAG, eg"
   echo "./build.sh v0.15.0"
