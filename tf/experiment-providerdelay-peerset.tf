@@ -1,6 +1,6 @@
-module "providerdelay" {
+module "providerdelaypeerset" {
   source = "./modules/experiment"
-  name   = "providerdelay-2022-09-27"
+  name   = "providerdelay-peerset-2022-09-28"
   request_rate = 10
   request_source = "sqs"
 
@@ -41,51 +41,69 @@ module "providerdelay" {
     "-100ms_a" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
-        { name = "SEARCH_DELAY", value = "100ms" }
+        { name = "CONNMGR_HIGHWATER", value = "600" },
+        { name = "CONNMGR_LOWWATER", value = "300" },
+        { name = "SEARCH_DELAY", value = "100ms" },
       ]
     }
     "-100ms_b" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
+        { name = "CONNMGR_HIGHWATER", value = "600" },
+        { name = "CONNMGR_LOWWATER", value = "300" },
         { name = "SEARCH_DELAY", value = "100ms" }
       ]
     }
     "-400ms_a" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
+        { name = "CONNMGR_HIGHWATER", value = "600" },
+        { name = "CONNMGR_LOWWATER", value = "300" },
         { name = "SEARCH_DELAY", value = "400ms" }
       ]
     }
     "-400ms_b" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
+        { name = "CONNMGR_HIGHWATER", value = "600" },
+        { name = "CONNMGR_LOWWATER", value = "300" },
         { name = "SEARCH_DELAY", value = "400ms" }
       ]
     }
     "-700ms_a" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
+        { name = "CONNMGR_HIGHWATER", value = "600" },
+        { name = "CONNMGR_LOWWATER", value = "300" },
         { name = "SEARCH_DELAY", value = "700ms" }
       ]
     }
     "-700ms_b" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
+        { name = "CONNMGR_HIGHWATER", value = "600" },
+        { name = "CONNMGR_LOWWATER", value = "300" },
         { name = "SEARCH_DELAY", value = "700ms" }
       ]
     }
     "1000ms_a" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
+        { name = "CONNMGR_HIGHWATER", value = "600" },
+        { name = "CONNMGR_LOWWATER", value = "300" },
         { name = "SEARCH_DELAY", value = "1000ms" }
       ]
     }
     "1000ms_b" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-providerdelay-from-env"
       environment = [
+        { name = "CONNMGR_HIGHWATER", value = "600" },
+        { name = "CONNMGR_LOWWATER", value = "300" },
         { name = "SEARCH_DELAY", value = "1000ms" }
       ]
     }
   }
 }
+
+
 

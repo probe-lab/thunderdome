@@ -2,6 +2,7 @@
 set -euo pipefail
 
 kubo_releases=(
+    v0.16.0-rc1
     v0.15.0
     v0.14.0
 )
