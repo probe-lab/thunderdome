@@ -1,7 +1,7 @@
 module "releases2" {
   source = "./modules/experiment"
-  name   = "releases-kubo16"
-  request_rate = 10
+  name   = "releases-kubo16-20"
+  request_rate = 20
   request_source = "sqs"
 
   ecs_cluster_id                                 = module.ecs-asg.cluster_id
