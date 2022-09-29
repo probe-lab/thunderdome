@@ -11,7 +11,7 @@ export REPO_NAME=147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome
 cd -
 ## (creates a kubo-"$TAG_NAME" image)
 
-# Build in this dir
+# Build in this dir to add additional container-init.d
 SOURCE_TAG=kubo-"$TAG_NAME"
 FINAL_TAG=kubo-providerdelay-from-env
 docker build -t "$FINAL_TAG" --build-arg SOURCE_TAG="$SOURCE_TAG" .
