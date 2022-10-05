@@ -33,7 +33,7 @@ module "ironbar" {
 
   targets = {
     "ironbar-kubo-head" = {
-      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:ironbar-kubo-head"
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:ironbar-kubo-head2"
       environment = []
     },
   }
