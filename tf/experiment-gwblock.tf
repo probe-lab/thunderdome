@@ -1,6 +1,6 @@
 module "gwblock" {
   source = "./modules/experiment"
-  name   = "gwblock-2022-10-03"
+  name   = "gwblock-2022-10-05"
   request_rate = 20
   request_source = "sqs"
 
