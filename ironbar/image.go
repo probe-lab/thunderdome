@@ -27,43 +27,43 @@ var ImageCommand = &cli.Command{
 		&cli.StringFlag{
 			Name:        "from-repo",
 			Aliases:     []string{"r"},
-			Usage:       "Build image from this Git repository",
+			Usage:       "Build Thunderdome image from this Git repository.",
 			Destination: &imageOpts.gitRepo,
 		},
 		&cli.StringFlag{
+			Name:        "from-image",
+			Usage:       "Build the Thunderdome image using this image as the base.",
+			Destination: &imageOpts.fromImage,
+		},
+		&cli.StringFlag{
 			Name:        "branch",
-			Usage:       "Switch to this branch in the Git repository",
+			Usage:       "Switch to this branch in the Git repository.",
 			Destination: &imageOpts.branch,
 		},
 		&cli.StringFlag{
 			Name:        "commit",
-			Usage:       "Switch to this commit in the Git repository",
+			Usage:       "Switch to this commit in the Git repository.",
 			Destination: &imageOpts.commit,
 		},
 		&cli.StringFlag{
 			Name:        "git-tag",
-			Usage:       "Switch to this tag in the Git repository",
+			Usage:       "Switch to this tag in the Git repository.",
 			Destination: &imageOpts.gitTag,
 		},
 		&cli.StringFlag{
 			Name:        "tag",
-			Usage:       "Tag to apply to image. All tags are prefixed by '" + imageBaseName + ":'",
+			Usage:       "Tag to apply to image. All tags are prefixed by '" + imageBaseName + ":'.",
 			Required:    true,
 			Destination: &imageOpts.tag,
 		},
 		&cli.StringFlag{
-			Name:        "from-image",
-			Usage:       "Build the image using this as the base",
-			Destination: &imageOpts.fromImage,
-		},
-		&cli.StringFlag{
 			Name:        "push-to",
-			Usage:       "Push built image to this docker repo",
+			Usage:       "Push built image to this docker repo.",
 			Destination: &imageOpts.dockerRepo,
 		},
 		&cli.StringSliceFlag{
 			Name:        "env-config",
-			Usage:       "Map an environment variable to a kubo config option. Use format 'EnvVar:ConfigOption'",
+			Usage:       "Map an environment variable to a kubo config option. Use format 'EnvVar:ConfigOption'.",
 			Destination: &imageOpts.envConfig,
 		},
 		&cli.BoolFlag{
@@ -73,12 +73,12 @@ var ImageCommand = &cli.Command{
 		},
 		&cli.StringFlag{
 			Name:        "description",
-			Usage:       "Description to embed in the image",
+			Usage:       "Human readable description of the image and its purpose.",
 			Destination: &imageOpts.description,
 		},
 		&cli.StringFlag{
 			Name:        "maintainer",
-			Usage:       "Maintainer to embed in the image",
+			Usage:       "Email address of the maintainer.",
 			Destination: &imageOpts.maintainer,
 			Value:       "ian.davis@protocol.ai",
 		},

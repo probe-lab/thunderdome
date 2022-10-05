@@ -31,7 +31,7 @@ The `image` command prepares docker images for use in experiments. Thunderdome e
 
 It can use an existing published image as the base or build one from a git repository using the head of the repo, a specific commit, a tag or a branch. 
 
-Specify the tag used for the created image using `--tag`. All tags are prefixed by `thunderdome:` so using `--tag=kubo-test` will result in an image named `thunderdome:kubo-test`.
+Specify the tag used for the created image using `--tag`. All image names are prefixed by `thunderdome:` so using `--tag=kubo-test` will result in an image named `thunderdome:kubo-test`.
 
 The following options control the origin of the base image:
 
@@ -90,7 +90,7 @@ ironbar image --from-image ipfs/kubo:v0.16.0  \
               --push-to 123456789.dkr.ecr.eu-west-1.amazonaws.com
 ```
 
-Build an image from the official v0.16.0 Kubo image, tag it as `kubo-highlow` and enable the `Swarm.ConnMgr.HighWater` and `Swarm.ConnMgr.LowWater` config options to be configured by environment `$CONNMGR_HIGHWATER` and `$CONNMGR_LOWWATER` variables:
+Build an image from the official v0.16.0 Kubo image, tag it as `kubo-highlow` and enable the `Swarm.ConnMgr.HighWater` and `Swarm.ConnMgr.LowWater` config options to be configured by environment variables `$CONNMGR_HIGHWATER` and `$CONNMGR_LOWWATER`:
 
 ```sh
 ironbar image --from-image ipfs/kubo:v0.16.0  \
