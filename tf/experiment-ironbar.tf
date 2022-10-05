@@ -36,5 +36,12 @@ module "ironbar" {
       image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:ironbar-kubo-head2"
       environment = []
     },
+    "ironbar-kubo-highlowwater" = {
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:ironbar-kubo-highlowwater"
+      environment = [
+        { name = "CONNMGR_HIGHWATER", value = "600" },
+        { name = "CONNMGR_LOWWATER", value = "300" },
+      ]
+    },
   }
 }

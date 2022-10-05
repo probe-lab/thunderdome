@@ -25,52 +25,77 @@ var ImageCommand = &cli.Command{
 	Action: Image,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
-			Name:        "repo",
-			Aliases:     []string{"g"},
+			Name:        "from-repo",
+			Aliases:     []string{"r"},
 			Usage:       "Build image from this Git repository",
 			Destination: &imageOpts.gitRepo,
 		},
 		&cli.StringFlag{
 			Name:        "branch",
-			Aliases:     []string{"b"},
-			Usage:       "Use this branch in the Git repository",
+			Usage:       "Switch to this branch in the Git repository",
 			Destination: &imageOpts.branch,
 		},
 		&cli.StringFlag{
 			Name:        "commit",
-			Aliases:     []string{"c"},
-			Usage:       "Use this commit in the Git repository",
+			Usage:       "Switch to this commit in the Git repository",
 			Destination: &imageOpts.commit,
 		},
 		&cli.StringFlag{
+			Name:        "git-tag",
+			Usage:       "Switch to this tag in the Git repository",
+			Destination: &imageOpts.gitTag,
+		},
+		&cli.StringFlag{
 			Name:        "tag",
-			Aliases:     []string{"t"},
 			Usage:       "Tag to apply to image. All tags are prefixed by '" + imageBaseName + ":'",
 			Required:    true,
 			Destination: &imageOpts.tag,
 		},
 		&cli.StringFlag{
 			Name:        "from-image",
-			Aliases:     []string{"f"},
 			Usage:       "Build the image using this as the base",
 			Destination: &imageOpts.fromImage,
 		},
 		&cli.StringFlag{
 			Name:        "push-to",
-			Aliases:     []string{"p"},
 			Usage:       "Push built image to this docker repo",
 			Destination: &imageOpts.dockerRepo,
+		},
+		&cli.StringSliceFlag{
+			Name:        "env-config",
+			Usage:       "Map an environment variable to a kubo config option. Use format 'EnvVar:ConfigOption'",
+			Destination: &imageOpts.envConfig,
+		},
+		&cli.BoolFlag{
+			Name:   "keeptemp",
+			Usage:  "Keep the temporary working directory after ironbar exits.",
+			Hidden: true,
+		},
+		&cli.StringFlag{
+			Name:        "description",
+			Usage:       "Description to embed in the image",
+			Destination: &imageOpts.description,
+		},
+		&cli.StringFlag{
+			Name:        "maintainer",
+			Usage:       "Maintainer to embed in the image",
+			Destination: &imageOpts.maintainer,
+			Value:       "ian.davis@protocol.ai",
 		},
 	},
 }
 
 var imageOpts struct {
-	gitRepo    string
-	branch     string
-	commit     string
-	tag        string
-	dockerRepo string
-	fromImage  string
+	gitRepo     string
+	branch      string
+	commit      string
+	gitTag      string
+	tag         string
+	dockerRepo  string
+	fromImage   string
+	envConfig   cli.StringSlice
+	description string
+	maintainer  string
 }
 
 const imageBaseName = "thunderdome"
@@ -79,58 +104,113 @@ func Image(cc *cli.Context) error {
 	imageName := imageBaseName + ":" + imageOpts.tag
 	log.Printf("building image %s", imageName)
 
+	envConfigMappings, err := parseEnvConfigMappings(imageOpts.envConfig.Value())
+	if err != nil {
+		return err
+	}
+
 	if imageOpts.gitRepo == "" && imageOpts.fromImage == "" {
-		return fmt.Errorf("must specify repo or from-image")
+		return fmt.Errorf("must specify one of repo or from-image options")
 	}
 
 	workDir, err := os.MkdirTemp("", "thunderdome")
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("could not create temporary work directory")
 	}
-	defer os.RemoveAll(workDir)
+	if !cc.Bool("keeptemp") {
+		defer os.RemoveAll(workDir)
+	}
 	log.Printf("using work dir %q", workDir)
 
+	labels := map[string]string{
+		"maintainer":                       imageOpts.maintainer,
+		"org.opencontainers.image.created": time.Now().Format(time.RFC3339),
+	}
+	if imageOpts.description != "" {
+		labels["org.opencontainers.image.description"] = imageOpts.description
+	}
+
+	var baseImage string
 	if imageOpts.gitRepo != "" {
-		if imageOpts.branch != "" && imageOpts.commit != "" {
-			return fmt.Errorf("must not specify both branch and commit")
+		if nonEmptyCount(imageOpts.branch, imageOpts.commit, imageOpts.gitTag) > 1 {
+			return fmt.Errorf("must only specify one of branch, commit or git-tag options")
 		}
 
 		if imageOpts.branch != "" {
-			if err := buildImageFromGitBranch(workDir, imageOpts.gitRepo, imageOpts.branch, imageName); err != nil {
+			baseImage, err = buildImageFromGitBranch(workDir, imageOpts.gitRepo, imageOpts.branch, imageName)
+			if err != nil {
 				return err
 			}
 		} else if imageOpts.commit != "" {
-			if err := buildImageFromGitCommit(workDir, imageOpts.gitRepo, imageOpts.commit, imageName); err != nil {
+			baseImage, err = buildImageFromGitCommit(workDir, imageOpts.gitRepo, imageOpts.commit, imageName)
+			if err != nil {
+				return err
+			}
+		} else if imageOpts.gitTag != "" {
+			baseImage, err = buildImageFromGitTag(workDir, imageOpts.gitRepo, imageOpts.gitTag, imageName)
+			if err != nil {
 				return err
 			}
 		} else {
-			if err := buildImageFromGit(workDir, imageOpts.gitRepo, imageName); err != nil {
+			baseImage, err = buildImageFromGit(workDir, imageOpts.gitRepo, imageName)
+			if err != nil {
 				return err
 			}
 		}
 	} else if imageOpts.fromImage != "" {
-		if err := buildImageFromImage(workDir, imageOpts.fromImage, imageName); err != nil {
-			return err
-		}
+		baseImage = imageOpts.fromImage
 	} else {
 		return fmt.Errorf("must specify repo or from-image")
 	}
+
+	if err := configureImage(workDir, baseImage, imageName, labels, envConfigMappings); err != nil {
+		return err
+	}
+
+	finalImage := imageName
 
 	if imageOpts.dockerRepo != "" {
 		if err := pushImage(imageName, imageOpts.dockerRepo); err != nil {
 			return err
 		}
-		log.Printf("pushed to %s/%s", imageOpts.dockerRepo, imageName)
+		finalImage = fmt.Sprintf("%s/%s", imageOpts.dockerRepo, imageName)
 	}
+
+	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Printf("Image build complete: %s\n", finalImage)
+	if imageOpts.gitRepo != "" {
+		ref := "default branch"
+		if imageOpts.branch != "" {
+			ref = "branch " + imageOpts.branch
+		} else if imageOpts.commit != "" {
+			ref = "commit " + imageOpts.commit
+		} else if imageOpts.gitTag != "" {
+			ref = "tag " + imageOpts.gitTag
+		}
+		fmt.Printf("Built from %s in %s\n", ref, imageOpts.gitRepo)
+	} else if imageOpts.fromImage != "" {
+		fmt.Printf("Used %s as base image\n", imageOpts.fromImage)
+	}
+	if imageOpts.description != "" {
+		fmt.Printf("Description: %s\n", imageOpts.description)
+	}
+	if len(envConfigMappings) > 0 {
+		fmt.Println("Configuration may be set using environment variables:")
+		for _, em := range envConfigMappings {
+			fmt.Printf("  $%s sets %s\n", em.EnvVar, em.ConfigOption)
+		}
+	}
+	fmt.Println("--------------------------------------------------------------------------------")
+
 	return nil
 }
 
-func gitClone(workdir string, repo string, target string) error {
-	log.Printf("git clone %s", repo)
-	cmd := exec.Command("git", "clone", repo, target)
+func gitClone(workdir string, repo string, targetDir string) error {
+	cmd := exec.Command("git", "clone", repo, targetDir)
 	cmd.Dir = workdir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	log.Println(cmd.String())
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -138,23 +218,23 @@ func gitClone(workdir string, repo string, target string) error {
 }
 
 func gitSwitch(gitRepoDir string, branch string) error {
-	log.Printf("git switch %s", branch)
 	cmd := exec.Command("git", "switch", branch)
 	cmd.Dir = gitRepoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	log.Println(cmd.String())
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 	return cmd.Wait()
 }
 
-func gitCheckout(gitRepoDir string, commit string) error {
-	log.Printf("git checkout %s", commit)
-	cmd := exec.Command("git", "checkout", commit)
+func gitCheckout(gitRepoDir string, ref string) error {
+	cmd := exec.Command("git", "checkout", "--detach", ref)
 	cmd.Dir = gitRepoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	log.Println(cmd.String())
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -162,11 +242,11 @@ func gitCheckout(gitRepoDir string, commit string) error {
 }
 
 func dockerBuild(gitRepoDir string, imageName string) error {
-	log.Printf("docker build -t %s .", imageName)
 	cmd := exec.Command("docker", "build", "-t", imageName, ".")
 	cmd.Dir = gitRepoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	log.Println(cmd.String())
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -174,10 +254,10 @@ func dockerBuild(gitRepoDir string, imageName string) error {
 }
 
 func dockerTag(srcImageName, dstImageName string) error {
-	log.Printf("docker tag %s %s", srcImageName, dstImageName)
 	cmd := exec.Command("docker", "tag", srcImageName, dstImageName)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	log.Println(cmd.String())
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -185,18 +265,18 @@ func dockerTag(srcImageName, dstImageName string) error {
 }
 
 func dockerPush(imageName string) error {
-	log.Printf("docker push %s", imageName)
 	cmd := exec.Command("docker", "push", imageName)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	log.Println(cmd.String())
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 	return cmd.Wait()
 }
 
-func dockerLogin(dockerRepo string) error {
-	awsPwd, err := getAwsEcrPassword()
+func ecrLogin(dockerRepo string, awsRegion string) error {
+	awsPwd, err := getAwsEcrPassword(awsRegion)
 	if err != nil {
 		return fmt.Errorf("get aws ecr password: %w", err)
 	}
@@ -217,11 +297,9 @@ func dockerLogin(dockerRepo string) error {
 	return cmd.Wait()
 }
 
-func getAwsEcrPassword() (string, error) {
+func getAwsEcrPassword(awsRegion string) (string, error) {
 	buf := new(bytes.Buffer)
-	// docker login -u AWS -p $(aws ecr get-login-password --region eu-west-1) "$ECR_REPO"
-	log.Println("aws", "ecr", "get-login-password", "--region", "eu-west-1")
-	cmd := exec.Command("aws", "ecr", "get-login-password", "--region", "eu-west-1")
+	cmd := exec.Command("aws", "ecr", "get-login-password", "--region", awsRegion)
 	cmd.Stdout = buf
 	cmd.Stderr = os.Stderr
 
@@ -229,6 +307,7 @@ func getAwsEcrPassword() (string, error) {
 		fmt.Sprintf("AWS_PROFILE=%s", os.Getenv("AWS_PROFILE")),
 	}
 
+	log.Println(cmd.String())
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
@@ -239,14 +318,22 @@ func getAwsEcrPassword() (string, error) {
 	return buf.String(), nil
 }
 
-func dockerBuildFromImage(buildDir, srcImageName, imageName string) error {
+func dockerBuildFromImage(buildDir, srcImageName, imageName string, labels map[string]string) error {
+	log.Printf("building docker image %s using %s as base", imageName, srcImageName)
 	fromImageNameArg := fmt.Sprintf("FROM_IMAGE_NAME=%s", srcImageName)
 
-	log.Printf("docker build -t %s --build-arg %s .", imageName, fromImageNameArg)
-	cmd := exec.Command("docker", "build", "-t", imageName, "--build-arg", fromImageNameArg, ".")
+	dockerArgs := []string{"build", "-t", imageName, "--build-arg", fromImageNameArg}
+	for k, v := range labels {
+		dockerArgs = append(dockerArgs, "--label")
+		dockerArgs = append(dockerArgs, fmt.Sprintf("%s=%s", k, v))
+	}
+	dockerArgs = append(dockerArgs, ".")
+
+	cmd := exec.Command("docker", dockerArgs...)
 	cmd.Dir = buildDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	log.Println(cmd.String())
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -254,6 +341,7 @@ func dockerBuildFromImage(buildDir, srcImageName, imageName string) error {
 }
 
 func copyDockerAssets(buildDir string, system string) error {
+	log.Printf("copying docker assets for %s to %s", system, buildDir)
 	systemPath := filepath.Join("dockerassets", system)
 	pathPrefix := systemPath + string(filepath.Separator)
 	err := fs.WalkDir(dockerAssets, systemPath, func(path string, d fs.DirEntry, err error) error {
@@ -277,6 +365,7 @@ func copyDockerAssets(buildDir string, system string) error {
 			if err != nil {
 				return fmt.Errorf("open destination file: %w", err)
 			}
+			defer fdst.Close()
 
 			fsrc, err := dockerAssets.Open(path)
 			if err != nil {
@@ -297,88 +386,89 @@ func copyDockerAssets(buildDir string, system string) error {
 	return nil
 }
 
-func buildImageFromGitBranch(workDir string, gitRepo string, branch string, imageName string) error {
+func buildImageFromGitBranch(workDir string, gitRepo string, branch string, imageName string) (string, error) {
 	log.Printf("building image from %s in %s", branch, gitRepo)
 	const cloneName = "code"
 
 	if err := gitClone(workDir, gitRepo, cloneName); err != nil {
-		return fmt.Errorf("git clone: %w", err)
+		return "", fmt.Errorf("git clone: %w", err)
 	}
 
 	gitRepoDir := filepath.Join(workDir, cloneName)
 	if err := gitSwitch(gitRepoDir, branch); err != nil {
-		return fmt.Errorf("git switch: %w", err)
+		return "", fmt.Errorf("git switch: %w", err)
 	}
 
 	tmpImageName := fmt.Sprintf("thunderdome:tmp-%d", time.Now().Unix())
 	if err := dockerBuild(gitRepoDir, tmpImageName); err != nil {
-		return fmt.Errorf("docker build: %w", err)
+		return "", fmt.Errorf("docker build: %w", err)
 	}
 
-	buildDir := filepath.Join(workDir, "build")
-	if err := os.Mkdir(buildDir, 0777); err != nil {
-		return fmt.Errorf("create build dir: %w", err)
-	}
-
-	if err := copyDockerAssets(buildDir, "kubo"); err != nil {
-		return fmt.Errorf("copy docker assets: %w", err)
-	}
-
-	if err := dockerBuildFromImage(buildDir, tmpImageName, imageName); err != nil {
-		return fmt.Errorf("docker build from tag docker assets: %w", err)
-	}
-
-	return nil
+	return tmpImageName, nil
 }
 
-func buildImageFromGitCommit(workDir string, gitRepo string, commit string, imageName string) error {
+func buildImageFromGitCommit(workDir string, gitRepo string, commit string, imageName string) (string, error) {
 	log.Printf("building image from %s in %s", commit, gitRepo)
 	const cloneName = "code"
 
 	if err := gitClone(workDir, gitRepo, cloneName); err != nil {
-		return fmt.Errorf("git clone: %w", err)
+		return "", fmt.Errorf("git clone: %w", err)
 	}
 
 	gitRepoDir := filepath.Join(workDir, cloneName)
 	if err := gitCheckout(gitRepoDir, commit); err != nil {
-		return fmt.Errorf("git checkout: %w", err)
+		return "", fmt.Errorf("git checkout: %w", err)
 	}
 
 	tmpImageName := fmt.Sprintf("thunderdome:tmp-%d", time.Now().Unix())
 	if err := dockerBuild(gitRepoDir, tmpImageName); err != nil {
-		return fmt.Errorf("docker build: %w", err)
+		return "", fmt.Errorf("docker build: %w", err)
 	}
-
-	buildDir := filepath.Join(workDir, "build")
-	if err := os.Mkdir(buildDir, 0777); err != nil {
-		return fmt.Errorf("create build dir: %w", err)
-	}
-
-	if err := copyDockerAssets(buildDir, "kubo"); err != nil {
-		return fmt.Errorf("copy docker assets: %w", err)
-	}
-
-	if err := dockerBuildFromImage(buildDir, tmpImageName, imageName); err != nil {
-		return fmt.Errorf("docker build from tag docker assets: %w", err)
-	}
-
-	return nil
+	return tmpImageName, nil
 }
 
-func buildImageFromGit(workDir string, gitRepo string, imageName string) error {
+func buildImageFromGitTag(workDir string, gitRepo string, gitTag string, imageName string) (string, error) {
+	log.Printf("building image from tag %s in %s", gitTag, gitRepo)
+	const cloneName = "code"
+
+	if err := gitClone(workDir, gitRepo, cloneName); err != nil {
+		return "", fmt.Errorf("git clone: %w", err)
+	}
+
+	if !strings.HasPrefix(gitTag, "tags/") {
+		gitTag = "tags/" + gitTag
+	}
+
+	gitRepoDir := filepath.Join(workDir, cloneName)
+	if err := gitCheckout(gitRepoDir, gitTag); err != nil {
+		return "", fmt.Errorf("git checkout: %w", err)
+	}
+
+	tmpImageName := fmt.Sprintf("thunderdome:tmp-%d", time.Now().Unix())
+	if err := dockerBuild(gitRepoDir, tmpImageName); err != nil {
+		return "", fmt.Errorf("docker build: %w", err)
+	}
+	return tmpImageName, nil
+}
+
+func buildImageFromGit(workDir string, gitRepo string, imageName string) (string, error) {
 	log.Printf("building image from %s", gitRepo)
 	const cloneName = "code"
 
 	if err := gitClone(workDir, gitRepo, cloneName); err != nil {
-		return fmt.Errorf("git clone: %w", err)
+		return "", fmt.Errorf("git clone: %w", err)
 	}
 
 	gitRepoDir := filepath.Join(workDir, cloneName)
 	tmpImageName := fmt.Sprintf("thunderdome:tmp-%d", time.Now().Unix())
 	if err := dockerBuild(gitRepoDir, tmpImageName); err != nil {
-		return fmt.Errorf("docker build: %w", err)
+		return "", fmt.Errorf("docker build: %w", err)
 	}
+	return tmpImageName, nil
+}
 
+func configureImage(workDir, fromImage, imageName string, labels map[string]string, envConfigMappings []EnvConfigMapping) error {
+	log.Printf("configuring image %s for use in thunderdome", fromImage)
 	buildDir := filepath.Join(workDir, "build")
 	if err := os.Mkdir(buildDir, 0777); err != nil {
 		return fmt.Errorf("create build dir: %w", err)
@@ -388,43 +478,94 @@ func buildImageFromGit(workDir string, gitRepo string, imageName string) error {
 		return fmt.Errorf("copy docker assets: %w", err)
 	}
 
-	if err := dockerBuildFromImage(buildDir, tmpImageName, imageName); err != nil {
+	if err := writeInitConfigScript(buildDir, envConfigMappings); err != nil {
+		return fmt.Errorf("write init config script: %w", err)
+	}
+
+	if err := dockerBuildFromImage(buildDir, fromImage, imageName, labels); err != nil {
 		return fmt.Errorf("docker build from tag docker assets: %w", err)
 	}
 
 	return nil
 }
 
-func buildImageFromImage(workDir, fromImage, imageName string) error {
-	log.Printf("building image from %s", fromImage)
-	buildDir := filepath.Join(workDir, "build")
-	if err := os.Mkdir(buildDir, 0777); err != nil {
-		return fmt.Errorf("create build dir: %w", err)
-	}
-
-	if err := copyDockerAssets(buildDir, "kubo"); err != nil {
-		return fmt.Errorf("copy docker assets: %w", err)
-	}
-
-	if err := dockerBuildFromImage(buildDir, fromImage, imageName); err != nil {
-		return fmt.Errorf("docker build from tag docker assets: %w", err)
-	}
-
-	return nil
-}
-
-func pushImage(imageName, dockerRepo string) error {
-	log.Printf("pushing image %s to %s", imageName, dockerRepo)
-	if err := dockerTag(imageName, dockerRepo+"/"+imageName); err != nil {
+func pushImage(imageName, ecrRepo string) error {
+	log.Printf("pushing image %s to %s", imageName, ecrRepo)
+	if err := dockerTag(imageName, ecrRepo+"/"+imageName); err != nil {
 		return fmt.Errorf("docker tag: %w", err)
 	}
 
-	if err := dockerLogin(dockerRepo); err != nil {
+	if err := ecrLogin(ecrRepo, "eu-west-1"); err != nil {
 		return fmt.Errorf("docker login: %w", err)
 	}
 
-	if err := dockerPush(dockerRepo + "/" + imageName); err != nil {
+	if err := dockerPush(ecrRepo + "/" + imageName); err != nil {
 		return fmt.Errorf("docker push: %w", err)
+	}
+
+	return nil
+}
+
+// nonEmptyCount returns the number the passed strings that are not empty
+func nonEmptyCount(strs ...string) int {
+	nonEmpty := 0
+	for _, s := range strs {
+		if len(s) > 0 {
+			nonEmpty++
+		}
+	}
+	return nonEmpty
+}
+
+type EnvConfigMapping struct {
+	EnvVar       string
+	ConfigOption string
+}
+
+func parseEnvConfigMappings(strs []string) ([]EnvConfigMapping, error) {
+	var ret []EnvConfigMapping
+
+	for _, s := range strs {
+		parts := strings.SplitN(s, ":", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("malformed mapping, expecting format 'EnvVar:ConfigOption', got '%s'", s)
+		}
+		ret = append(ret, EnvConfigMapping{
+			EnvVar:       parts[0],
+			ConfigOption: parts[1],
+		})
+	}
+
+	return ret, nil
+}
+
+func writeInitConfigScript(buildDir string, envConfigMappings []EnvConfigMapping) error {
+	if len(envConfigMappings) == 0 {
+		return nil
+	}
+	b := new(strings.Builder)
+	b.WriteString("#!/bin/sh\n")
+	for _, ec := range envConfigMappings {
+		fmt.Fprintf(b, `if [ -n "$%s" ]; then`, ec.EnvVar)
+		fmt.Fprintln(b)
+		fmt.Fprintf(b, `  echo "setting %s to $%s"`, ec.ConfigOption, ec.EnvVar)
+		fmt.Fprintln(b)
+		fmt.Fprintf(b, `  ipfs config --json %s "$%s"`, ec.ConfigOption, ec.EnvVar)
+		fmt.Fprintln(b)
+		fmt.Fprint(b, `fi`)
+		fmt.Fprintln(b)
+	}
+
+	initConfigFilename := filepath.Join(buildDir, "container-init.d", "02-env-config.sh")
+	log.Printf("writing init config script %s", initConfigFilename)
+	f, err := os.OpenFile(initConfigFilename, os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return fmt.Errorf("open init config file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := fmt.Fprintln(f, b.String()); err != nil {
+		return fmt.Errorf("write init config file: %w", err)
 	}
 
 	return nil
