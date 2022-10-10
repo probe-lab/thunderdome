@@ -28,6 +28,7 @@ type BaseInfra struct {
 	logGroupName                          string
 	serviceDiscoveryPrivateDnsNamespaceID string
 	ecsClusterArn                         string
+	taskRoleName                          string
 
 	mu          sync.Mutex
 	ready       bool
@@ -40,6 +41,7 @@ func NewBaseInfra(experiment, awsRegion string, ecsClusterArn string) *BaseInfra
 		awsRegion:     awsRegion,
 		ecsClusterArn: ecsClusterArn,
 		logGroupName:  "thunderdome", // aws_cloudwatch_log_group.logs.name
+		taskRoleName:  experiment,
 	}
 }
 
@@ -67,6 +69,12 @@ func (b *BaseInfra) EcsClusterArn() string {
 	return b.ecsClusterArn
 }
 
+func (b *BaseInfra) TaskRoleName() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.taskRoleName
+}
+
 func (b *BaseInfra) ServiceDiscoveryPrivateDnsNamespaceID() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -84,22 +92,26 @@ func (b *BaseInfra) Setup(ctx context.Context) error {
 		return fmt.Errorf("new session: %w", err)
 	}
 
-	if err := b.inspectExisting(ctx, sess); err != nil {
+	if err := b.InspectExisting(ctx); err != nil {
 		return fmt.Errorf("inspect existing infra: %w", err)
 	}
 
-	if err := b.setupTaskRole(sess); err != nil {
-		return fmt.Errorf("setup task role: %w", err)
-	}
-
-	if err := b.setupTaskRolePolicyAttachments(sess); err != nil {
-		return fmt.Errorf("setup task role policy attachments: %w", err)
-	}
+	return TaskSequence(ctx, sess, "base infra",
+		b.createTaskRole(),
+		b.attachSsmExecPolicy(),
+	)
 
 	return nil
 }
 
-func (b *BaseInfra) inspectExisting(ctx context.Context, sess *session.Session) error {
+func (b *BaseInfra) InspectExisting(ctx context.Context) error {
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(b.awsRegion),
+	})
+	if err != nil {
+		return fmt.Errorf("new session: %w", err)
+	}
+
 	svc := servicediscovery.New(sess)
 
 	in := &servicediscovery.ListNamespacesInput{
@@ -126,15 +138,82 @@ func (b *BaseInfra) inspectExisting(ctx context.Context, sess *session.Session) 
 		}
 	}
 
+	if b.serviceDiscoveryPrivateDnsNamespaceID == "" {
+		return fmt.Errorf("did not find service discovery private DNS namespace ID")
+	}
+
 	return nil
 }
 
-func (b *BaseInfra) setupTaskRole(sess *session.Session) error {
+func (b *BaseInfra) findExistingTaskRole(sess *session.Session) error {
 	svc := iam.New(sess)
-	// Create Role
-	in := &iam.CreateRoleInput{
+	in := &iam.GetRoleInput{
 		RoleName: aws.String(b.experiment),
-		AssumeRolePolicyDocument: aws.String(`{
+	}
+	out, err := svc.GetRole(in)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case iam.ErrCodeNoSuchEntityException:
+				return nil
+			default:
+				return fmt.Errorf("get role: %w", err)
+			}
+		}
+
+		return fmt.Errorf("get role: %w", err)
+	}
+
+	if out == nil || out.Role == nil || out.Role.Arn == nil {
+		return fmt.Errorf("no arn returned")
+	}
+
+	b.taskRoleArn = *out.Role.Arn
+
+	return nil
+}
+
+func (b *BaseInfra) Teardown(ctx context.Context) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(b.awsRegion),
+	})
+	if err != nil {
+		return fmt.Errorf("new session: %w", err)
+	}
+
+	log.Printf("base infra: starting tear down")
+	if err := b.InspectExisting(ctx); err != nil {
+		return fmt.Errorf("inspect existing infra: %w", err)
+	}
+
+	return TaskSequence(ctx, sess, "base infra",
+		b.detachSsmExecPolicy(),
+		b.deleteTaskRole(),
+	)
+}
+
+func (b *BaseInfra) createTaskRole() Task {
+	return Task{
+		Name:  "create task role " + b.taskRoleName,
+		Check: b.taskRoleExists(),
+		Func: func(ctx context.Context, sess *session.Session) error {
+			if err := b.findExistingTaskRole(sess); err != nil {
+				return fmt.Errorf("find existing task role: %w", err)
+			}
+
+			if b.taskRoleArn != "" {
+				// TODO: don't assume this is configured how we want it to be
+				log.Printf("task role %q: already exists with arn %s", b.taskRoleName, b.taskRoleArn)
+				return nil
+			}
+
+			svc := iam.New(sess)
+			in := &iam.CreateRoleInput{
+				RoleName: aws.String(b.taskRoleName),
+				AssumeRolePolicyDocument: aws.String(`{
 		    "Version":"2012-10-17",
 		    "Statement": [
 		      {
@@ -147,47 +226,94 @@ func (b *BaseInfra) setupTaskRole(sess *session.Session) error {
 		      }
 		    ]
 		  }`),
-	}
-	out, err := svc.CreateRole(in)
-	if err != nil {
-		return fmt.Errorf("create role: %w", err)
-	}
+			}
+			log.Printf("task role %q: creating", b.taskRoleName)
+			out, err := svc.CreateRole(in)
+			if err != nil {
+				return fmt.Errorf("create role: %w", err)
+			}
 
-	if out == nil || out.Role == nil || out.Role.Arn == nil {
-		return fmt.Errorf("no arn returned")
-	}
+			if out == nil || out.Role == nil || out.Role.Arn == nil {
+				return fmt.Errorf("no arn returned")
+			}
 
-	b.taskRoleArn = *out.Role.Arn
-	return nil
+			b.taskRoleArn = *out.Role.Arn
+			log.Printf("task role %q: created with arn %s", b.taskRoleName, b.taskRoleArn)
+			return nil
+		},
+	}
 }
 
-func (b *BaseInfra) setupTaskRolePolicyAttachments(sess *session.Session) error {
-	svc := iam.New(sess)
+func (b *BaseInfra) deleteTaskRole() Task {
+	return Task{
+		Name:  "delete task role " + b.taskRoleName,
+		Check: b.taskRoleDoesNotExist(),
+		Func: func(ctx context.Context, sess *session.Session) error {
+			svc := iam.New(sess)
 
-	// Create Role
-	in := &iam.AttachRolePolicyInput{
-		RoleName:  aws.String(b.experiment),
-		PolicyArn: aws.String(ssm_exec_policy_arn),
+			in := &iam.DeleteRoleInput{
+				RoleName: aws.String(b.taskRoleName),
+			}
+
+			_, err := svc.DeleteRole(in)
+			if err != nil {
+				if iamIsNoSuchEntity(err) {
+					return nil
+				}
+				return fmt.Errorf("delete role: %w", err)
+			}
+			return nil
+		},
 	}
-
-	if _, err := svc.AttachRolePolicy(in); err != nil {
-		return fmt.Errorf("attach role policy: %w", err)
-	}
-
-	return nil
 }
 
-func (b *BaseInfra) Teardown(context.Context) error {
-	panic("not implemented")
+func (b *BaseInfra) attachSsmExecPolicy() Task {
+	return Task{
+		Name:  "attach ssm exec policy to role " + b.taskRoleName,
+		Check: b.ssmExecPolicyAttached(),
+		Func: func(ctx context.Context, sess *session.Session) error {
+			svc := iam.New(sess)
+
+			in := &iam.AttachRolePolicyInput{
+				RoleName:  aws.String(b.taskRoleName),
+				PolicyArn: aws.String(ssm_exec_policy_arn),
+			}
+
+			if _, err := svc.AttachRolePolicy(in); err != nil {
+				return fmt.Errorf("attach role policy: %w", err)
+			}
+
+			return nil
+		},
+	}
+}
+
+func (b *BaseInfra) detachSsmExecPolicy() Task {
+	return Task{
+		Name:  "detach ssm exec policy from role " + b.taskRoleName,
+		Check: b.ssmExecPolicyDetached(),
+		Func: func(ctx context.Context, sess *session.Session) error {
+			svc := iam.New(sess)
+
+			in := &iam.DetachRolePolicyInput{
+				RoleName:  aws.String(b.taskRoleName),
+				PolicyArn: aws.String(ssm_exec_policy_arn),
+			}
+
+			if _, err := svc.DetachRolePolicy(in); err != nil {
+				if iamIsNoSuchEntity(err) {
+					return nil
+				}
+				return fmt.Errorf("detach role policy: %w", err)
+			}
+			return nil
+		},
+	}
 }
 
 func (b *BaseInfra) Ready(ctx context.Context) (bool, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
-	if b.ready {
-		return true, nil
-	}
 
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(b.awsRegion),
@@ -196,126 +322,165 @@ func (b *BaseInfra) Ready(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("new session: %w", err)
 	}
 
-	log.Printf("checking if task role is ready")
-	taskRoleReady, err := b.readyTaskRole(ctx, sess)
-	if err != nil {
-		return false, fmt.Errorf("task role: %w", err)
-	}
-	if !taskRoleReady {
-		return false, nil
+	if err := b.InspectExisting(ctx); err != nil {
+		return false, fmt.Errorf("inspect existing infra: %w", err)
 	}
 
-	log.Printf("checking if task role policy attachment is ready")
-	taskRolePolicyAttachmentsReady, err := b.readyTaskRolePolicyAttachments(ctx, sess)
-	if err != nil {
-		return false, fmt.Errorf("task role policy attachments: %w", err)
-	}
-	if !taskRolePolicyAttachmentsReady {
-		return false, nil
-	}
-
-	return true, nil
+	return CheckSequence(ctx, sess, "base infra",
+		b.taskRoleExists(),
+		b.ssmExecPolicyAttached(),
+	)
 }
 
-func (b *BaseInfra) readyTaskRole(ctx context.Context, sess *session.Session) (bool, error) {
-	svc := iam.New(sess)
-	in := &iam.GetRoleInput{
-		RoleName: aws.String(b.experiment),
-	}
-	out, err := svc.GetRole(in)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case iam.ErrCodeNoSuchEntityException:
-				return false, nil // ready check failed
-			default:
+func (b *BaseInfra) taskRoleDoesNotExist() Check {
+	return Check{
+		Name:        "task role does not exist",
+		FailureText: "task role exists",
+		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
+			svc := iam.New(sess)
+			in := &iam.GetRoleInput{
+				RoleName: aws.String(b.experiment),
+			}
+			out, err := svc.GetRole(in)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case iam.ErrCodeNoSuchEntityException:
+						return true, nil // ready check failed
+					default:
+						return false, fmt.Errorf("get role: %w", err)
+					}
+				}
+
 				return false, fmt.Errorf("get role: %w", err)
 			}
-		}
 
-		return false, fmt.Errorf("get role: %w", err)
+			if out == nil || out.Role == nil {
+				return false, fmt.Errorf("role not found")
+			}
+
+			return false, nil
+		},
 	}
-
-	if out == nil || out.Role == nil {
-		return false, fmt.Errorf("role not found")
-	}
-
-	return true, nil
 }
 
-func (b *BaseInfra) readyTaskRolePolicyAttachments(ctx context.Context, sess *session.Session) (bool, error) {
-	svc := iam.New(sess)
-	in := &iam.ListAttachedRolePoliciesInput{
-		RoleName: aws.String(b.experiment),
+func (b *BaseInfra) taskRoleExists() Check {
+	return Check{
+		Name:        "task role exists",
+		FailureText: "task role does not exist",
+		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
+			svc := iam.New(sess)
+			in := &iam.GetRoleInput{
+				RoleName: aws.String(b.experiment),
+			}
+			out, err := svc.GetRole(in)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case iam.ErrCodeNoSuchEntityException:
+						return false, nil
+					default:
+						return false, fmt.Errorf("get role: %w", err)
+					}
+				}
+
+				return false, fmt.Errorf("get role: %w", err)
+			}
+
+			if out == nil || out.Role == nil {
+				return false, fmt.Errorf("role not found")
+			}
+
+			return true, nil
+		},
 	}
-	out, err := svc.ListAttachedRolePolicies(in)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case iam.ErrCodeNoSuchEntityException:
-				return false, nil // ready check failed
-			default:
+}
+
+func (b *BaseInfra) ssmExecPolicyAttached() Check {
+	return Check{
+		Name: "ssm exec policy attached",
+		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
+			svc := iam.New(sess)
+			in := &iam.ListAttachedRolePoliciesInput{
+				RoleName: aws.String(b.experiment),
+			}
+			out, err := svc.ListAttachedRolePolicies(in)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case iam.ErrCodeNoSuchEntityException:
+						return false, nil // ready check failed
+					default:
+						return false, err
+					}
+				}
+
 				return false, err
 			}
-		}
 
-		return false, err
+			if out == nil || out.AttachedPolicies == nil {
+				return false, nil
+			}
+
+			for _, p := range out.AttachedPolicies {
+				if p.PolicyArn != nil && *p.PolicyArn == ssm_exec_policy_arn {
+					return true, nil
+				}
+			}
+
+			if out.IsTruncated != nil && *out.IsTruncated == true {
+				// TODO: implement fetching next page of results
+				return false, fmt.Errorf("policy not found but there are results that were not fetched (unimplemented behaviour)")
+			}
+			return false, nil
+		},
 	}
-
-	if out == nil || out.AttachedPolicies == nil {
-		return false, fmt.Errorf("no attached policies found")
-	}
-
-	found := false
-	for _, p := range out.AttachedPolicies {
-		if p.PolicyArn != nil && *p.PolicyArn == ssm_exec_policy_arn {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		if out.IsTruncated != nil && *out.IsTruncated == true {
-			// TODO: implement fetching next page of results
-			return false, fmt.Errorf("policy not found but there are results that were not fetched (unimplemented behaviour)")
-		}
-		return false, nil
-	}
-
-	return true, nil
 }
 
-func (b *BaseInfra) Status(ctx context.Context) ([]ComponentStatus, error) {
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(b.awsRegion),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("new session: %w", err)
-	}
+func (b *BaseInfra) ssmExecPolicyDetached() Check {
+	return Check{
+		Name: "ssm exec policy detached",
+		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
+			svc := iam.New(sess)
+			in := &iam.ListAttachedRolePoliciesInput{
+				RoleName: aws.String(b.experiment),
+			}
+			out, err := svc.ListAttachedRolePolicies(in)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case iam.ErrCodeNoSuchEntityException:
+						return true, nil
+					default:
+						return false, err
+					}
+				}
 
-	statusFuncs := []struct {
-		Name string
-		Func func(context.Context, *session.Session) (bool, error)
-	}{
-		{
-			Name: "task role",
-			Func: b.readyTaskRole,
+				return false, err
+			}
+
+			if out == nil || out.AttachedPolicies == nil {
+				return true, nil
+			}
+
+			for _, p := range out.AttachedPolicies {
+				if p.PolicyArn != nil && *p.PolicyArn == ssm_exec_policy_arn {
+					return false, nil
+				}
+			}
+
+			if out.IsTruncated != nil && *out.IsTruncated == true {
+				// TODO: implement fetching next page of results
+				return false, fmt.Errorf("policy not found but there are results that were not fetched (unimplemented behaviour)")
+			}
+			return true, nil
 		},
-		{
-			Name: "task role policy attachment",
-			Func: b.readyTaskRolePolicyAttachments,
-		},
 	}
+}
 
-	statuses := []ComponentStatus{}
-
-	for _, sf := range statusFuncs {
-		status := ComponentStatus{
-			Name: sf.Name,
-		}
-		status.Ready, status.Error = sf.Func(ctx, sess)
-		statuses = append(statuses, status)
+func iamIsNoSuchEntity(err error) bool {
+	if aerr, ok := err.(awserr.Error); ok {
+		return aerr.Code() == iam.ErrCodeNoSuchEntityException
 	}
-
-	return statuses, nil
+	return false
 }

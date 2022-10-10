@@ -19,6 +19,13 @@ var StatusCommand = &cli.Command{
 			Required:    true,
 			Destination: &statusOpts.name,
 		},
+		&cli.StringFlag{
+			Name:        "aws-region",
+			Usage:       "AWS region to use when deploying experiments.",
+			Value:       "eu-west-1",
+			Destination: &commonOpts.awsRegion,
+			EnvVars:     []string{"IRONBAR_AWS_REGION"},
+		},
 	},
 }
 
@@ -28,52 +35,41 @@ var statusOpts struct {
 
 func Status(cc *cli.Context) error {
 	ctx := cc.Context
+	if commonOpts.awsRegion == "" {
+		return fmt.Errorf("aws region must be specified")
+	}
 
-	experiment := statusOpts.name
+	// TODO: fetch experiment from storage
+	exp := TestExperiment()
 
-	log.Printf("checking status of experiment %q", experiment)
+	log.Printf("checking status of experiment %q", exp.Name)
 
-	base := NewBaseInfra(experiment, "eu-west-1", "arn:aws:ecs:eu-west-1:147263665150:cluster/thunderdome")
+	allready := true
 
-	log.Printf("checking base infrastructure status")
-	statuses, err := base.Status(ctx)
+	base := NewBaseInfra(exp.Name, commonOpts.awsRegion, "arn:aws:ecs:eu-west-1:147263665150:cluster/thunderdome")
+	ready, err := base.Ready(ctx)
 	if err != nil {
-		return fmt.Errorf("base infra status: %w", err)
+		return fmt.Errorf("failed to check base infra ready state: %w", err)
 	}
-
-	baseReady := true
-	for _, st := range statuses {
-		if st.Error != nil {
-			log.Printf("base infra component %q gave error: %v", st.Name, st.Error)
-			baseReady = false
-			continue
+	if ready {
+		for _, t := range exp.Targets {
+			target := NewTarget(t.Name, exp.Name, base, t.Image, t.Environment)
+			ready, err := target.Ready(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to check target %q ready state: %w", t.Name, err)
+			}
+			if ready {
+				log.Printf("target %q ready", t.Name)
+			} else {
+				allready = false
+			}
 		}
-		if st.Ready {
-			log.Printf("base infra component %q ready", st.Name)
-		} else {
-			baseReady = false
-			log.Printf("base infra component %q does not exist or is not ready", st.Name)
-		}
+	} else {
+		allready = false
 	}
 
-	if !baseReady {
-		return nil
+	if allready {
+		log.Printf("all components ready")
 	}
-	log.Printf("base infra ready")
-
-	// target := NewTarget("target1", experiment, "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0", map[string]string{})
-
-	// log.Printf("checking if %q is ready", target.name)
-	// if err := WaitUntil(ctx, target.Ready, 2*time.Second, 30*time.Second); err != nil {
-	// 	return fmt.Errorf("target %q failed to become ready: %w", target.name, err)
-	// }
-	// log.Printf("target %q ready", target.name)
-
 	return nil
-}
-
-type ComponentStatus struct {
-	Name  string
-	Ready bool
-	Error error
 }

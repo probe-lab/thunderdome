@@ -1,5 +1,9 @@
 package main
 
+import (
+	"time"
+)
+
 type ExperimentJSON struct {
 	Name     string `json:"name"`
 	Duration int    `json:"duration"` // in hours
@@ -26,6 +30,42 @@ type TargetJSON struct {
 	Image        string   `json:"image"`         // docker image to use. If empty, DefaultImage will be used instead
 	InstanceType string   `json:"instance_type"` // instance type to use. If empty, DefaultInstanceType will be used instead
 	Environment  []NVJSON `json:"environment"`   // additional environment variables
+}
+
+type Experiment struct {
+	Name     string
+	Duration time.Duration
+
+	MaxRequestRate int
+	MaxConcurrency int
+	RequestFilter  string
+
+	DefaultImage      string
+	SharedEnvironment map[string]string
+
+	DefaultInstanceType string
+
+	Targets []*TargetDef
+}
+
+type TargetDef struct {
+	Name         string
+	Image        string
+	InstanceType string
+	Environment  map[string]string
+}
+
+func TestExperiment() *Experiment {
+	return &Experiment{
+		Name: "ironbar_test",
+
+		Targets: []*TargetDef{
+			{
+				Name:  "target1",
+				Image: "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0",
+			},
+		},
+	}
 }
 
 /*
