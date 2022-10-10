@@ -44,7 +44,10 @@ When building from a git repository, the following options control the commit to
 	--commit value   Checkout this commit
 	--git-tag value  Checkout this tag
 
-The Thunderdome image may include a script that maps an environment variable to a Kubo config option. The value of the option will be set to the value of the environment variable on start up. Use `--env-config` to specify a mapping and repeat for each mapping required. Separate the name of the environment variable from the config option with a colon like this: `EnvVar:ConfigOption`.
+The Thunderdome image can be configured to maps environment variables to Kubo config options. The value of the option will be set to the value of the environment variable on start up. Two command line options control this, `--env-config` for numeric and boolean values, and `--env-config-quoted` for Kubo config options that require quoting such as strings and durations. Separate the name of the environment variable from the config option with a colon like this: `EnvVar:ConfigOption`.
+
+	--env-config          Map an environment variable to a kubo config option
+	--env-config-quoted   Quotes the mapped environment value
 
 The following options add metadata to the Thunderdome image: 
 
@@ -97,4 +100,12 @@ ironbar image --from-image ipfs/kubo:v0.16.0  \
               --tag kubo-highlow  \
               --env-config=CONNMGR_HIGHWATER:Swarm.ConnMgr.HighWater \
               --env-config=CONNMGR_LOWWATER:Swarm.ConnMgr.LowWater
+```
+
+Build an image from the official v0.16.0 Kubo image, tag it as `kubo-reposize` and enable the `Datastore.StorageMax` config option to be configured by the `$STORAGEMAX` environment variable. Since this config option requires a string, we must use `--env-config-quoted`:
+
+```sh
+ironbar image --from-image ipfs/kubo:v0.16.0  \
+              --tag kubo-reposize  \
+              --env-config-quoted=STORAGEMAX:Datastore.StorageMax 
 ```

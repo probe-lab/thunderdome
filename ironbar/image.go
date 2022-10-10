@@ -66,6 +66,11 @@ var ImageCommand = &cli.Command{
 			Usage:       "Map an environment variable to a kubo config option. Use format 'EnvVar:ConfigOption'.",
 			Destination: &imageOpts.envConfig,
 		},
+		&cli.StringSliceFlag{
+			Name:        "env-config-quoted",
+			Usage:       "Map an environment variable to a kubo config option that requires quotes (such as a string or duration). Use format 'EnvVar:ConfigOption'.",
+			Destination: &imageOpts.envConfigQuoted,
+		},
 		&cli.BoolFlag{
 			Name:   "keeptemp",
 			Usage:  "Keep the temporary working directory after ironbar exits.",
@@ -82,20 +87,22 @@ var ImageCommand = &cli.Command{
 			Destination: &imageOpts.maintainer,
 			Value:       "ian.davis@protocol.ai",
 		},
+		// TODO: support  ARG IPFS_PLUGINS
 	},
 }
 
 var imageOpts struct {
-	gitRepo     string
-	branch      string
-	commit      string
-	gitTag      string
-	tag         string
-	dockerRepo  string
-	fromImage   string
-	envConfig   cli.StringSlice
-	description string
-	maintainer  string
+	gitRepo         string
+	branch          string
+	commit          string
+	gitTag          string
+	tag             string
+	dockerRepo      string
+	fromImage       string
+	envConfig       cli.StringSlice
+	envConfigQuoted cli.StringSlice
+	description     string
+	maintainer      string
 }
 
 const imageBaseName = "thunderdome"
@@ -105,6 +112,11 @@ func Image(cc *cli.Context) error {
 	log.Printf("building image %s", imageName)
 
 	envConfigMappings, err := parseEnvConfigMappings(imageOpts.envConfig.Value())
+	if err != nil {
+		return err
+	}
+
+	envConfigMappingsQuoted, err := parseEnvConfigMappings(imageOpts.envConfigQuoted.Value())
 	if err != nil {
 		return err
 	}
@@ -163,7 +175,7 @@ func Image(cc *cli.Context) error {
 		return fmt.Errorf("must specify repo or from-image")
 	}
 
-	if err := configureImage(workDir, baseImage, imageName, labels, envConfigMappings); err != nil {
+	if err := configureImage(workDir, baseImage, imageName, labels, envConfigMappings, envConfigMappingsQuoted); err != nil {
 		return err
 	}
 
@@ -194,13 +206,20 @@ func Image(cc *cli.Context) error {
 	if imageOpts.description != "" {
 		fmt.Printf("Description: %s\n", imageOpts.description)
 	}
-	if len(envConfigMappings) > 0 {
+	if len(envConfigMappings) > 0 || len(envConfigMappingsQuoted) > 0 {
 		fmt.Println("Configuration may be set using environment variables:")
 		for _, em := range envConfigMappings {
 			fmt.Printf("  $%s sets %s\n", em.EnvVar, em.ConfigOption)
 		}
+		for _, em := range envConfigMappingsQuoted {
+			fmt.Printf("  $%s sets %s\n", em.EnvVar, em.ConfigOption)
+		}
 	}
 	fmt.Println("--------------------------------------------------------------------------------")
+
+	if cc.Bool("keeptemp") {
+		fmt.Println("Build files kept in: " + workDir)
+	}
 
 	return nil
 }
@@ -467,7 +486,7 @@ func buildImageFromGit(workDir string, gitRepo string, imageName string) (string
 	return tmpImageName, nil
 }
 
-func configureImage(workDir, fromImage, imageName string, labels map[string]string, envConfigMappings []EnvConfigMapping) error {
+func configureImage(workDir, fromImage, imageName string, labels map[string]string, envConfigMappings []EnvConfigMapping, envConfigMappingsQuoted []EnvConfigMapping) error {
 	log.Printf("configuring image %s for use in thunderdome", fromImage)
 	buildDir := filepath.Join(workDir, "build")
 	if err := os.Mkdir(buildDir, 0777); err != nil {
@@ -478,7 +497,7 @@ func configureImage(workDir, fromImage, imageName string, labels map[string]stri
 		return fmt.Errorf("copy docker assets: %w", err)
 	}
 
-	if err := writeInitConfigScript(buildDir, envConfigMappings); err != nil {
+	if err := writeInitConfigScript(buildDir, envConfigMappings, envConfigMappingsQuoted); err != nil {
 		return fmt.Errorf("write init config script: %w", err)
 	}
 
@@ -539,7 +558,7 @@ func parseEnvConfigMappings(strs []string) ([]EnvConfigMapping, error) {
 	return ret, nil
 }
 
-func writeInitConfigScript(buildDir string, envConfigMappings []EnvConfigMapping) error {
+func writeInitConfigScript(buildDir string, envConfigMappings []EnvConfigMapping, envConfigMappingsQuoted []EnvConfigMapping) error {
 	if len(envConfigMappings) == 0 {
 		return nil
 	}
@@ -551,6 +570,16 @@ func writeInitConfigScript(buildDir string, envConfigMappings []EnvConfigMapping
 		fmt.Fprintf(b, `  echo "setting %s to $%s"`, ec.ConfigOption, ec.EnvVar)
 		fmt.Fprintln(b)
 		fmt.Fprintf(b, `  ipfs config --json %s "$%s"`, ec.ConfigOption, ec.EnvVar)
+		fmt.Fprintln(b)
+		fmt.Fprint(b, `fi`)
+		fmt.Fprintln(b)
+	}
+	for _, ec := range envConfigMappingsQuoted {
+		fmt.Fprintf(b, `if [ -n "$%s" ]; then`, ec.EnvVar)
+		fmt.Fprintln(b)
+		fmt.Fprintf(b, `  echo "setting %s to $%s"`, ec.ConfigOption, ec.EnvVar)
+		fmt.Fprintln(b)
+		fmt.Fprintf(b, `  ipfs config --json %s "\"$%s\""`, ec.ConfigOption, ec.EnvVar)
 		fmt.Fprintln(b)
 		fmt.Fprint(b, `fi`)
 		fmt.Fprintln(b)
