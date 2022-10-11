@@ -1,6 +1,6 @@
-module "peerset" {
+module "providerdelaylong" {
   source = "./modules/experiment"
-  name   = "peerset-2022-10-10"
+  name   = "providerdelay-long-2022-10-10"
   request_rate = 20
   request_source = "sqs"
 
@@ -32,62 +32,45 @@ module "peerset" {
   ]
 
   targets = {
-    "-600_a" = {
+    "10000ms_a" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-psd-opts3"
       environment = [
-        { name = "TD_KUBO_SWARM_CONNMGR_HIGHWATER", value = "600" },
-        { name = "TD_KUBO_SWARM_CONNMGR_LOWWATER", value = "600" },
+        { name = "TD_KUBO_INTERNAL_BITSWAP_PROVIDERSEARCHDELAY", value = "10000ms" },
       ]
     }
-    "-600_b" = {
+    "10000ms_b" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-psd-opts3"
       environment = [
-        { name = "TD_KUBO_SWARM_CONNMGR_HIGHWATER", value = "600" },
-        { name = "TD_KUBO_SWARM_CONNMGR_LOWWATER", value = "600" },
+        { name = "TD_KUBO_INTERNAL_BITSWAP_PROVIDERSEARCHDELAY", value = "10000ms" }
       ]
     }
-    "2000_a" = {
+    "20000ms_a" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-psd-opts3"
       environment = [
-        { name = "TD_KUBO_SWARM_CONNMGR_HIGHWATER", value = "2000" },
-        { name = "TD_KUBO_SWARM_CONNMGR_LOWWATER", value = "2000" },
+        { name = "TD_KUBO_INTERNAL_BITSWAP_PROVIDERSEARCHDELAY", value = "20000ms" }
       ]
     }
-    "2000_b" = {
+    "20000ms_b" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-psd-opts3"
       environment = [
-        { name = "TD_KUBO_SWARM_CONNMGR_HIGHWATER", value = "2000" },
-        { name = "TD_KUBO_SWARM_CONNMGR_LOWWATER", value = "2000" },
+        { name = "TD_KUBO_INTERNAL_BITSWAP_PROVIDERSEARCHDELAY", value = "20000ms" }
       ]
     }
-    "5000_a" = {
+    "30000ms_a" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-psd-opts3"
       environment = [
-        { name = "TD_KUBO_SWARM_CONNMGR_HIGHWATER", value = "5000" },
-        { name = "TD_KUBO_SWARM_CONNMGR_LOWWATER", value = "5000" },
+        { name = "TD_KUBO_INTERNAL_BITSWAP_PROVIDERSEARCHDELAY", value = "30000ms" }
       ]
     }
-    "5000_b" = {
+    "30000ms_b" = {
       image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-psd-opts3"
       environment = [
-        { name = "TD_KUBO_SWARM_CONNMGR_HIGHWATER", value = "5000" },
-        { name = "TD_KUBO_SWARM_CONNMGR_LOWWATER", value = "5000" },
-      ]
-    }
-    "9000_a" = {
-      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-psd-opts3"
-      environment = [
-        { name = "TD_KUBO_SWARM_CONNMGR_HIGHWATER", value = "9000" },
-        { name = "TD_KUBO_SWARM_CONNMGR_LOWWATER", value = "9000" },
-      ]
-    }
-    "9000_b" = {
-      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-psd-opts3"
-      environment = [
-        { name = "TD_KUBO_SWARM_CONNMGR_HIGHWATER", value = "9000" },
-        { name = "TD_KUBO_SWARM_CONNMGR_LOWWATER", value = "9000" },
+        { name = "TD_KUBO_EXPERIMENTAL_ACCELERATEDDHTCLIENT", value = "false" },
+        { name = "TD_KUBO_INTERNAL_BITSWAP_PROVIDERSEARCHDELAY", value = "30000ms" }
       ]
     }
   }
 }
+
+
 
