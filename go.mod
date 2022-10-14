@@ -23,6 +23,8 @@ require (
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 )
 
+replace github.com/pkg/profile => github.com/iand/profile v0.0.0-20220825113751-13692ce5785f
+
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
