@@ -1,4 +1,4 @@
-package main
+package prom
 
 import (
 	"context"
@@ -19,7 +19,7 @@ type PrometheusServer struct {
 	pe   *promexp.Exporter
 }
 
-func NewPrometheusServer(addr string) (*PrometheusServer, error) {
+func NewPrometheusServer(addr string, appName string) (*PrometheusServer, error) {
 	pe, err := promexp.NewExporter(promexp.Options{
 		Namespace:  appName,
 		Registerer: prom.DefaultRegisterer,
@@ -52,7 +52,7 @@ func (p *PrometheusServer) Run(ctx context.Context) error {
 	return server.ListenAndServe()
 }
 
-func newPrometheusCounter(name string, help string) (prometheus.Counter, error) {
+func NewPrometheusCounter(appName string, name string, help string) (prometheus.Counter, error) {
 	m := prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace:   "thunderdome",
@@ -72,7 +72,7 @@ func newPrometheusCounter(name string, help string) (prometheus.Counter, error) 
 	return m, nil
 }
 
-func newPrometheusGauge(name string, help string) (prometheus.Gauge, error) {
+func NewPrometheusGauge(appName string, name string, help string) (prometheus.Gauge, error) {
 	m := prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace:   "thunderdome",

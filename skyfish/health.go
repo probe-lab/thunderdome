@@ -9,8 +9,7 @@ import (
 
 // Some global counts that will be periodically logged
 var (
-	totalRequestsReceived atomic.Int64
-	totalRequestsSent     atomic.Int64
+	totalRequestsSent atomic.Int64
 )
 
 type Health struct{}
@@ -24,7 +23,7 @@ func (h *Health) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			log.Printf("sent %d requests of %d received", totalRequestsSent.Load(), totalRequestsReceived.Load())
+			log.Printf("sent %d requests", totalRequestsSent.Load())
 		}
 	}
 }

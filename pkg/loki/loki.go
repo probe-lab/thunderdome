@@ -1,4 +1,4 @@
-package main
+package loki
 
 import (
 	"context"
@@ -18,13 +18,13 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/config"
+
+	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
 )
 
 const (
 	tailPath = "/loki/api/v1/tail"
 )
-
-var userAgent = fmt.Sprintf("%s/0.1", appName)
 
 type Request struct {
 	Method    string            `json:"method"`
@@ -50,6 +50,7 @@ type LokiTailer struct {
 }
 
 type LokiConfig struct {
+	AppName   string
 	URI       string // URI of the loki server, e.g. https://logs-prod-us-central1.grafana.net
 	Username  string // For grafana cloud this is a numeric user id
 	Password  string // For grafana cloud this is the API token
@@ -71,7 +72,8 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 
 	var err error
 
-	l.requestsIncomingCounter, err = newPrometheusCounter(
+	l.requestsIncomingCounter, err = prom.NewPrometheusCounter(
+		cfg.AppName,
 		"loki_requests_incoming_total",
 		"The total number of requests read from loki.",
 	)
@@ -79,7 +81,8 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	l.requestsDroppedCounter, err = newPrometheusCounter(
+	l.requestsDroppedCounter, err = prom.NewPrometheusCounter(
+		cfg.AppName,
 		"loki_requests_dropped_total",
 		"The total number of requests that could not be sent to the publisher.",
 	)
@@ -87,7 +90,8 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	l.errorCounter, err = newPrometheusCounter(
+	l.errorCounter, err = prom.NewPrometheusCounter(
+		cfg.AppName,
 		"loki_error_total",
 		"The total number of errors encountered when reading from loki.",
 	)
@@ -95,7 +99,8 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	l.connectedGauge, err = newPrometheusGauge(
+	l.connectedGauge, err = prom.NewPrometheusGauge(
+		cfg.AppName,
 		"loki_connected",
 		"Indicates whether the tailer is connected to loki.",
 	)
@@ -141,7 +146,6 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 		for _, stream := range tr.Streams {
 			for _, entry := range stream.Values {
 				l.requestsIncomingCounter.Add(1)
-				totalRequestsReceived.Add(1)
 
 				var line logline
 				err := json.Unmarshal([]byte(entry.Line()), &line)
@@ -285,7 +289,7 @@ func (l *LokiTailer) getHTTPRequestHeader() (http.Header, error) {
 		)
 	}
 
-	h.Set("User-Agent", userAgent)
+	h.Set("User-Agent", fmt.Sprintf("%s/0.1", l.cfg.AppName))
 
 	if l.cfg.OrgID != "" {
 		h.Set("X-Scope-OrgID", l.cfg.OrgID)

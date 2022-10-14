@@ -15,6 +15,9 @@ import (
 	"github.com/pkg/profile"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
+	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
 )
 
 const appName = "skyfish"
@@ -113,7 +116,8 @@ func main() {
 func Run(cc *cli.Context) error {
 	ctx := cc.Context
 
-	cfg := &LokiConfig{
+	cfg := &loki.LokiConfig{
+		AppName:  appName,
 		URI:      flags.lokiURI,
 		Username: flags.lokiUsername,
 		Password: flags.lokiPassword,
@@ -122,14 +126,14 @@ func Run(cc *cli.Context) error {
 
 	rg := &RunGroup{}
 
-	source, err := NewLokiTailer(cfg)
+	source, err := loki.NewLokiTailer(cfg)
 	if err != nil {
 		return fmt.Errorf("loki source: %w", err)
 	}
 	rg.Add(source)
 
 	if flags.prometheusAddr != "" {
-		ps, err := NewPrometheusServer(flags.prometheusAddr)
+		ps, err := prom.NewPrometheusServer(flags.prometheusAddr, appName)
 		if err != nil {
 			return fmt.Errorf("start prometheus: %w", err)
 		}

@@ -11,12 +11,15 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
+	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
 )
 
 const MaxMessageSize = 256 * 1024 // sns has 256kb max message size
 
 type Publisher struct {
-	reqs                <-chan Request
+	reqs                <-chan loki.Request
 	awscfg              *aws.Config
 	topicArn            string
 	snsErrorCounter     prometheus.Counter
@@ -26,14 +29,15 @@ type Publisher struct {
 	connectedGauge      prometheus.Gauge
 }
 
-func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan Request) (*Publisher, error) {
+func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan loki.Request) (*Publisher, error) {
 	p := &Publisher{
 		reqs:     reqs,
 		awscfg:   awscfg,
 		topicArn: topicArn,
 	}
 	var err error
-	p.connectedGauge, err = newPrometheusGauge(
+	p.connectedGauge, err = prom.NewPrometheusGauge(
+		appName,
 		"publisher_connected",
 		"Indicates whether the application is connected to sns.",
 	)
@@ -41,7 +45,8 @@ func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan Request) (*Pu
 		return nil, fmt.Errorf("new gauge: %w", err)
 	}
 
-	p.snsErrorCounter, err = newPrometheusCounter(
+	p.snsErrorCounter, err = prom.NewPrometheusCounter(
+		appName,
 		"publisher_sns_error_total",
 		"The total number of errors encountered when publishing requests to sns.",
 	)
@@ -49,7 +54,8 @@ func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan Request) (*Pu
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	p.processErrorCounter, err = newPrometheusCounter(
+	p.processErrorCounter, err = prom.NewPrometheusCounter(
+		appName,
 		"publisher_process_error_total",
 		"The total number of errors encountered when preparing requests to be published.",
 	)
@@ -57,7 +63,8 @@ func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan Request) (*Pu
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	p.messagesCounter, err = newPrometheusCounter(
+	p.messagesCounter, err = prom.NewPrometheusCounter(
+		appName,
 		"publisher_sns_messages_total",
 		"The total number of sns messages published.",
 	)
@@ -65,7 +72,8 @@ func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan Request) (*Pu
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	p.requestsCounter, err = newPrometheusCounter(
+	p.requestsCounter, err = prom.NewPrometheusCounter(
+		appName,
 		"publisher_requests_total",
 		"The total number of requests published in messages.",
 	)
