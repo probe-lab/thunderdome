@@ -26,19 +26,10 @@ const (
 	tailPath = "/loki/api/v1/tail"
 )
 
-type Request struct {
-	Method    string            `json:"method"`
-	URI       string            `json:"uri"`
-	Body      []byte            `json:"body,omitempty"`
-	Header    map[string]string `json:"header"`
-	Status    int               `json:"status"` // status as reported by original server
-	Timestamp time.Time         `json:"ts"`     // time the request was created
-}
-
 // LokiTailer reads a stream of nginx logs from Loki
 type LokiTailer struct {
 	cfg                     LokiConfig
-	ch                      chan Request
+	ch                      chan LogLine
 	shutdown                chan struct{} // semaphore to indicate that shutdown has been called
 	requestsDroppedCounter  prometheus.Counter
 	requestsIncomingCounter prometheus.Counter
@@ -60,6 +51,15 @@ type LokiConfig struct {
 	TLSConfig config.TLSConfig
 }
 
+type LogLine struct {
+	Server  string            `json:"server"`
+	Time    time.Time         `json:"time"`
+	Method  string            `json:"method"`
+	URI     string            `json:"uri"`
+	Status  int               `json:"status"`
+	Headers map[string]string `json:"headers"`
+}
+
 func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
@@ -67,7 +67,7 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 	l := &LokiTailer{
 		cfg:      *cfg,
 		shutdown: make(chan struct{}, 0),
-		ch:       make(chan Request, 100*60*30),
+		ch:       make(chan LogLine, 100*60*30),
 	}
 
 	commonLabels := map[string]string{}
@@ -116,7 +116,7 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 	return l, nil
 }
 
-func (l *LokiTailer) Chan() <-chan Request {
+func (l *LokiTailer) Chan() <-chan LogLine {
 	return l.ch
 }
 
@@ -125,15 +125,6 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 		return err
 	}
 	defer l.connectedGauge.Set(0)
-
-	type logline struct {
-		Server  string            `json:"server"`
-		Time    time.Time         `json:"time"`
-		Method  string            `json:"method"`
-		URI     string            `json:"uri"`
-		Status  int               `json:"status"`
-		Headers map[string]string `json:"headers"`
-	}
 
 	defer close(l.ch)
 
@@ -152,19 +143,11 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 			for _, entry := range stream.Values {
 				l.requestsIncomingCounter.Add(1)
 
-				var line logline
+				var line LogLine
 				err := json.Unmarshal([]byte(entry.Line()), &line)
 				if err != nil {
 					l.errorCounter.Add(1)
 					continue
-				}
-
-				req := Request{
-					Method:    line.Method,
-					URI:       line.URI,
-					Header:    line.Headers,
-					Status:    line.Status,
-					Timestamp: line.Time,
 				}
 
 				select {
@@ -174,7 +157,7 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 				case <-ctx.Done():
 					l.Shutdown(context.Background())
 					return ctx.Err()
-				case l.ch <- req:
+				case l.ch <- line:
 				}
 
 			}

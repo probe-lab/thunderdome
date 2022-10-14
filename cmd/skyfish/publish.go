@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -14,12 +15,13 @@ import (
 
 	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
 	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
+	"github.com/ipfs-shipyard/thunderdome/pkg/request"
 )
 
 const MaxMessageSize = 256 * 1024 // sns has 256kb max message size
 
 type Publisher struct {
-	reqs                <-chan loki.Request
+	logch               <-chan loki.LogLine
 	awscfg              *aws.Config
 	topicArn            string
 	snsErrorCounter     prometheus.Counter
@@ -29,9 +31,18 @@ type Publisher struct {
 	connectedGauge      prometheus.Gauge
 }
 
-func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan loki.Request) (*Publisher, error) {
+type Request struct {
+	Method    string            `json:"method"`
+	URI       string            `json:"uri"`
+	Body      []byte            `json:"body,omitempty"`
+	Header    map[string]string `json:"header"`
+	Status    int               `json:"status"` // status as reported by original server
+	Timestamp time.Time         `json:"ts"`     // time the request was created
+}
+
+func NewPublisher(awscfg *aws.Config, topicArn string, logch <-chan loki.LogLine) (*Publisher, error) {
 	p := &Publisher{
-		reqs:     reqs,
+		logch:    logch,
 		awscfg:   awscfg,
 		topicArn: topicArn,
 	}
@@ -113,9 +124,17 @@ func (p *Publisher) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case r, ok := <-p.reqs:
+		case ll, ok := <-p.logch:
 			if !ok {
 				return fmt.Errorf("request channel closed")
+			}
+
+			r := request.Request{
+				Method:    ll.Method,
+				URI:       ll.URI,
+				Header:    ll.Headers,
+				Status:    ll.Status,
+				Timestamp: ll.Time,
 			}
 
 			data, err := json.Marshal(r)

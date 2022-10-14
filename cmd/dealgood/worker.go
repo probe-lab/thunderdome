@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipfs-shipyard/thunderdome/pkg/request"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -57,7 +58,7 @@ func (w *Worker) Run(ctx context.Context, wg *sync.WaitGroup, results chan *Requ
 	}
 }
 
-func (w *Worker) timeRequest(ctx context.Context, r *Request) *RequestTiming {
+func (w *Worker) timeRequest(ctx context.Context, r *request.Request) *RequestTiming {
 	req, err := newRequest(ctx, w.Target, r)
 	if err != nil {
 		if w.PrintFailures {
@@ -139,7 +140,7 @@ func (w *Worker) timeRequest(ctx context.Context, r *Request) *RequestTiming {
 	}
 }
 
-func newRequest(ctx context.Context, t *Target, r *Request) (*http.Request, error) {
+func newRequest(ctx context.Context, t *Target, r *request.Request) (*http.Request, error) {
 	req := &http.Request{
 		Method: r.Method,
 		URL: &url.URL{
@@ -216,7 +217,7 @@ func targetsReady(ctx context.Context, targets []*Target, quiet bool, interactiv
 					Timeout:   2 * time.Second,
 				}
 
-				req, err := newRequest(ctx, target, &Request{Method: "GET", URI: "/"})
+				req, err := newRequest(ctx, target, &request.Request{Method: "GET", URI: "/"})
 				if err != nil {
 					return fmt.Errorf("new request to target: %w", err)
 				}

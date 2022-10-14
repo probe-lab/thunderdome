@@ -20,15 +20,8 @@ import (
 
 	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
 	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
+	"github.com/ipfs-shipyard/thunderdome/pkg/request"
 )
-
-type Request struct {
-	Method    string            `json:"method"`
-	URI       string            `json:"uri"`
-	Body      []byte            `json:"body,omitempty"`
-	Header    map[string]string `json:"header"`
-	Timestamp time.Time         `json:"ts"` // time the request was created
-}
 
 // A RequestSource is a provider of a stream of requests that can be sent to workers.
 type RequestSource interface {
@@ -40,7 +33,7 @@ type RequestSource interface {
 
 	// Chan is a channel that can be used to read requests produced by the source.
 	// This channel will be closed when the stream ends.
-	Chan() <-chan Request
+	Chan() <-chan request.Request
 
 	// Err returns any error that was encountered while processing the stream.
 	Err() error
@@ -116,7 +109,7 @@ func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, e
 // StdinRequestSource is a request source that reads a stream of JSON requests
 // from stdin.
 type StdinRequestSource struct {
-	ch      chan Request
+	ch      chan request.Request
 	done    chan struct{}
 	filter  RequestFilter
 	metrics *RequestSourceMetrics
@@ -130,7 +123,7 @@ var _ RequestSource = (*StdinRequestSource)(nil)
 func NewStdinRequestSource(filter RequestFilter, metrics *RequestSourceMetrics) *StdinRequestSource {
 	return &StdinRequestSource{
 		done:    make(chan struct{}),
-		ch:      make(chan Request),
+		ch:      make(chan request.Request),
 		filter:  filter,
 		metrics: metrics,
 	}
@@ -140,7 +133,7 @@ func (s *StdinRequestSource) Name() string {
 	return "stdin"
 }
 
-func (s *StdinRequestSource) Chan() <-chan Request {
+func (s *StdinRequestSource) Chan() <-chan request.Request {
 	return s.ch
 }
 
@@ -154,7 +147,7 @@ func (s *StdinRequestSource) Start() error {
 		for scanner.Scan() {
 			s.metrics.requestsIncoming.Add(1)
 			data := scanner.Bytes()
-			var req Request
+			var req request.Request
 			if err := json.Unmarshal(data, &req); err != nil {
 				s.metrics.errors.Add(1)
 				log.Printf("failed to unmarshal request: %v", err)
@@ -191,19 +184,19 @@ func (s *StdinRequestSource) Err() error {
 // from a list of requests.
 type RandomRequestSource struct {
 	name    string
-	reqs    []*Request
+	reqs    []*request.Request
 	rng     *rand.Rand
-	ch      chan Request
+	ch      chan request.Request
 	done    chan struct{}
 	filter  RequestFilter
 	metrics *RequestSourceMetrics
 }
 
-func NewRandomRequestSource(filter RequestFilter, metrics *RequestSourceMetrics, reqs []*Request) *RandomRequestSource {
+func NewRandomRequestSource(filter RequestFilter, metrics *RequestSourceMetrics, reqs []*request.Request) *RandomRequestSource {
 	return &RandomRequestSource{
 		reqs:    reqs,
 		rng:     rand.New(rand.NewSource(time.Now().UnixNano())),
-		ch:      make(chan Request),
+		ch:      make(chan request.Request),
 		filter:  filter,
 		metrics: metrics,
 	}
@@ -213,7 +206,7 @@ func (s *RandomRequestSource) Name() string {
 	return s.name
 }
 
-func (r *RandomRequestSource) Chan() <-chan Request {
+func (r *RandomRequestSource) Chan() <-chan request.Request {
 	return r.ch
 }
 
@@ -258,7 +251,7 @@ func (r *RandomRequestSource) Err() error {
 // that will serve the requests at random. Requests are filtered to GET
 // and paths /ipfs and /ipns
 func NewNginxLogRequestSource(fname string, filter RequestFilter, metrics *RequestSourceMetrics) (*RandomRequestSource, error) {
-	var reqs []*Request
+	var reqs []*request.Request
 
 	f, err := os.Open(fname)
 	if err != nil {
@@ -283,7 +276,7 @@ func NewNginxLogRequestSource(fname string, filter RequestFilter, metrics *Reque
 			continue
 		}
 
-		reqs = append(reqs, &Request{
+		reqs = append(reqs, &request.Request{
 			Method: fields[0],
 			URI:    fields[1],
 		})
@@ -346,32 +339,32 @@ var samplePathsIPNS = []string{
 	"/ipns/fromthemachine.org/ARTIMESIAN.html",
 }
 
-func sampleRequests() []*Request {
+func sampleRequests() []*request.Request {
 	paths := []string{}
 	paths = append(paths, samplePathsIPFS...)
 	paths = append(paths, samplePathsIPNS...)
 	return permutePaths(paths)
 }
 
-func permuteSamplePathsIPFS() []*Request {
+func permuteSamplePathsIPFS() []*request.Request {
 	return permutePaths(samplePathsIPFS)
 }
 
-func permuteSamplePathsIPNS() []*Request {
+func permuteSamplePathsIPNS() []*request.Request {
 	return permutePaths(samplePathsIPNS)
 }
 
-func permutePaths(paths []string) []*Request {
+func permutePaths(paths []string) []*request.Request {
 	headerVariants := []map[string]string{
 		{},
 		{"Accept": "application/vnd.ipld.car"},
 		{"Accept": "application/vnd.ipld.raw"},
 	}
 
-	reqs := make([]*Request, 0, len(paths)*len(headerVariants))
+	reqs := make([]*request.Request, 0, len(paths)*len(headerVariants))
 	for _, p := range paths {
 		for _, h := range headerVariants {
-			req := &Request{
+			req := &request.Request{
 				Method: "GET",
 				URI:    p,
 				Header: map[string]string{},
@@ -391,7 +384,7 @@ func permutePaths(paths []string) []*Request {
 // LokiRequestSource is a request source that reads a stream of nginx logs from Loki
 type LokiRequestSource struct {
 	cfg     loki.LokiConfig
-	ch      chan Request
+	ch      chan request.Request
 	done    chan struct{}
 	filter  RequestFilter
 	metrics *RequestSourceMetrics
@@ -414,7 +407,7 @@ func NewLokiRequestSource(cfg *loki.LokiConfig, filter RequestFilter, metrics *R
 	}
 	l := &LokiRequestSource{
 		cfg:     *cfg,
-		ch:      make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
+		ch:      make(chan request.Request, rps*60*30), // buffer at least 30 minutes of requests
 		done:    make(chan struct{}, 0),
 		filter:  filter,
 		metrics: metrics,
@@ -427,7 +420,7 @@ func (l *LokiRequestSource) Name() string {
 	return "loki"
 }
 
-func (l *LokiRequestSource) Chan() <-chan Request {
+func (l *LokiRequestSource) Chan() <-chan request.Request {
 	return l.ch
 }
 
@@ -456,12 +449,12 @@ func (l *LokiRequestSource) Start() error {
 			select {
 			case <-ctx.Done():
 				return
-			case r := <-source.Chan():
-				l.ch <- Request{
-					Method:    r.Method,
-					URI:       r.URI,
-					Header:    r.Header,
-					Timestamp: r.Timestamp,
+			case ll := <-source.Chan():
+				l.ch <- request.Request{
+					Method:    ll.Method,
+					URI:       ll.URI,
+					Header:    ll.Headers,
+					Timestamp: ll.Time,
 				}
 			}
 		}
@@ -492,7 +485,7 @@ type SQSConfig struct {
 
 type SQSRequestSource struct {
 	cfg     SQSConfig
-	ch      chan Request
+	ch      chan request.Request
 	done    chan struct{}
 	filter  RequestFilter
 	metrics *RequestSourceMetrics
@@ -509,7 +502,7 @@ func NewSQSRequestSource(cfg *SQSConfig, filter RequestFilter, metrics *RequestS
 	}
 	s := &SQSRequestSource{
 		cfg:     *cfg,
-		ch:      make(chan Request, rps*60*30), // buffer at least 30 minutes of requests
+		ch:      make(chan request.Request, rps*60*30), // buffer at least 30 minutes of requests
 		done:    make(chan struct{}, 0),
 		filter:  filter,
 		metrics: metrics,
@@ -522,7 +515,7 @@ func (s *SQSRequestSource) Name() string {
 	return "sns"
 }
 
-func (s *SQSRequestSource) Chan() <-chan Request {
+func (s *SQSRequestSource) Chan() <-chan request.Request {
 	return s.ch
 }
 
@@ -598,7 +591,7 @@ func (s *SQSRequestSource) Start() error {
 				for scanner.Scan() {
 					s.metrics.requestsIncoming.Add(1)
 					data := scanner.Bytes()
-					var req Request
+					var req request.Request
 					if err := json.Unmarshal(data, &req); err != nil {
 						s.metrics.errors.Add(1)
 						log.Printf("failed to unmarshal request: %v", err)

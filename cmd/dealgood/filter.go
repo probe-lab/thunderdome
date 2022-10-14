@@ -3,19 +3,20 @@ package main
 import (
 	"strings"
 
+	"github.com/ipfs-shipyard/thunderdome/pkg/request"
 	ipfspath "github.com/ipfs/go-path"
 )
 
 // A RequestFilter reports whether a request meets a condition
-type RequestFilter func(*Request) bool
+type RequestFilter func(*request.Request) bool
 
 // A NullRequestFilter allows every request to pass
-func NullRequestFilter(*Request) bool {
+func NullRequestFilter(*request.Request) bool {
 	return true
 }
 
 // A PathRequestFilter only allows path requests to pass
-func PathRequestFilter(req *Request) bool {
+func PathRequestFilter(req *request.Request) bool {
 	if req.Method != "GET" {
 		return false
 	}
@@ -26,7 +27,7 @@ func PathRequestFilter(req *Request) bool {
 }
 
 // A ValidPathRequestFilter only allows valid path requests to pass
-func ValidPathRequestFilter(req *Request) bool {
+func ValidPathRequestFilter(req *request.Request) bool {
 	if !PathRequestFilter(req) {
 		return false
 	}

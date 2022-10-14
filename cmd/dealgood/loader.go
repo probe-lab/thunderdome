@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipfs-shipyard/thunderdome/pkg/request"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/http2"
 )
@@ -168,7 +169,7 @@ loop:
 			l.rateGauge.WithLabelValues(l.ExperimentName).Set(float64(l.Rate))
 			l.concurrencyGauge.WithLabelValues(l.ExperimentName).Set(float64(l.Concurrency))
 
-			var req Request
+			var req request.Request
 			var ok bool
 
 			// Do we have a request available

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
+
+	"github.com/ipfs-shipyard/thunderdome/pkg/request"
 )
 
 type ExperimentJSON struct {
@@ -29,12 +31,12 @@ type Experiment struct {
 }
 
 type Target struct {
-	Name        string        // short name of the target to be used in reports and metrics
-	BaseURL     string        // base URL of the target (without a path)
-	HostName    string        // the name of the host to be sent in the Host header of requests (may be different to the target's own host name)
-	URLScheme   string        // http or https
-	RawHostPort string        // hostname and port of target as derived from the URL
-	Requests    chan *Request // channel used to receive requests to be issued to the target
+	Name        string                // short name of the target to be used in reports and metrics
+	BaseURL     string                // base URL of the target (without a path)
+	HostName    string                // the name of the host to be sent in the Host header of requests (may be different to the target's own host name)
+	URLScheme   string                // http or https
+	RawHostPort string                // hostname and port of target as derived from the URL
+	Requests    chan *request.Request // channel used to receive requests to be issued to the target
 
 	mu               sync.Mutex // guards accesses to hostPort which may change over time
 	resolvedHostPort string
@@ -108,7 +110,7 @@ func newExperiment(expjson *ExperimentJSON) (*Experiment, error) {
 			URLScheme:        u.Scheme,
 			RawHostPort:      u.Host,
 			resolvedHostPort: u.Host,
-			Requests:         make(chan *Request),
+			Requests:         make(chan *request.Request),
 		}
 
 		// allow host to be overridden
