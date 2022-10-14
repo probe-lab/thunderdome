@@ -12,8 +12,6 @@ import (
 	"go.opencensus.io/stats/view"
 )
 
-var commonLabels = map[string]string{}
-
 type PrometheusServer struct {
 	addr string
 	pe   *promexp.Exporter
@@ -52,14 +50,14 @@ func (p *PrometheusServer) Run(ctx context.Context) error {
 	return server.ListenAndServe()
 }
 
-func NewPrometheusCounter(appName string, name string, help string) (prometheus.Counter, error) {
+func NewPrometheusCounter(appName string, name string, help string, labels map[string]string) (prometheus.Counter, error) {
 	m := prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace:   "thunderdome",
 			Subsystem:   appName,
 			Name:        name,
 			Help:        help,
-			ConstLabels: commonLabels,
+			ConstLabels: labels,
 		},
 	)
 	if err := prometheus.Register(m); err != nil {
@@ -72,14 +70,14 @@ func NewPrometheusCounter(appName string, name string, help string) (prometheus.
 	return m, nil
 }
 
-func NewPrometheusGauge(appName string, name string, help string) (prometheus.Gauge, error) {
+func NewPrometheusGauge(appName string, name string, help string, labels map[string]string) (prometheus.Gauge, error) {
 	m := prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace:   "thunderdome",
 			Subsystem:   appName,
 			Name:        name,
 			Help:        help,
-			ConstLabels: commonLabels,
+			ConstLabels: labels,
 		},
 	)
 	if err := prometheus.Register(m); err != nil {

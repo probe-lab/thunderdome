@@ -35,11 +35,14 @@ func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan loki.Request)
 		awscfg:   awscfg,
 		topicArn: topicArn,
 	}
+
+	commonLabels := map[string]string{}
 	var err error
 	p.connectedGauge, err = prom.NewPrometheusGauge(
 		appName,
 		"publisher_connected",
 		"Indicates whether the application is connected to sns.",
+		commonLabels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new gauge: %w", err)
@@ -49,6 +52,7 @@ func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan loki.Request)
 		appName,
 		"publisher_sns_error_total",
 		"The total number of errors encountered when publishing requests to sns.",
+		commonLabels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
@@ -58,6 +62,7 @@ func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan loki.Request)
 		appName,
 		"publisher_process_error_total",
 		"The total number of errors encountered when preparing requests to be published.",
+		commonLabels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
@@ -67,6 +72,7 @@ func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan loki.Request)
 		appName,
 		"publisher_sns_messages_total",
 		"The total number of sns messages published.",
+		commonLabels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
@@ -76,6 +82,7 @@ func NewPublisher(awscfg *aws.Config, topicArn string, reqs <-chan loki.Request)
 		appName,
 		"publisher_requests_total",
 		"The total number of requests published in messages.",
+		commonLabels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)

@@ -70,12 +70,14 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 		ch:       make(chan Request, 100*60*30),
 	}
 
+	commonLabels := map[string]string{}
 	var err error
 
 	l.requestsIncomingCounter, err = prom.NewPrometheusCounter(
 		cfg.AppName,
 		"loki_requests_incoming_total",
 		"The total number of requests read from loki.",
+		commonLabels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
@@ -85,6 +87,7 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 		cfg.AppName,
 		"loki_requests_dropped_total",
 		"The total number of requests that could not be sent to the publisher.",
+		commonLabels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
@@ -94,6 +97,7 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 		cfg.AppName,
 		"loki_error_total",
 		"The total number of errors encountered when reading from loki.",
+		commonLabels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new counter: %w", err)
@@ -103,6 +107,7 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 		cfg.AppName,
 		"loki_connected",
 		"Indicates whether the tailer is connected to loki.",
+		commonLabels,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("new gauge: %w", err)

@@ -22,6 +22,8 @@ import (
 	"github.com/grafana/loki/pkg/util/unmarshal"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/config"
+
+	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
 )
 
 type Request struct {
@@ -62,7 +64,8 @@ func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, e
 	s := &RequestSourceMetrics{}
 
 	var err error
-	s.requestsDropped, err = newPrometheusCounter(
+	s.requestsDropped, err = prom.NewPrometheusCounter(
+		appName,
 		"source_requests_dropped_total",
 		"The total number of requests dropped by the request source due to targets falling behind.",
 		labels,
@@ -71,7 +74,8 @@ func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, e
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	s.requestsFiltered, err = newPrometheusCounter(
+	s.requestsFiltered, err = prom.NewPrometheusCounter(
+		appName,
 		"source_requests_filtered_total",
 		"The total number of requests ignored by the request source due to filter rules.",
 		labels,
@@ -80,7 +84,8 @@ func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, e
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	s.requestsIncoming, err = newPrometheusCounter(
+	s.requestsIncoming, err = prom.NewPrometheusCounter(
+		appName,
 		"source_requests_incoming_total",
 		"The total number of requests read from the request source.",
 		labels,
@@ -89,7 +94,8 @@ func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, e
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	s.errors, err = newPrometheusCounter(
+	s.errors, err = prom.NewPrometheusCounter(
+		appName,
 		"source_error_total",
 		"The total number of errors encountered when reading from request source.",
 		labels,
@@ -98,7 +104,8 @@ func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, e
 		return nil, fmt.Errorf("new counter: %w", err)
 	}
 
-	s.connected, err = newPrometheusGauge(
+	s.connected, err = prom.NewPrometheusGauge(
+		appName,
 		"source_connected",
 		"Indicates whether the request source is connected to its provider of requests.",
 		labels,
