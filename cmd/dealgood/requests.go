@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -15,14 +16,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/gorilla/websocket"
-	"github.com/grafana/loki/pkg/logcli/client"
-	"github.com/grafana/loki/pkg/logcli/query"
-	"github.com/grafana/loki/pkg/loghttp"
-	"github.com/grafana/loki/pkg/util/unmarshal"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/config"
 
+	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
 	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
 )
 
@@ -394,25 +390,25 @@ func permutePaths(paths []string) []*Request {
 
 // LokiRequestSource is a request source that reads a stream of nginx logs from Loki
 type LokiRequestSource struct {
-	cfg     LokiConfig
+	cfg     loki.LokiConfig
 	ch      chan Request
 	done    chan struct{}
 	filter  RequestFilter
 	metrics *RequestSourceMetrics
 
-	mu   sync.Mutex // guards following fields
-	conn *websocket.Conn
-	err  error
+	mu     sync.Mutex // guards following fields
+	cancel func()
+	err    error
 }
 
-type LokiConfig struct {
-	URI      string // URI of the loki server, e.g. https://logs-prod-us-central1.grafana.net
-	Username string // For grafana cloud this is a numeric user id
-	Password string // For grafana cloud this is the API token
-	Query    string // the query to use to obtain logs
-}
+// type LokiConfig struct {
+// 	URI      string // URI of the loki server, e.g. https://logs-prod-us-central1.grafana.net
+// 	Username string // For grafana cloud this is a numeric user id
+// 	Password string // For grafana cloud this is the API token
+// 	Query    string // the query to use to obtain logs
+// }
 
-func NewLokiRequestSource(cfg *LokiConfig, filter RequestFilter, metrics *RequestSourceMetrics, rps int) (*LokiRequestSource, error) {
+func NewLokiRequestSource(cfg *loki.LokiConfig, filter RequestFilter, metrics *RequestSourceMetrics, rps int) (*LokiRequestSource, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
@@ -436,152 +432,57 @@ func (l *LokiRequestSource) Chan() <-chan Request {
 }
 
 func (l *LokiRequestSource) Start() error {
-	client := &client.DefaultClient{
-		TLSConfig: config.TLSConfig{},
-		Address:   l.cfg.URI,
-		Username:  l.cfg.Username,
-		Password:  l.cfg.Password,
+	source, err := loki.NewLokiTailer(&l.cfg)
+	if err != nil {
+		return fmt.Errorf("loki source: %w", err)
 	}
 
-	q := &query.Query{
-		Limit:       100,
-		QueryString: l.cfg.Query,
-		Start:       time.Now().Add(-60 * time.Minute),
-		End:         time.Now(),
-		BatchSize:   1000,
-	}
-
-	if err := l.connect(client, q); err != nil {
-		return err
-	}
-	defer l.metrics.connected.Set(0)
-
-	type logline struct {
-		Server  string            `json:"server"`
-		Time    time.Time         `json:"time"`
-		Method  string            `json:"method"`
-		URI     string            `json:"uri"`
-		Status  int               `json:"status"`
-		Headers map[string]string `json:"headers"`
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	l.mu.Lock()
+	l.cancel = cancel
+	l.mu.Unlock()
 
 	go func() {
-		defer close(l.ch)
+		if err := source.Run(ctx); err != nil {
+			log.Printf("loki source failed: %v", err)
+			l.mu.Lock()
+			l.err = err
+			l.mu.Unlock()
+		}
+	}()
 
+	go func() {
 		for {
-			tr, ok := l.readTailResponse()
-			if !ok {
-				log.Printf("failed to read tail from loki: %v", l.err)
-				if err := l.connect(client, q); err != nil {
-					l.metrics.errors.Add(1)
-					log.Printf("failed to connect to loki: %v", err)
-					time.Sleep(30 * time.Second)
-				}
-				continue
-			}
-			for _, stream := range tr.Streams {
-				for _, entry := range stream.Entries {
-					l.metrics.requestsIncoming.Add(1)
-
-					var line logline
-					err := json.Unmarshal([]byte(entry.Line), &line)
-					if err != nil {
-						l.metrics.errors.Add(1)
-						continue
-					}
-
-					req := Request{
-						Method:    line.Method,
-						URI:       line.URI,
-						Header:    line.Headers,
-						Timestamp: line.Time,
-					}
-
-					if l.filter != nil && !l.filter(&req) {
-						l.metrics.requestsFiltered.Add(1)
-						continue
-					}
-
-					select {
-					case <-l.done:
-						return
-					case l.ch <- req:
-
-					default:
-						l.metrics.requestsDropped.Add(1)
-					}
-
+			select {
+			case <-ctx.Done():
+				return
+			case r := <-source.Chan():
+				l.ch <- Request{
+					Method:    r.Method,
+					URI:       r.URI,
+					Header:    r.Header,
+					Timestamp: r.Timestamp,
 				}
 			}
-
 		}
 	}()
 
 	return nil
 }
 
-func (l *LokiRequestSource) connect(c *client.DefaultClient, q *query.Query) error {
-	// Clean up if we were previously connected
-	l.mu.Lock()
-	if l.conn != nil {
-		l.conn.Close()
-	}
-	l.conn = nil
-	l.metrics.connected.Set(0)
-	l.mu.Unlock()
-
-	conn, err := c.LiveTailQueryConn(q.QueryString, 0, q.Limit, q.Start, q.Quiet)
-	if err != nil {
-		l.err = fmt.Errorf("tailing logs failed: %w", err)
-		return l.err
-	}
-	l.mu.Lock()
-	l.conn = conn
-	l.mu.Unlock()
-	l.metrics.connected.Set(1)
-	log.Printf("connected to loki: %s", l.cfg.URI)
-	return nil
-}
-
 func (l *LokiRequestSource) Stop() {
-	close(l.done)
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	if l.conn == nil {
-		return
+	if l.cancel != nil {
+		l.cancel()
+		l.cancel = nil
 	}
-
-	if err := l.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
-		l.err = err
-	}
-	l.conn = nil
 }
 
 func (l *LokiRequestSource) Err() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.err
-}
-
-func (l *LokiRequestSource) readTailResponse() (*loghttp.TailResponse, bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if l.conn == nil {
-		l.err = fmt.Errorf("disconnected")
-		return nil, false
-	}
-
-	tr := new(loghttp.TailResponse)
-	err := unmarshal.ReadTailResponseJSON(tr, l.conn)
-	if err != nil {
-		l.err = fmt.Errorf("read tail response json: %w", err)
-		return nil, false
-	}
-
-	return tr, true
 }
 
 type SQSConfig struct {

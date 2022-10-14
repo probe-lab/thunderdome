@@ -22,6 +22,8 @@ import (
 	"go.opentelemetry.io/otel/exporters/zipkin"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
 )
 
 const appName = "dealgood"
@@ -305,7 +307,8 @@ func Run(cc *cli.Context) error {
 			return fmt.Errorf("nginx source: %w", err)
 		}
 	case "loki":
-		cfg := &LokiConfig{
+		cfg := &loki.LokiConfig{
+			AppName:  appName,
 			URI:      flags.lokiURI,
 			Username: flags.lokiUsername,
 			Password: flags.lokiPassword,
