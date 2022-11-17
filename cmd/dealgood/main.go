@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace"
 
+	"github.com/ipfs-shipyard/thunderdome/pkg/filter"
 	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
 )
 
@@ -276,14 +277,14 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("experiment: %w", err)
 	}
 
-	var filter RequestFilter
+	var fltr filter.RequestFilter
 	switch flags.filter {
 	case "all":
-		filter = NullRequestFilter
+		fltr = filter.NullRequestFilter
 	case "pathonly":
-		filter = PathRequestFilter
+		fltr = filter.PathRequestFilter
 	case "validpathonly":
-		filter = ValidPathRequestFilter
+		fltr = filter.ValidPathRequestFilter
 	default:
 		return fmt.Errorf("unsupported filter: %s", flags.filter)
 	}
@@ -300,9 +301,9 @@ func Run(cc *cli.Context) error {
 	var source RequestSource
 	switch flags.source {
 	case "random":
-		source = NewRandomRequestSource(filter, metrics, sampleRequests())
+		source = NewRandomRequestSource(fltr, metrics, sampleRequests())
 	case "nginxlog":
-		source, err = NewNginxLogRequestSource(flags.sourceParam, filter, metrics)
+		source, err = NewNginxLogRequestSource(flags.sourceParam, fltr, metrics)
 		if err != nil {
 			return fmt.Errorf("nginx source: %w", err)
 		}
@@ -315,7 +316,7 @@ func Run(cc *cli.Context) error {
 			Query:    flags.lokiQuery,
 		}
 
-		source, err = NewLokiRequestSource(cfg, filter, metrics, exp.Rate)
+		source, err = NewLokiRequestSource(cfg, fltr, metrics, exp.Rate)
 		if err != nil {
 			return fmt.Errorf("loki source: %w", err)
 		}
@@ -334,12 +335,12 @@ func Run(cc *cli.Context) error {
 			Queue:     flags.sqsQueue,
 		}
 
-		source, err = NewSQSRequestSource(cfg, filter, metrics, exp.Rate)
+		source, err = NewSQSRequestSource(cfg, fltr, metrics, exp.Rate)
 		if err != nil {
 			return fmt.Errorf("sqs source: %w", err)
 		}
 	case "stdin":
-		source = NewStdinRequestSource(filter, metrics)
+		source = NewStdinRequestSource(fltr, metrics)
 	default:
 		return fmt.Errorf("unsupported source: %s", flags.source)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/ipfs-shipyard/thunderdome/pkg/filter"
 	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
 	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
 	"github.com/ipfs-shipyard/thunderdome/pkg/request"
@@ -111,7 +112,7 @@ func NewRequestSourceMetrics(labels map[string]string) (*RequestSourceMetrics, e
 type StdinRequestSource struct {
 	ch      chan request.Request
 	done    chan struct{}
-	filter  RequestFilter
+	filter  filter.RequestFilter
 	metrics *RequestSourceMetrics
 
 	mu  sync.Mutex // guards following fields
@@ -120,7 +121,7 @@ type StdinRequestSource struct {
 
 var _ RequestSource = (*StdinRequestSource)(nil)
 
-func NewStdinRequestSource(filter RequestFilter, metrics *RequestSourceMetrics) *StdinRequestSource {
+func NewStdinRequestSource(filter filter.RequestFilter, metrics *RequestSourceMetrics) *StdinRequestSource {
 	return &StdinRequestSource{
 		done:    make(chan struct{}),
 		ch:      make(chan request.Request),
@@ -188,11 +189,11 @@ type RandomRequestSource struct {
 	rng     *rand.Rand
 	ch      chan request.Request
 	done    chan struct{}
-	filter  RequestFilter
+	filter  filter.RequestFilter
 	metrics *RequestSourceMetrics
 }
 
-func NewRandomRequestSource(filter RequestFilter, metrics *RequestSourceMetrics, reqs []*request.Request) *RandomRequestSource {
+func NewRandomRequestSource(filter filter.RequestFilter, metrics *RequestSourceMetrics, reqs []*request.Request) *RandomRequestSource {
 	return &RandomRequestSource{
 		reqs:    reqs,
 		rng:     rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -250,7 +251,7 @@ func (r *RandomRequestSource) Err() error {
 // from an nginx formatted access log file and returns a RandomRequestSource
 // that will serve the requests at random. Requests are filtered to GET
 // and paths /ipfs and /ipns
-func NewNginxLogRequestSource(fname string, filter RequestFilter, metrics *RequestSourceMetrics) (*RandomRequestSource, error) {
+func NewNginxLogRequestSource(fname string, filter filter.RequestFilter, metrics *RequestSourceMetrics) (*RandomRequestSource, error) {
 	var reqs []*request.Request
 
 	f, err := os.Open(fname)
@@ -386,7 +387,7 @@ type LokiRequestSource struct {
 	cfg     loki.LokiConfig
 	ch      chan request.Request
 	done    chan struct{}
-	filter  RequestFilter
+	filter  filter.RequestFilter
 	metrics *RequestSourceMetrics
 
 	mu     sync.Mutex // guards following fields
@@ -401,7 +402,7 @@ type LokiRequestSource struct {
 // 	Query    string // the query to use to obtain logs
 // }
 
-func NewLokiRequestSource(cfg *loki.LokiConfig, filter RequestFilter, metrics *RequestSourceMetrics, rps int) (*LokiRequestSource, error) {
+func NewLokiRequestSource(cfg *loki.LokiConfig, filter filter.RequestFilter, metrics *RequestSourceMetrics, rps int) (*LokiRequestSource, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
@@ -487,7 +488,7 @@ type SQSRequestSource struct {
 	cfg     SQSConfig
 	ch      chan request.Request
 	done    chan struct{}
-	filter  RequestFilter
+	filter  filter.RequestFilter
 	metrics *RequestSourceMetrics
 
 	mu       sync.Mutex
@@ -496,7 +497,7 @@ type SQSRequestSource struct {
 	err      error
 }
 
-func NewSQSRequestSource(cfg *SQSConfig, filter RequestFilter, metrics *RequestSourceMetrics, rps int) (*SQSRequestSource, error) {
+func NewSQSRequestSource(cfg *SQSConfig, filter filter.RequestFilter, metrics *RequestSourceMetrics, rps int) (*SQSRequestSource, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}

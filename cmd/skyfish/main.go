@@ -7,17 +7,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pkg/profile"
 	"github.com/urfave/cli/v2"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
 	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
+	"github.com/ipfs-shipyard/thunderdome/pkg/run"
 )
 
 const appName = "skyfish"
@@ -124,7 +122,7 @@ func Run(cc *cli.Context) error {
 		Query:    flags.lokiQuery,
 	}
 
-	rg := &RunGroup{}
+	rg := new(run.Group)
 
 	source, err := loki.NewLokiTailer(cfg)
 	if err != nil {
@@ -167,51 +165,8 @@ func Run(cc *cli.Context) error {
 	return rg.RunAndWait(ctx)
 }
 
-type Runnable interface {
-	// Run starts running the component and blocks until the context is canceled, Shutdown is // called or a fatal error is encountered.
-	Run(context.Context) error
-}
-
-type RunGroup struct {
-	runnables []Runnable
-}
-
-func (a *RunGroup) Add(r Runnable) {
-	a.runnables = append(a.runnables, r)
-}
-
-func (a *RunGroup) RunAndWait(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	g, ctx := errgroup.WithContext(ctx)
-
-	for i := range a.runnables {
-		r := a.runnables[i]
-		g.Go(func() error { return r.Run(ctx) })
-	}
-
-	// Ensure components stop if we receive a terminating operating system signal.
-	g.Go(func() error {
-		interrupt := make(chan os.Signal, 1)
-		signal.Notify(interrupt, syscall.SIGTERM, syscall.SIGINT)
-		select {
-		case <-interrupt:
-			cancel()
-		case <-ctx.Done():
-		}
-		return nil
-	})
-
-	// Wait for all servers to run to completion.
-	if err := g.Wait(); err != nil {
-		if !errors.Is(err, context.Canceled) {
-			return err
-		}
-	}
-	return nil
-}
-
 type Restartable struct {
-	Runnable
+	run.Runnable
 }
 
 func (r Restartable) Run(ctx context.Context) error {

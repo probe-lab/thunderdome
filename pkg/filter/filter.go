@@ -1,4 +1,4 @@
-package main
+package filter
 
 import (
 	"strings"
@@ -39,7 +39,6 @@ func ValidPathRequestFilter(req *request.Request) bool {
 		path = path[:p]
 	}
 	if _, err := ipfspath.ParsePath(path); err != nil {
-		println("FILTERED: ", err.Error())
 		return false
 	}
 
