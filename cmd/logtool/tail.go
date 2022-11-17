@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -113,17 +114,21 @@ func Tail(cc *cli.Context) error {
 	case "-":
 		output = os.Stdout
 	default:
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("could not get working directory: %w", err)
-		}
+		fname := tailOpts.output
+		if !strings.HasPrefix(tailOpts.output, "/") {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("could not get working directory: %w", err)
+			}
 
-		fname := filepath.Join(cwd, tailOpts.output)
+			fname = filepath.Join(cwd, tailOpts.output)
+		}
 		f, err := os.Create(fname)
 		if err != nil {
 			return err
 		}
 		defer f.Close()
+		log.Printf("writing requests to %s", fname)
 		output = f
 	}
 
