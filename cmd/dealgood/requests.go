@@ -452,10 +452,13 @@ func (l *LokiRequestSource) Start() error {
 				return
 			case ll := <-source.Chan():
 				l.ch <- request.Request{
-					Method:    ll.Method,
-					URI:       ll.URI,
-					Header:    ll.Headers,
-					Timestamp: ll.Time,
+					Method:     ll.Method,
+					URI:        ll.URI,
+					Header:     ll.Headers,
+					Timestamp:  ll.Time,
+					RemoteAddr: ll.RemoteAddr,
+					UserAgent:  ll.UserAgent,
+					Referer:    ll.Referer,
 				}
 			}
 		}

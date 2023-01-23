@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -29,15 +28,6 @@ type Publisher struct {
 	messagesCounter     prometheus.Counter
 	requestsCounter     prometheus.Counter
 	connectedGauge      prometheus.Gauge
-}
-
-type Request struct {
-	Method    string            `json:"method"`
-	URI       string            `json:"uri"`
-	Body      []byte            `json:"body,omitempty"`
-	Header    map[string]string `json:"header"`
-	Status    int               `json:"status"` // status as reported by original server
-	Timestamp time.Time         `json:"ts"`     // time the request was created
 }
 
 func NewPublisher(awscfg *aws.Config, topicArn string, logch <-chan loki.LogLine) (*Publisher, error) {
@@ -130,11 +120,14 @@ func (p *Publisher) Run(ctx context.Context) error {
 			}
 
 			r := request.Request{
-				Method:    ll.Method,
-				URI:       ll.URI,
-				Header:    ll.Headers,
-				Status:    ll.Status,
-				Timestamp: ll.Time,
+				Method:     ll.Method,
+				URI:        ll.URI,
+				Header:     ll.Headers,
+				Status:     ll.Status,
+				Timestamp:  ll.Time,
+				RemoteAddr: ll.RemoteAddr,
+				UserAgent:  ll.UserAgent,
+				Referer:    ll.Referer,
 			}
 
 			data, err := json.Marshal(r)
