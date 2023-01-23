@@ -52,12 +52,15 @@ type LokiConfig struct {
 }
 
 type LogLine struct {
-	Server  string            `json:"server"`
-	Time    time.Time         `json:"time"`
-	Method  string            `json:"method"`
-	URI     string            `json:"uri"`
-	Status  int               `json:"status"`
-	Headers map[string]string `json:"headers"`
+	Server     string            `json:"server"`
+	Time       time.Time         `json:"time"`
+	Method     string            `json:"method"`
+	URI        string            `json:"uri"`
+	Status     int               `json:"status"`
+	Headers    map[string]string `json:"headers"`
+	RemoteAddr string            `json:"addr"`
+	UserAgent  string            `json:"agent"`
+	Referrer   string            `json:"referer"`
 }
 
 func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
