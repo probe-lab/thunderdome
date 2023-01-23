@@ -60,7 +60,7 @@ type LogLine struct {
 	Headers    map[string]string `json:"headers"`
 	RemoteAddr string            `json:"addr"`
 	UserAgent  string            `json:"agent"`
-	Referrer   string            `json:"referer"`
+	Referer    string            `json:"referer"`
 }
 
 func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {

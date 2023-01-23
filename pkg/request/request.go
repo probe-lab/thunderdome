@@ -11,5 +11,5 @@ type Request struct {
 	Timestamp  time.Time         `json:"ts"`     // time the request was created
 	RemoteAddr string            `json:"remote_addr"`
 	UserAgent  string            `json:"agent"`
-	Referrer   string            `json:"referrer"`
+	Referer    string            `json:"referer"`
 }

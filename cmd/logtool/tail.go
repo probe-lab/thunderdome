@@ -217,7 +217,7 @@ func (p *Printer) Run(ctx context.Context) error {
 				Timestamp:  ll.Time,
 				RemoteAddr: ll.RemoteAddr,
 				UserAgent:  ll.UserAgent,
-				Referrer:   ll.Referrer,
+				Referer:    ll.Referer,
 			}
 			if p.filter != nil && !p.filter(&r) {
 				filtered++

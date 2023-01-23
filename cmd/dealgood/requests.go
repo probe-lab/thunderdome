@@ -458,7 +458,7 @@ func (l *LokiRequestSource) Start() error {
 					Timestamp:  ll.Time,
 					RemoteAddr: ll.RemoteAddr,
 					UserAgent:  ll.UserAgent,
-					Referrer:   ll.Referrer,
+					Referer:    ll.Referer,
 				}
 			}
 		}
