@@ -74,3 +74,13 @@ variable "request_source" {
 variable "request_sns_topic_arn" {
   description = "arn of an sns topic to subscribe to"
 }
+
+variable "capacity_provider" {
+  type    = string
+}
+
+variable "target_memory" {
+  type        = number
+  description = "Amount (in GiB) of memory to allocate to the targets."
+}
+

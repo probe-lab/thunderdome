@@ -1,6 +1,6 @@
 module "tweedles" {
   source         = "./modules/experiment"
-  name           = "tweedles-2022-09-08"
+  name           = "tweedles-2023-01-30"
   request_rate   = 10
   request_source = "sqs"
 
@@ -16,6 +16,8 @@ module "tweedles" {
   grafana_agent_dealgood_config_url              = "http://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["dealgood"].s3_object_id}"
   grafana_agent_target_config_url                = "http://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["target"].s3_object_id}"
   request_sns_topic_arn                          = aws_sns_topic.gateway_requests.arn
+  capacity_provider                              = "io_medium"
+  target_memory                                  = 30
 
   grafana_secrets = [
     { name = "GRAFANA_USER", valueFrom = "${data.aws_secretsmanager_secret.grafana-push-secret.arn}:username::" },
@@ -33,11 +35,11 @@ module "tweedles" {
 
   targets = {
     "dee" = {
-      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-bifrost-0.18.0"
       environment = []
     },
     "dum" = {
-      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
+      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-bifrost-0.18.0"
       environment = []
     }
   }

@@ -14,7 +14,7 @@ resource "aws_ecs_service" "target" {
 
   capacity_provider_strategy {
     base              = 0
-    capacity_provider = "one"
+    capacity_provider = var.capacity_provider
     weight            = 1
   }
 }
@@ -44,7 +44,7 @@ resource "aws_ecs_task_definition" "target" {
   execution_role_arn       = var.execution_role_arn
   task_role_arn            = aws_iam_role.experiment.arn
 
-  memory = 50 * 1024
+  memory = var.target_memory * 1024
 
   tags = {
     "experiment" = var.name

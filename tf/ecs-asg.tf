@@ -12,6 +12,7 @@ locals {
     systemctl enable fstrim.timer
     systemctl start fstrim.timer
   EOT
+
 }
 
 module "ecs-asg" {
@@ -38,8 +39,8 @@ module "ecs-asg" {
 
   # Capacity provider - autoscaling groups
   autoscaling_capacity_providers = {
-    one = {
-      auto_scaling_group_arn         = module.autoscaling["one"].autoscaling_group_arn
+    compute_large = {
+      auto_scaling_group_arn         = module.autoscaling["compute_large"].autoscaling_group_arn
       managed_termination_protection = "DISABLED"
 
       managed_scaling = {
@@ -47,13 +48,50 @@ module "ecs-asg" {
         minimum_scaling_step_size = 1
         status                    = "ENABLED"
         target_capacity           = 100
-        # this is a percentage you want to be utilised, hopefully 100% leads to less wasted resources
-        # https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_capacity_provider#target_capacity
       }
+    }
+    compute_medium = {
+      auto_scaling_group_arn         = module.autoscaling["compute_medium"].autoscaling_group_arn
+      managed_termination_protection = "DISABLED"
 
-      default_capacity_provider_strategy = {
-        weight = 60
-        base   = 20
+      managed_scaling = {
+        maximum_scaling_step_size = 10
+        minimum_scaling_step_size = 1
+        status                    = "ENABLED"
+        target_capacity           = 100
+      }
+    }
+    compute_small = {
+      auto_scaling_group_arn         = module.autoscaling["compute_small"].autoscaling_group_arn
+      managed_termination_protection = "DISABLED"
+
+      managed_scaling = {
+        maximum_scaling_step_size = 10
+        minimum_scaling_step_size = 1
+        status                    = "ENABLED"
+        target_capacity           = 100
+      }
+    }
+    io_large = {
+      auto_scaling_group_arn         = module.autoscaling["io_large"].autoscaling_group_arn
+      managed_termination_protection = "DISABLED"
+
+      managed_scaling = {
+        maximum_scaling_step_size = 10
+        minimum_scaling_step_size = 1
+        status                    = "ENABLED"
+        target_capacity           = 100
+      }
+    }
+    io_medium = {
+      auto_scaling_group_arn         = module.autoscaling["io_medium"].autoscaling_group_arn
+      managed_termination_protection = "DISABLED"
+
+      managed_scaling = {
+        maximum_scaling_step_size = 10
+        minimum_scaling_step_size = 1
+        status                    = "ENABLED"
+        target_capacity           = 100
       }
     }
   }
@@ -69,8 +107,29 @@ module "autoscaling" {
   version = "~> 6.5"
 
   for_each = {
-    one = {
+    compute_large = {
+      # 64GB RAM, 32 CPU, 12.5 Gigabit, $1.61 hourly
       instance_type = "c6id.8xlarge"
+    }
+
+    compute_medium = {
+      # 32GB RAM, 16 CPU, Up to 12.5 Gigabit, $0.81 hourly
+      instance_type = "c6id.4xlarge"
+    }
+
+    compute_small = {
+      # 16GB RAM, 8 CPU, Up to 12.5 Gigabit, $0.40 hourly
+      instance_type = "c6id.2xlarge"
+    }
+
+    io_large = {
+      # 64GB RAM, 8 CPU, Up to 25 Gigabit, $0.62 hourly
+      instance_type = "i3en.2xlarge"
+    }
+
+    io_medium  = {
+      # 32GB RAM, 4 CPU, Up to 25 Gigabit, $0.31 hourly
+      instance_type = "i3en.xlarge"
     }
   }
 
@@ -134,7 +193,7 @@ module "autoscaling" {
   health_check_type   = "EC2"
   min_size            = 0
   max_size            = 100
-  desired_capacity    = 1
+  desired_capacity    = 0
 
   # https://github.com/hashicorp/terraform-provider-aws/issues/12582
   autoscaling_group_tags = {

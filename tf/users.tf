@@ -1,12 +1,29 @@
-locals {
-  admins = toset([
-    "ian.davis",
-    "tom.hall"
-  ])
+variable "admins" {
+  type = map(object({
+    key_name          = string
+    provision_workbox = bool
+    instance_type     = string
+    ami               = string
+  }))
+  default = {
+    "ian.davis" = {
+      key_name          = "ian.davis"
+      provision_workbox = true
+      instance_type     = "t2.small"
+      ami               = "ami-0591c8c8aa7d9b217" # debian 11
+    }
+    "tom.hall" = {
+      key_name          = "tom.hall"
+      provision_workbox = false
+      instance_type     = "t2.small"
+      ami               = "ami-0333305f9719618c7" # ubuntu
+    }
+  }
 }
 
+
 resource "aws_iam_user" "admin" {
-  for_each = local.admins
+  for_each = var.admins
   name     = each.key
 }
 
@@ -17,10 +34,10 @@ resource "aws_iam_user_policy_attachment" "admin" {
 }
 
 resource "aws_instance" "testbox" {
-  for_each      = local.admins
-  ami           = "ami-030802ad6e5ffb009"
-  instance_type = "m6i.xlarge"
-  key_name      = each.key
+  for_each      = { for k, v in var.admins : k => v if v.provision_workbox }
+  ami           = each.value["ami"]
+  instance_type = each.value["instance_type"]
+  key_name      = each.value["key_name"]
   iam_instance_profile = aws_iam_instance_profile.testbox_profile.name
   vpc_security_group_ids = [
     aws_security_group.dealgood.id,
