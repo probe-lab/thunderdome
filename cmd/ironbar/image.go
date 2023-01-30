@@ -10,8 +10,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/urfave/cli/v2"
 )
@@ -61,6 +63,12 @@ var ImageCommand = &cli.Command{
 			Usage:       "Push built image to this docker repo.",
 			Destination: &imageOpts.dockerRepo,
 		},
+		&cli.StringFlag{
+			Name:        "base-config",
+			Usage:       "Name of a built-in base config to apply. One of " + baseConfigNames,
+			Destination: &imageOpts.baseConfig,
+			Value:       "bifrost",
+		},
 		&cli.StringSliceFlag{
 			Name:        "env-config",
 			Usage:       "Map an environment variable to a kubo config option. Use format 'EnvVar:ConfigOption'.",
@@ -103,6 +111,7 @@ var imageOpts struct {
 	envConfigQuoted cli.StringSlice
 	description     string
 	maintainer      string
+	baseConfig      string
 }
 
 const imageBaseName = "thunderdome"
@@ -132,7 +141,7 @@ func Image(cc *cli.Context) error {
 	if !cc.Bool("keeptemp") {
 		defer os.RemoveAll(workDir)
 	}
-	log.Printf("using work dir %q", workDir)
+	log.Printf("using work dir %q\n", workDir)
 
 	labels := map[string]string{
 		"maintainer":                       imageOpts.maintainer,
@@ -175,7 +184,12 @@ func Image(cc *cli.Context) error {
 		return fmt.Errorf("must specify repo or from-image")
 	}
 
-	if err := configureImage(workDir, baseImage, imageName, labels, envConfigMappings, envConfigMappingsQuoted); err != nil {
+	baseConfig, ok := baseConfigs[imageOpts.baseConfig]
+	if !ok {
+		return fmt.Errorf("unknown base config specified: %s (expected one of %s)", imageOpts.baseConfig, baseConfigNames)
+	}
+
+	if err := configureImage(workDir, baseImage, imageName, labels, baseConfig, envConfigMappings, envConfigMappingsQuoted); err != nil {
 		return err
 	}
 
@@ -206,8 +220,9 @@ func Image(cc *cli.Context) error {
 	if imageOpts.description != "" {
 		fmt.Printf("Description: %s\n", imageOpts.description)
 	}
+	fmt.Printf("Uses %s as base configuration\n", imageOpts.baseConfig)
 	if len(envConfigMappings) > 0 || len(envConfigMappingsQuoted) > 0 {
-		fmt.Println("Configuration may be set using environment variables:")
+		fmt.Println("Additional configuration may be set using environment variables:")
 		for _, em := range envConfigMappings {
 			fmt.Printf("  $%s sets %s\n", em.EnvVar, em.ConfigOption)
 		}
@@ -376,7 +391,7 @@ func copyDockerAssets(buildDir string, system string) error {
 
 		if d.IsDir() {
 			log.Printf("creating directory %s", dst)
-			if err := os.Mkdir(dst, 0777); err != nil {
+			if err := os.Mkdir(dst, 0o777); err != nil {
 				return fmt.Errorf("make dir %s: %w", dst, err)
 			}
 		} else {
@@ -486,10 +501,10 @@ func buildImageFromGit(workDir string, gitRepo string, imageName string) (string
 	return tmpImageName, nil
 }
 
-func configureImage(workDir, fromImage, imageName string, labels map[string]string, envConfigMappings []EnvConfigMapping, envConfigMappingsQuoted []EnvConfigMapping) error {
+func configureImage(workDir, fromImage, imageName string, labels map[string]string, baseConfig string, envConfigMappings []EnvConfigMapping, envConfigMappingsQuoted []EnvConfigMapping) error {
 	log.Printf("configuring image %s for use in thunderdome", fromImage)
 	buildDir := filepath.Join(workDir, "build")
-	if err := os.Mkdir(buildDir, 0777); err != nil {
+	if err := os.Mkdir(buildDir, 0o777); err != nil {
 		return fmt.Errorf("create build dir: %w", err)
 	}
 
@@ -497,7 +512,7 @@ func configureImage(workDir, fromImage, imageName string, labels map[string]stri
 		return fmt.Errorf("copy docker assets: %w", err)
 	}
 
-	if err := writeInitConfigScript(buildDir, envConfigMappings, envConfigMappingsQuoted); err != nil {
+	if err := writeInitConfigScript(buildDir, baseConfig, envConfigMappings, envConfigMappingsQuoted); err != nil {
 		return fmt.Errorf("write init config script: %w", err)
 	}
 
@@ -558,12 +573,17 @@ func parseEnvConfigMappings(strs []string) ([]EnvConfigMapping, error) {
 	return ret, nil
 }
 
-func writeInitConfigScript(buildDir string, envConfigMappings []EnvConfigMapping, envConfigMappingsQuoted []EnvConfigMapping) error {
+func writeInitConfigScript(buildDir string, baseConfig string, envConfigMappings []EnvConfigMapping, envConfigMappingsQuoted []EnvConfigMapping) error {
 	if len(envConfigMappings) == 0 {
 		return nil
 	}
 	b := new(strings.Builder)
 	b.WriteString("#!/bin/sh\n")
+
+	if baseConfig != "" {
+		fmt.Fprintln(b, baseConfig)
+	}
+
 	for _, ec := range envConfigMappings {
 		fmt.Fprintf(b, `if [ -n "$%s" ]; then`, ec.EnvVar)
 		fmt.Fprintln(b)
@@ -598,4 +618,52 @@ func writeInitConfigScript(buildDir string, envConfigMappings []EnvConfigMapping
 	}
 
 	return nil
+}
+
+var baseConfigNames string
+
+func init() {
+	names := make([]string, 0, len(baseConfigs))
+	for name := range baseConfigs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	baseConfigNames = strings.Join(names, ",")
+}
+
+var baseConfigs = map[string]string{
+	"kubo-default": unindent(`
+				echo "using kubo-default config"
+	`),
+	"bifrost": unindent(`
+				echo "using bifrost style base config"
+				ipfs config --json AutoNAT '{"ServiceMode": "disabled"}'
+
+				ipfs config --json Datastore.BloomFilterSize '268435456'
+				ipfs config --json Datastore.StorageGCWatermark 90
+				ipfs config --json Datastore.StorageMax '"1000GB"'
+
+				ipfs config --json Pubsub.StrictSignatureVerification false
+
+				ipfs config --json Reprovider.Interval '"0"'
+
+				ipfs config --json Routing.Type '"dhtserver"'
+
+				ipfs config --json Swarm.ConnMgr.GracePeriod '"2m"'
+				ipfs config --json Swarm.ConnMgr.HighWater 5000
+				ipfs config --json Swarm.ConnMgr.LowWater 3000
+				ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true
+
+				ipfs config --json Experimental.AcceleratedDHTClient true
+				ipfs config --json Experimental.StrategicProviding true
+			`),
+}
+
+func unindent(s string) string {
+	buf := new(strings.Builder)
+	lines := strings.Split(s, "\n")
+	for _, line := range lines {
+		buf.WriteString(strings.TrimLeftFunc(line, unicode.IsSpace))
+	}
+	return buf.String()
 }
