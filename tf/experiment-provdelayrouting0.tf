@@ -1,7 +1,7 @@
-module "tweedles" {
-  count          = 0 # 0 is disabled, 1 is enabled
+module "provdelayrouting0" {
+  count          = 1 # 0 is disabled, 1 is enabled
   source         = "./modules/experiment"
-  name           = "tweedles-2023-01-30"
+  name           = "provdelayrouting0"
   request_rate   = 10
   request_source = "sqs"
 
@@ -35,13 +35,42 @@ module "tweedles" {
   ]
 
   targets = {
-    "dee" = {
-      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-bifrost-0.18.0"
-      environment = []
-    },
-    "dum" = {
-      image       = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-bifrost-0.18.0"
-      environment = []
+    "kubo17-dht-900" = {
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-0.17.0-provdelayrouting-r2"
+      environment = [
+        { name = "ROUTING_TYPE", value = "dht" },
+        { name = "CONNMGR_HIGHWATER", value = "900" },
+        { name = "CONNMGR_LOWWATER", value = "600" },
+        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "0s" },
+      ]
+    }
+    "kubo18rc2-auto-96" = {
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-0.18.0-rc2-provdelayrouting-r2"
+      environment = [
+        { name = "ROUTING_TYPE", value = "auto" },
+        { name = "CONNMGR_HIGHWATER", value = "96" },
+        { name = "CONNMGR_LOWWATER", value = "32" },
+        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "0s" },
+      ]
+    }
+    "kubo18rc2-dht-96" = {
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-0.18.0-rc2-provdelayrouting-r2"
+      environment = [
+        { name = "ROUTING_TYPE", value = "dht" },
+        { name = "CONNMGR_HIGHWATER", value = "96" },
+        { name = "CONNMGR_LOWWATER", value = "32" },
+        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "0s" },
+      ]
+    }
+    "kubo18rc2-dht-900" = {
+      image = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-0.18.0-rc2-provdelayrouting-r2"
+      environment = [
+        { name = "ROUTING_TYPE", value = "dht" },
+        { name = "CONNMGR_HIGHWATER", value = "900" },
+        { name = "CONNMGR_LOWWATER", value = "600" },
+        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "0s" },
+      ]
     }
   }
 }
+
