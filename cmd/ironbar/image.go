@@ -641,7 +641,7 @@ var baseConfigs = map[string]string{
 
 				ipfs config --json Datastore.BloomFilterSize '268435456'
 				ipfs config --json Datastore.StorageGCWatermark 90
-				ipfs config --json Datastore.StorageMax '"1000GB"'
+				ipfs config --json Datastore.StorageMax '"160GB"'
 
 				ipfs config --json Pubsub.StrictSignatureVerification false
 
