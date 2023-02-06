@@ -1,5 +1,5 @@
 module "provdelayrouting0" {
-  count          = 1 # 0 is disabled, 1 is enabled
+  count          = 0 # 0 is disabled, 1 is enabled
   source         = "./modules/experiment"
   name           = "provdelayrouting0"
   request_rate   = 10

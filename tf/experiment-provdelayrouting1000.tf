@@ -1,5 +1,5 @@
 module "provdelayrouting1000" {
-  count          = 1 # 0 is disabled, 1 is enabled
+  count          = 0 # 0 is disabled, 1 is enabled
   source         = "./modules/experiment"
   name           = "provdelayrouting1000"
   request_rate   = 10
@@ -41,7 +41,7 @@ module "provdelayrouting1000" {
         { name = "ROUTING_TYPE", value = "dht" },
         { name = "CONNMGR_HIGHWATER", value = "900" },
         { name = "CONNMGR_LOWWATER", value = "600" },
-        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "1000s" },
+        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "1000ms" },
       ]
     }
     "kubo18rc2-auto-96" = {
@@ -50,7 +50,7 @@ module "provdelayrouting1000" {
         { name = "ROUTING_TYPE", value = "auto" },
         { name = "CONNMGR_HIGHWATER", value = "96" },
         { name = "CONNMGR_LOWWATER", value = "32" },
-        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "1000s" },
+        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "1000ms" },
       ]
     }
     "kubo18rc2-dht-96" = {
@@ -59,7 +59,7 @@ module "provdelayrouting1000" {
         { name = "ROUTING_TYPE", value = "dht" },
         { name = "CONNMGR_HIGHWATER", value = "96" },
         { name = "CONNMGR_LOWWATER", value = "32" },
-        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "1000s" },
+        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "1000ms" },
       ]
     }
     "kubo18rc2-dht-900" = {
@@ -68,7 +68,7 @@ module "provdelayrouting1000" {
         { name = "ROUTING_TYPE", value = "dht" },
         { name = "CONNMGR_HIGHWATER", value = "900" },
         { name = "CONNMGR_LOWWATER", value = "600" },
-        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "1000s" },
+        { name = "BITSWAP_PROVIDERSEARCHDELAY", value = "1000ms" },
       ]
     }
   }
