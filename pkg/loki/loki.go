@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -133,9 +134,16 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 
 	defer close(l.ch)
 
+	go func() {
+		<-ctx.Done()
+		l.Shutdown(context.Background())
+	}()
+
 	for {
 		tr, err := l.readTailResponse()
-		if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return ctx.Err()
+		} else if err != nil {
 			log.Printf("failed to read tail from loki: %v", err)
 			if err := l.connect(); err != nil {
 				l.errorCounter.Add(1)
@@ -247,6 +255,7 @@ func (l *LokiTailer) Shutdown(ctx context.Context) error {
 		l.conn = nil
 		return fmt.Errorf("write close message: %w", err)
 	}
+	l.conn.Close()
 	l.conn = nil
 	return nil
 }
