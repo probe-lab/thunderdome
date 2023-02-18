@@ -3,10 +3,11 @@ package aws
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/exp"
+	"github.com/kortschak/utter"
+	"golang.org/x/exp/slog"
 )
 
 // Resources needed
@@ -30,33 +31,52 @@ type Provider struct {
 }
 
 func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
-	base := NewBaseInfra(e.Name, p.Region, "arn:aws:ecs:eu-west-1:147263665150:cluster/thunderdome")
-	log.Printf("starting setup of base infra")
+	base := NewBaseInfra(e.Name, p.Region)
 	if err := base.Setup(ctx); err != nil {
 		return fmt.Errorf("failed to setup base infra: %w", err)
 	}
 
-	log.Printf("waiting for base infra to be ready")
-	if err := WaitUntil(ctx, base.Ready, 2*time.Second, 30*time.Second); err != nil {
+	if err := WaitUntil(ctx, slog.With("component", base.Name()), "is ready", base.Ready, 2*time.Second, 30*time.Second); err != nil {
 		return fmt.Errorf("base infra failed to become ready: %w", err)
 	}
 
-	log.Printf("base infra ready")
-
-	components := make([]Component, 0)
-
+	components := make([]Component, 0, len(e.Targets))
+	targets := make([]*Target, 0, len(e.Targets))
 	for _, t := range e.Targets {
 		t := NewTarget(t.Name, e.Name, base, t.Image, t.Environment)
+		targets = append(targets, t)
 		components = append(components, t)
 	}
+	if err := DeployInParallel(ctx, components); err != nil {
+		return fmt.Errorf("targets failed to deploy: %w", err)
+	}
 
-	return DeployInParallel(ctx, components)
+	targetURLs := make([]string, len(targets))
+	for i := range targets {
+		targetURLs[i] = targets[i].GatewayURL()
+	}
+
+	d := NewDealgood(e.Name, base, e.Dealgood.Image, e.Dealgood.Environment, targetURLs)
+	if err := d.Setup(ctx); err != nil {
+		return fmt.Errorf("failed to setup dealgood: %w", err)
+	}
+
+	if err := WaitUntil(ctx, slog.With("component", d.Name()), "is ready", d.Ready, 2*time.Second, 30*time.Second); err != nil {
+		return fmt.Errorf("dealgood failed to become ready: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Provider) Teardown(ctx context.Context, e *exp.Experiment) error {
-	base := NewBaseInfra(e.Name, p.Region, "arn:aws:ecs:eu-west-1:147263665150:cluster/thunderdome")
+	base := NewBaseInfra(e.Name, p.Region)
 	if err := base.InspectExisting(ctx); err != nil {
 		return fmt.Errorf("failed to inspect existing infra: %w", err)
+	}
+
+	d := NewDealgood(e.Name, base, e.Dealgood.Image, e.Dealgood.Environment, []string{})
+	if err := d.Teardown(ctx); err != nil {
+		return fmt.Errorf("failed to teardown dealgood: %w", err)
 	}
 
 	components := make([]Component, 0)
@@ -69,7 +89,7 @@ func (p *Provider) Teardown(ctx context.Context, e *exp.Experiment) error {
 	}
 
 	if err := base.Teardown(ctx); err != nil {
-		return fmt.Errorf("base infra: failed to tear down: %w", err)
+		return fmt.Errorf("failed to tear down base infra: %w", err)
 	}
 
 	return nil
@@ -78,30 +98,59 @@ func (p *Provider) Teardown(ctx context.Context, e *exp.Experiment) error {
 func (p *Provider) Status(ctx context.Context, e *exp.Experiment) error {
 	allready := true
 
-	base := NewBaseInfra(e.Name, p.Region, "arn:aws:ecs:eu-west-1:147263665150:cluster/thunderdome")
+	base := NewBaseInfra(e.Name, p.Region)
 	ready, err := base.Ready(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to check base infra ready state: %w", err)
+		return fmt.Errorf("failed to check %s ready state: %w", base.Name(), err)
 	}
 	if ready {
 		for _, t := range e.Targets {
 			target := NewTarget(t.Name, e.Name, base, t.Image, t.Environment)
 			ready, err := target.Ready(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to check target %q ready state: %w", t.Name, err)
+				return fmt.Errorf("failed to check %s ready state: %w", target.Name(), err)
 			}
 			if ready {
-				log.Printf("target %q ready", t.Name)
+				slog.Info("ready", "component", target.Name())
 			} else {
 				allready = false
 			}
+		}
+
+		d := NewDealgood(e.Name, base, e.Dealgood.Image, e.Dealgood.Environment, []string{})
+		ready, err := d.Ready(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to check %s ready state: %w", d.Name(), err)
+		}
+		if ready {
+			slog.Info("ready", "component", d.Name())
+		} else {
+			allready = false
 		}
 	} else {
 		allready = false
 	}
 
 	if allready {
-		log.Printf("all components ready")
+		slog.Info("all components ready")
 	}
 	return nil
+}
+
+func debugf(t string, args ...any) {
+	slog.Debug(fmt.Sprintf(t, args...))
+}
+
+func warnf(t string, args ...any) {
+	slog.Warn(fmt.Sprintf(t, args...))
+}
+
+func errorf(t string, args ...any) {
+	slog.Log(slog.LevelError, fmt.Sprintf(t, args...))
+}
+
+func dump(vs ...any) {
+	for _, v := range vs {
+		fmt.Println(utter.Sdump(v))
+	}
 }

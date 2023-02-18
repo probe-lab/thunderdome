@@ -42,7 +42,7 @@ resource "aws_ecs_task_definition" "target" {
   requires_compatibilities = ["EC2"]
   network_mode             = "host"
   execution_role_arn       = var.execution_role_arn
-  task_role_arn            = aws_iam_role.experiment.arn
+  task_role_arn            = var.target_task_role_arn #aws_iam_role.experiment.arn
 
   memory = var.target_memory * 1024
 
@@ -183,24 +183,24 @@ resource "aws_ecs_task_definition" "target" {
   ])
 }
 
-resource "aws_iam_role" "experiment" {
-  name = var.name
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Sid    = ""
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      },
-    ]
-  })
-}
+# resource "aws_iam_role" "experiment" {
+#   name = var.name
+#   assume_role_policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Action = "sts:AssumeRole"
+#         Effect = "Allow"
+#         Sid    = ""
+#         Principal = {
+#           Service = "ecs-tasks.amazonaws.com"
+#         }
+#       },
+#     ]
+#   })
+# }
 
-resource "aws_iam_role_policy_attachment" "experiment-ssm" {
-  role       = aws_iam_role.experiment.name
-  policy_arn = var.ssm_exec_policy_arn
-}
+# resource "aws_iam_role_policy_attachment" "experiment-ssm" {
+#   role       = aws_iam_role.experiment.name
+#   policy_arn = var.ssm_exec_policy_arn
+# }

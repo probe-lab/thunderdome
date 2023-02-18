@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
+	"golang.org/x/exp/slog"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -17,14 +17,13 @@ type Check struct {
 	FailureText string // optional text to use to describe failure
 }
 
-func CheckSequence(ctx context.Context, sess *session.Session, prefix string, checks ...Check) (bool, error) {
-	if prefix != "" {
-		prefix += ": "
-	}
+func CheckSequence(ctx context.Context, sess *session.Session, component string, checks ...Check) (bool, error) {
+	logger := slog.With("component", component)
+
 	for _, c := range checks {
 		ready, err := c.Func(ctx, sess)
 		if err != nil {
-			log.Printf("%s%s: error %v", prefix, c.Name, err)
+			logger.Error(c.Name, err)
 			return false, err
 		}
 		if !ready {
@@ -32,10 +31,10 @@ func CheckSequence(ctx context.Context, sess *session.Session, prefix string, ch
 			if failureText == "" {
 				failureText = fmt.Sprintf("%s: no", c.Name)
 			}
-			log.Printf("%s%s", prefix, failureText)
+			logger.Log(slog.LevelError, failureText)
 			return false, nil
 		}
-		log.Printf("%s%s", prefix, c.Name)
+		logger.Info(c.Name)
 	}
 
 	return true, nil
@@ -47,99 +46,55 @@ type Task struct {
 	Func  func(context.Context, *session.Session) error
 }
 
-func ExecuteTask(ctx context.Context, sess *session.Session, prefix string, task Task) error {
-	tag := task.Name
-	if prefix != "" {
-		tag = prefix + ": " + tag
-	}
+// ExecuteTask executes a task. It first runs the task's Check function, if any. If this returns false then
+// the task Func is called. Then the Check function is polled until it returns true.
+func ExecuteTask(ctx context.Context, sess *session.Session, component string, task Task) error {
+	logger := slog.With("component", component, "step", task.Name)
 
 	// Do a pre-check to see if the correct state already exists
 	if task.Check.Func != nil {
-		log.Printf("%s: checking whether %s", tag, task.Check.Name)
+		logger.Info(fmt.Sprintf("checking whether %s", task.Check.Name))
 		ok, err := task.Check.Func(ctx, sess)
 		if err != nil {
-			return fmt.Errorf("failed precondition check (%s%s): %w", tag, task.Check.Name, err)
+			return fmt.Errorf("failed precondition check (%s:%s): %w", component, task.Check.Name, err)
 		}
 		if ok {
-			log.Printf("%s: %s", tag, task.Check.Name)
+			logger.Info(task.Check.Name)
 			return nil
 		}
 		failureText := task.Check.FailureText
 		if failureText == "" {
 			failureText = fmt.Sprintf("%s: no", task.Check.Name)
 		}
-		log.Printf("%s: %s", tag, failureText)
+		logger.Info(failureText)
 	}
 
-	log.Printf("%s: executing task", tag)
+	logger.Info("executing step")
 	err := task.Func(ctx, sess)
 	if err != nil {
-		log.Printf("%s: error %v", tag, err)
-		return fmt.Errorf("failed task (%s): %w", tag, err)
+		logger.Error("failed", err)
+		return fmt.Errorf("failed task (%s): %w", task.Name, err)
 	}
 
 	if task.Check.Func != nil {
-		if err := WaitUntilCheck(ctx, sess, tag, task.Check, 2*time.Second, 30*time.Second); err != nil {
-			log.Printf("%s: %s: error %v", tag, task.Check.Name, err)
-			return fmt.Errorf("failed check (%s: %s): %w", tag, task.Check.Name, err)
+		if err := WaitUntilCheck(ctx, sess, logger, task.Check, 2*time.Second, 30*time.Second); err != nil {
+			logger.Error("failed", err)
+			return fmt.Errorf("failed check (%s: %s): %w", component, task.Check.Name, err)
 		}
-		log.Printf("%s: %s", tag, task.Check.Name)
+		logger.Info(task.Check.Name)
 	}
 
 	return nil
 }
 
-func TaskSequence(ctx context.Context, sess *session.Session, prefix string, tasks ...Task) error {
+func TaskSequence(ctx context.Context, sess *session.Session, component string, tasks ...Task) error {
 	for _, task := range tasks {
-		if err := ExecuteTask(ctx, sess, prefix, task); err != nil {
+		if err := ExecuteTask(ctx, sess, component, task); err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-func WaitUntilCheck(ctx context.Context, sess *session.Session, prefix string, check Check, delay time.Duration, interval time.Duration) error {
-	if check.Func == nil {
-		return nil
-	}
-	first := true
-	if delay > 0 {
-		log.Printf("%s: waiting until %s", prefix, check.Name)
-		time.Sleep(delay)
-		first = false
-	}
-	done, err := check.Func(ctx, sess)
-	if err != nil {
-		return err
-	}
-	if done {
-		return nil
-	}
-
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-
-	for {
-		select {
-		case <-tick.C:
-			done, err := check.Func(ctx, sess)
-			if err != nil {
-				return err
-			}
-			if done {
-				return nil
-			}
-			if first {
-				first = false
-				log.Printf("%s: waiting until %s", prefix, check.Name)
-			} else {
-				log.Printf("%s: still waiting until %s", prefix, check.Name)
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
 }
 
 type Component interface {
@@ -155,15 +110,12 @@ func DeployInParallel(ctx context.Context, comps []Component) error {
 	for _, c := range comps {
 		c := c // ugh, hurry up https://github.com/golang/go/discussions/56010
 		g.Go(func() error {
-			log.Printf("%s: deploying", c.Name())
 			if err := c.Setup(ctx); err != nil {
 				return fmt.Errorf("%s failed to setup: %w", c.Name(), err)
 			}
-			log.Printf("%s: waiting to become ready", c.Name())
-			if err := WaitUntil(ctx, c.Ready, 2*time.Second, 30*time.Second); err != nil {
+			if err := WaitUntil(ctx, slog.With("component", c.Name()), "is ready", c.Ready, 2*time.Second, 30*time.Second); err != nil {
 				return fmt.Errorf("%s failed to become ready: %w", c.Name(), err)
 			}
-			log.Printf("%s: ready", c.Name())
 			return nil
 		})
 	}
@@ -183,7 +135,6 @@ func TeardownInParallel(ctx context.Context, comps []Component) error {
 	for _, c := range comps {
 		c := c // ugh, hurry up https://github.com/golang/go/discussions/56010
 		g.Go(func() error {
-			log.Printf("%s: tearing down", c.Name())
 			if err := c.Teardown(ctx); err != nil {
 				return fmt.Errorf("%s failed to tear down: %w", c.Name(), err)
 			}

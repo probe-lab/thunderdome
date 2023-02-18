@@ -45,7 +45,8 @@ type Experiment struct {
 
 	DefaultInstanceType string
 
-	Targets []*TargetDef
+	Targets  []*TargetDef
+	Dealgood DealgoodDef
 }
 
 type TargetDef struct {
@@ -53,6 +54,11 @@ type TargetDef struct {
 	Image        string
 	InstanceType string
 	Environment  map[string]string
+}
+
+type DealgoodDef struct {
+	Image       string
+	Environment map[string]string
 }
 
 func TestExperiment() *Experiment {
@@ -63,7 +69,15 @@ func TestExperiment() *Experiment {
 			{
 				Name:  "target1",
 				Image: "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0",
+				Environment: map[string]string{
+					"IPFS_PROFILE": "server",
+				},
 			},
+		},
+
+		Dealgood: DealgoodDef{
+			Image:       "147263665150.dkr.ecr.eu-west-1.amazonaws.com/dealgood:2022-09-15__1504",
+			Environment: map[string]string{},
 		},
 	}
 }

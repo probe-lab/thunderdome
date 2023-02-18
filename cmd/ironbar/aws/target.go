@@ -2,16 +2,15 @@ package aws
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
-	"strings"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/servicediscovery"
+	// "github.com/aws/aws-sdk-go/service/servicediscovery"
+	"golang.org/x/exp/slog"
 )
 
 type Target struct {
@@ -20,20 +19,21 @@ type Target struct {
 	base        *BaseInfra
 	image       string
 	environment map[string]string
-	awsRegion   string
 
 	taskDefinitionFamily        string
-	taskDefinitionRevision      int64
 	serviceDiscoveryServiceName string
-	ecsServiceName              string
+	// ecsServiceName              string
+	taskName string
+	// taskRoleName                string
 
-	mu                         sync.Mutex
-	ready                      bool
-	taskRoleResourceName       string
-	taskDefinitionArn          string
-	serviceDiscoveryServiceArn string
-	serviceDiscoveryServiceId  string
-	ecsServiceArn              string
+	// mu guards access to fields in block directly below
+	mu                     sync.Mutex
+	ready                  bool
+	taskDefinitionArn      string
+	taskDefinitionRevision int64
+	taskArn                string
+	taskEC2InstanceID      string
+	taskPrivateIPAddress   string
 }
 
 func NewTarget(name, experiment string, base *BaseInfra, image string, environment map[string]string) *Target {
@@ -45,15 +45,68 @@ func NewTarget(name, experiment string, base *BaseInfra, image string, environme
 		environment:                 environment,
 		taskDefinitionFamily:        experiment + "-" + name,
 		serviceDiscoveryServiceName: experiment + "-" + name,
-		ecsServiceName:              experiment + "-" + name,
+		// ecsServiceName:              experiment + "-" + name,
+		taskName: experiment + "-" + name,
+		// taskRoleName:                experiment + "-" + name + "_task_role",
 	}
 }
 
 func (t *Target) Name() string { return fmt.Sprintf("target %s", t.name) }
 
-func (t *Target) Setup(ctx context.Context) error {
+func (t *Target) TaskDefinitionArn() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if !t.ready {
+		return ""
+	}
+	return t.taskDefinitionArn
+}
+
+func (t *Target) TaskArn() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		return ""
+	}
+	return t.taskArn
+}
+
+func (t *Target) EC2InstanceID() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		return ""
+	}
+	return t.taskEC2InstanceID
+}
+
+func (t *Target) PrivateIPAddress() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		return ""
+	}
+	return t.taskPrivateIPAddress
+}
+
+func (t *Target) GatewayURL() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		return ""
+	}
+	return "http://" + t.taskPrivateIPAddress + ":8080"
+}
+
+func (t *Target) tags() map[string]*string {
+	return map[string]*string{
+		"experiment": aws.String(t.experiment),
+		"component":  aws.String(t.Name()),
+	}
+}
+
+func (t *Target) Setup(ctx context.Context) error {
+	slog.Info("starting setup", "component", t.Name())
 
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(t.base.AwsRegion()),
@@ -62,17 +115,14 @@ func (t *Target) Setup(ctx context.Context) error {
 		return fmt.Errorf("new session: %w", err)
 	}
 
-	return TaskSequence(ctx, sess, "target "+t.name,
+	return TaskSequence(ctx, sess, t.Name(),
 		t.createTaskDefinition(),
-		t.createServiceDiscoveryService(),
-		t.createEcsService(),
+		t.runTask(),
 	)
 }
 
 func (t *Target) Teardown(ctx context.Context) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
+	slog.Info("starting teardown", "component", t.Name())
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(t.base.AwsRegion()),
 	})
@@ -80,84 +130,65 @@ func (t *Target) Teardown(ctx context.Context) error {
 		return fmt.Errorf("new session: %w", err)
 	}
 
-	return TaskSequence(ctx, sess, "target "+t.name,
-		t.deleteEcsService(),
-		t.deleteServiceDiscoveryService(),
+	return TaskSequence(ctx, sess, t.Name(),
+		t.stopTask(),
 		t.deregisterTaskDefinition(),
 	)
 }
 
 func (t *Target) Ready(ctx context.Context) (bool, error) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
+	t.ready = false
+	t.mu.Unlock()
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(t.awsRegion),
+		Region: aws.String(t.base.AwsRegion()),
 	})
 	if err != nil {
 		return false, fmt.Errorf("new session: %w", err)
 	}
 
-	return CheckSequence(ctx, sess, "target "+t.name,
+	ready, err := CheckSequence(ctx, sess, t.Name(),
 		t.taskDefinitionIsActive(),
-		t.serviceDiscoveryServiceExists(),
-		t.ecsServiceExists(),
-		t.ecsServiceStatusIsActive(),
-		t.ecsServiceHasRunningTask(),
+		t.taskIsRunning(),
 	)
-}
-
-func (t *Target) findExistingTaskDefinition(sess *session.Session) error {
-	t.taskDefinitionArn = ""
-	t.taskDefinitionRevision = 0
-
-	svc := ecs.New(sess)
-	in := &ecs.DescribeTaskDefinitionInput{
-		TaskDefinition: aws.String(t.taskDefinitionFamily),
-	}
-	out, err := svc.DescribeTaskDefinition(in)
-	if err != nil {
-		aerr := &ecs.ClientException{}
-		if errors.As(err, &aerr) {
-			if strings.Contains(aerr.Error(), "Unable to describe task definition") {
-				return nil
-			}
-		}
-		return fmt.Errorf("describe task definition: %w", err)
+	if !ready || err != nil {
+		return ready, err
 	}
 
-	if out == nil || out.TaskDefinition == nil || out.TaskDefinition.TaskDefinitionArn == nil || out.TaskDefinition.Status == nil || out.TaskDefinition.Revision == nil {
-		return fmt.Errorf("unable to read task definition arn, status or revision")
-	}
-
-	if *out.TaskDefinition.Status == "ACTIVE" {
-		t.taskDefinitionArn = *out.TaskDefinition.TaskDefinitionArn
-		t.taskDefinitionRevision = *out.TaskDefinition.Revision
-	}
-	return nil
+	t.mu.Lock()
+	t.ready = true
+	t.mu.Unlock()
+	return true, nil
 }
 
 func (t *Target) createTaskDefinition() Task {
 	return Task{
-		Name:  "create task definition " + t.taskDefinitionFamily,
+		Name:  "create task definition",
 		Check: t.taskDefinitionIsActive(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			gwEnv := make([]*ecs.KeyValuePair, len(t.environment))
-			for n, v := range t.environment {
-				gwEnv = append(gwEnv, &ecs.KeyValuePair{Name: aws.String(n), Value: aws.String(v)})
+			taskDefinitionArn, _, err := findTaskDefinition(t.taskDefinitionFamily, sess)
+			if err != nil {
+				return fmt.Errorf("find existing task definition: %w", err)
+			}
+
+			if taskDefinitionArn != "" {
+				// TODO: don't assume this is configured how we want it to be
+				debugf("task definition %q: already exists with arn %s", t.taskDefinitionFamily, taskDefinitionArn)
+				return nil
+			}
+
+			additionalEnv := map[string]string{
+				// TODO: any additiona env?
 			}
 
 			in := &ecs.RegisterTaskDefinitionInput{
 				Family:                  aws.String(t.taskDefinitionFamily),
 				RequiresCompatibilities: []*string{aws.String("EC2")},
 				NetworkMode:             aws.String("host"),
-				ExecutionRoleArn:        aws.String(execution_role_arn),
-				TaskRoleArn:             aws.String(t.base.TaskRoleArn()),
-				Memory:                  aws.String("51200"), // TODO: review  50*1024
-				Tags: []*ecs.Tag{
-					{Key: aws.String("experiment"), Value: aws.String(t.experiment)},
-					{Key: aws.String("target"), Value: aws.String(t.name)},
-				},
+				ExecutionRoleArn:        aws.String(t.base.EcsExecutionRoleArn()),
+				TaskRoleArn:             aws.String(t.base.TargetTaskRoleArn()),
+				Memory:                  aws.String("30720"), // TODO: review  50*1024
+				Tags:                    ecsTags(t.tags()),
 				Volumes: []*ecs.Volume{
 					{
 						Name: aws.String("ipfs-data"),
@@ -171,7 +202,7 @@ func (t *Target) createTaskDefinition() Task {
 					{
 						Name: aws.String("efs"),
 						EfsVolumeConfiguration: &ecs.EFSVolumeConfiguration{
-							FileSystemId: aws.String(efs_file_system_id),
+							FileSystemId: aws.String(t.base.EfsFileSystemID()),
 						},
 					},
 				},
@@ -181,7 +212,7 @@ func (t *Target) createTaskDefinition() Task {
 						Image:       aws.String(t.image),
 						Cpu:         aws.Int64(0),
 						Essential:   aws.Bool(true),
-						Environment: gwEnv,
+						Environment: mapsToKeyValuePair(t.environment, additionalEnv),
 						MountPoints: []*ecs.MountPoint{
 							{
 								SourceVolume:  aws.String("ipfs-data"),
@@ -222,8 +253,7 @@ func (t *Target) createTaskDefinition() Task {
 							aws.String("-metrics.wal-directory=/data/grafana-agent"),
 							aws.String("-config.expand-env"),
 							aws.String("-enable-features=remote-configs"),
-							aws.String("-config.file=" + grafana_agent_target_config_url), // TODO: different for dealgood
-
+							aws.String("-config.file=" + t.base.GrafanaAgentTargetConfigURL()),
 						},
 						Environment: []*ecs.KeyValuePair{
 							// we use these for setting labels on metrics
@@ -258,11 +288,11 @@ func (t *Target) createTaskDefinition() Task {
 						Secrets: []*ecs.Secret{
 							{
 								Name:      aws.String("GRAFANA_USER"),
-								ValueFrom: aws.String(grafana_push_secret_arn + ":username::"),
+								ValueFrom: aws.String(t.base.GrafanaPushSecretArn() + ":username::"),
 							},
 							{
 								Name:      aws.String("GRAFANA_PASS"),
-								ValueFrom: aws.String(grafana_push_secret_arn + ":password::"),
+								ValueFrom: aws.String(t.base.GrafanaPushSecretArn() + ":password::"),
 							},
 						},
 					},
@@ -309,7 +339,6 @@ func (t *Target) createTaskDefinition() Task {
 				return fmt.Errorf("no task definition arn found")
 			}
 
-			t.taskDefinitionArn = *out.TaskDefinition.TaskDefinitionArn
 			return nil
 		},
 	}
@@ -317,7 +346,7 @@ func (t *Target) createTaskDefinition() Task {
 
 func (t *Target) deregisterTaskDefinition() Task {
 	return Task{
-		Name:  "deregister task definition " + t.taskDefinitionFamily,
+		Name:  "deregister task definition",
 		Check: t.taskDefinitionIsInactive(),
 		Func: func(ctx context.Context, sess *session.Session) error {
 			in := &ecs.DeregisterTaskDefinitionInput{
@@ -335,381 +364,111 @@ func (t *Target) deregisterTaskDefinition() Task {
 	}
 }
 
-func (t *Target) findExistingServiceDiscoveryService(ctx context.Context, sess *session.Session) error {
-	t.serviceDiscoveryServiceArn = ""
-	t.serviceDiscoveryServiceId = ""
-
-	svc := servicediscovery.New(sess)
-
-	in := &servicediscovery.ListServicesInput{
-		Filters: []*servicediscovery.ServiceFilter{
-			{
-				Condition: aws.String("EQ"),
-				Name:      aws.String("NAMESPACE_ID"),
-				Values: []*string{
-					aws.String(t.base.ServiceDiscoveryPrivateDnsNamespaceID()),
-				},
-			},
-		},
-	}
-
-	out, err := svc.ListServices(in)
-	if err != nil {
-		return fmt.Errorf("list service discovery services: %w", err)
-	}
-
-	if out == nil {
-		return fmt.Errorf("list service discovery services gave no result")
-	}
-
-	for _, ss := range out.Services {
-		if ss.Name != nil && *ss.Name == t.serviceDiscoveryServiceName {
-			if ss.Arn == nil || ss.Id == nil {
-				return fmt.Errorf("no service discovery service arn or id found")
-			}
-			t.serviceDiscoveryServiceArn = *ss.Arn
-			t.serviceDiscoveryServiceId = *ss.Id
-			return nil
-		}
-	}
-
-	if out.NextToken != nil {
-		return fmt.Errorf("no service discovery service found but more were available (FIXME: implement pagination)")
-	}
-
-	return nil
-}
-
-func (t *Target) createServiceDiscoveryService() Task {
+func (t *Target) runTask() Task {
 	return Task{
-		Name:  "create service discovery service " + t.serviceDiscoveryServiceName,
-		Check: t.serviceDiscoveryServiceExists(),
+		Name:  "run task",
+		Check: t.taskIsRunning(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			in := &servicediscovery.CreateServiceInput{
-				Name: aws.String(t.serviceDiscoveryServiceName),
-				DnsConfig: &servicediscovery.DnsConfig{
-					NamespaceId: aws.String(t.base.ServiceDiscoveryPrivateDnsNamespaceID()),
-					DnsRecords: []*servicediscovery.DnsRecord{
-						{
-							TTL:  aws.Int64(10),
-							Type: aws.String("SRV"),
-						},
-					},
-					RoutingPolicy: aws.String("MULTIVALUE"),
-				},
-			}
-
-			svc := servicediscovery.New(sess)
-			out, err := svc.CreateService(in)
+			taskArn, err := findTask(t.base.EcsClusterArn(), t.taskDefinitionFamily, sess)
 			if err != nil {
-				return fmt.Errorf("create service discovery service: %w", err)
+				return fmt.Errorf("find task: %w", err)
 			}
 
-			if out == nil || out.Service == nil || out.Service.Arn == nil || out.Service.Id == nil {
-				return fmt.Errorf("no service discovery service arn or id found")
-			}
-
-			t.serviceDiscoveryServiceArn = *out.Service.Arn
-			t.serviceDiscoveryServiceId = *out.Service.Id
-
-			return nil
-		},
-	}
-}
-
-func (t *Target) deleteServiceDiscoveryService() Task {
-	return Task{
-		Name:  "delete service discovery service " + t.serviceDiscoveryServiceName,
-		Check: t.serviceDiscoveryServiceDoesNotExist(),
-		Func: func(ctx context.Context, sess *session.Session) error {
-			in := &servicediscovery.DeleteServiceInput{
-				Id: aws.String(t.serviceDiscoveryServiceId),
-			}
-
-			svc := servicediscovery.New(sess)
-			_, err := svc.DeleteService(in)
-			if err != nil {
-				return fmt.Errorf("delete service discovery service: %w", err)
-			}
-
-			return nil
-		},
-	}
-}
-
-func (t *Target) findExistingEcsService(ctx context.Context, sess *session.Session) error {
-	t.ecsServiceArn = ""
-
-	svc := ecs.New(sess)
-
-	in := &ecs.DescribeServicesInput{
-		Cluster: aws.String(t.base.EcsClusterArn()),
-		Services: []*string{
-			aws.String(t.ecsServiceName),
-		},
-	}
-
-	out, err := svc.DescribeServices(in)
-	if err != nil {
-		return fmt.Errorf("describe services: %w", err)
-	}
-
-	// TODO: check out.Failures
-	for _, s := range out.Services {
-		if s.ServiceName != nil && *s.ServiceName == t.ecsServiceName {
-			if s.Status == nil {
-				return fmt.Errorf("unable to read ecs service status")
-			}
-			if s.ServiceArn == nil {
-				return fmt.Errorf("unable to read ecs service arn")
-			}
-			if *s.Status == "ACTIVE" {
-				t.ecsServiceArn = *s.ServiceArn
-			}
-			return nil
-		}
-	}
-
-	return nil
-}
-
-func (t *Target) createEcsService() Task {
-	return Task{
-		Name:  "create ecs service " + t.ecsServiceName,
-		Check: t.ecsServiceExists(),
-		Func: func(ctx context.Context, sess *session.Session) error {
-			if err := t.findExistingEcsService(ctx, sess); err != nil {
-				return fmt.Errorf("find existing ecs service: %w", err)
-			}
-
-			if t.ecsServiceArn != "" {
+			if taskArn != "" {
 				// TODO: don't assume this is configured how we want it to be
-				log.Printf("target %q ecs service: already exists with arn %s", t.name, t.ecsServiceArn)
+				debugf("target %q task: already exists with arn %s", t.name, taskArn)
+				return nil
+			}
+
+			svc := ecs.New(sess)
+			in := &ecs.RunTaskInput{
+				CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{
+					{
+						Base:             aws.Int64(0),
+						CapacityProvider: aws.String("io_medium"),
+						Weight:           aws.Int64(1),
+					},
+				},
+				Cluster:        aws.String(t.base.EcsClusterArn()),
+				Count:          aws.Int64(1),
+				TaskDefinition: aws.String(t.taskDefinitionFamily),
+				Tags:           ecsTags(t.tags()),
+			}
+
+			out, err := svc.RunTask(in)
+			if err != nil {
+				return fmt.Errorf("run task: %w", err)
+			}
+
+			if out == nil {
+				return fmt.Errorf("no run task output found")
+			}
+
+			if len(out.Failures) > 0 {
+				for _, f := range out.Failures {
+					warnf("target %q task: run failure arn=%v, detail=%v, reason=%v", t.name, f.Arn, f.Detail, f.Reason)
+				}
+				return fmt.Errorf("run task returned with failures")
+			}
+
+			if len(out.Tasks) != 1 {
+				return fmt.Errorf("unexpected number of tasks: %d", len(out.Tasks))
+			}
+
+			return nil
+		},
+	}
+}
+
+func (t *Target) stopTask() Task {
+	return Task{
+		Name:  "stop task",
+		Check: t.taskIsStoppedOrStopping(),
+		Func: func(ctx context.Context, sess *session.Session) error {
+			taskArn, err := findTask(t.base.EcsClusterArn(), t.taskDefinitionFamily, sess)
+			if err != nil {
+				return fmt.Errorf("find existing task: %w", err)
+			}
+
+			if taskArn == "" {
 				return nil
 			}
 
 			svc := ecs.New(sess)
 
-			in := &ecs.CreateServiceInput{
-				ServiceName:          aws.String(t.ecsServiceName),
-				Cluster:              aws.String(t.base.EcsClusterArn()),
-				TaskDefinition:       aws.String(t.taskDefinitionArn),
-				DesiredCount:         aws.Int64(1),
-				EnableExecuteCommand: aws.Bool(true),
-				ServiceRegistries: []*ecs.ServiceRegistry{
-					{
-						RegistryArn:   aws.String(t.serviceDiscoveryServiceArn),
-						ContainerPort: aws.Int64(8080),
-						ContainerName: aws.String("gateway"),
-					},
-				},
-
-				CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{
-					{
-						Base:             aws.Int64(0),
-						CapacityProvider: aws.String("one"),
-						Weight:           aws.Int64(1),
-					},
-				},
+			in := &ecs.StopTaskInput{
+				Cluster: aws.String(t.base.EcsClusterArn()),
+				Reason:  aws.String("stopped by ironbar"),
+				Task:    aws.String(taskArn),
 			}
 
-			out, err := svc.CreateService(in)
-			if err != nil {
-				return fmt.Errorf("create service: %w", err)
+			if _, err := svc.StopTask(in); err != nil {
+				return fmt.Errorf("stop task: %w", err)
 			}
 
-			if out == nil || out.Service == nil || out.Service.ServiceArn == nil {
-				return fmt.Errorf("no ecs service arn found")
-			}
-
-			t.ecsServiceArn = *out.Service.ServiceArn
 			return nil
-		},
-	}
-}
-
-func (t *Target) stopAllTasks() Task {
-	return Task{
-		Name:  "ecs service: stop all tasks",
-		Check: t.ecsServiceHasNoRunningTasks(),
-		Func: func(ctx context.Context, sess *session.Session) error {
-			svc := ecs.New(sess)
-			// reduce running task count
-			uin := &ecs.UpdateServiceInput{
-				Cluster:      aws.String(t.base.EcsClusterArn()),
-				Service:      aws.String(t.ecsServiceName),
-				DesiredCount: aws.Int64(0),
-			}
-			uout, err := svc.UpdateService(uin)
-			if err != nil {
-				return fmt.Errorf("update service: %w", err)
-			}
-			if uout == nil || uout.Service == nil || uout.Service.DesiredCount == nil || *uout.Service.DesiredCount != 0 {
-				return fmt.Errorf("could not set desired count to 0")
-			}
-			return nil
-		},
-	}
-}
-
-func (t *Target) deleteEcsService() Task {
-	return Task{
-		Name:  "ecs service: delete",
-		Check: t.ecsServiceStatusIsInactive(),
-		Func: func(ctx context.Context, sess *session.Session) error {
-			if err := ExecuteTask(ctx, sess, "", t.stopAllTasks()); err != nil {
-				return fmt.Errorf("stop tasks: %w", err)
-			}
-
-			svc := ecs.New(sess)
-			// reduce running task count
-			din := &ecs.DeleteServiceInput{
-				Cluster: aws.String(t.base.EcsClusterArn()),
-				Service: aws.String(t.ecsServiceName),
-			}
-			if _, err := svc.DeleteService(din); err != nil {
-				return fmt.Errorf("delete service: %w", err)
-			}
-			return nil
-		},
-	}
-}
-
-func (t *Target) ecsServiceHasNoRunningTasks() Check {
-	return Check{
-		Name:        "ecs service has no running tasks",
-		FailureText: "ecs service has running tasks",
-		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			svc := ecs.New(sess)
-
-			in := &ecs.DescribeServicesInput{
-				Cluster: aws.String(t.base.EcsClusterArn()),
-				Services: []*string{
-					aws.String(t.ecsServiceName),
-				},
-			}
-
-			out, err := svc.DescribeServices(in)
-			if err != nil {
-				return false, fmt.Errorf("describe services: %w", err)
-			}
-			for _, s := range out.Services {
-				if s.ServiceName != nil && *s.ServiceName == t.ecsServiceName {
-					if s.RunningCount != nil && *s.RunningCount == 0 {
-						return true, nil
-					}
-					return false, nil
-				}
-			}
-
-			return false, nil
-		},
-	}
-}
-
-func (t *Target) ecsServiceHasRunningTask() Check {
-	return Check{
-		Name: "ecs service has a running task",
-		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			svc := ecs.New(sess)
-
-			in := &ecs.DescribeServicesInput{
-				Cluster: aws.String(t.base.EcsClusterArn()),
-				Services: []*string{
-					aws.String(t.ecsServiceName),
-				},
-			}
-
-			out, err := svc.DescribeServices(in)
-			if err != nil {
-				return false, fmt.Errorf("describe services: %w", err)
-			}
-			for _, s := range out.Services {
-				if s.ServiceName != nil && *s.ServiceName == t.ecsServiceName {
-					if s.RunningCount != nil && *s.RunningCount == 1 {
-						return true, nil
-					}
-					return false, nil
-				}
-			}
-
-			return false, nil
-		},
-	}
-}
-
-func (t *Target) ecsServiceStatusIsInactive() Check {
-	return Check{
-		Name: "ecs service is inactive",
-		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			svc := ecs.New(sess)
-
-			in := &ecs.DescribeServicesInput{
-				Cluster: aws.String(t.base.EcsClusterArn()),
-				Services: []*string{
-					aws.String(t.ecsServiceName),
-				},
-			}
-
-			out, err := svc.DescribeServices(in)
-			if err != nil {
-				return false, fmt.Errorf("describe services: %w", err)
-			}
-			for _, s := range out.Services {
-				if s.ServiceName != nil && *s.ServiceName == t.ecsServiceName {
-					if s.Status != nil && *s.Status == "INACTIVE" {
-						return true, nil
-					}
-					return false, nil
-				}
-			}
-
-			// Service does not exist
-			return true, nil
-		},
-	}
-}
-
-func (t *Target) ecsServiceStatusIsActive() Check {
-	return Check{
-		Name: "ecs service is active",
-		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			svc := ecs.New(sess)
-
-			in := &ecs.DescribeServicesInput{
-				Cluster: aws.String(t.base.EcsClusterArn()),
-				Services: []*string{
-					aws.String(t.ecsServiceName),
-				},
-			}
-
-			out, err := svc.DescribeServices(in)
-			if err != nil {
-				return false, fmt.Errorf("describe services: %w", err)
-			}
-			for _, s := range out.Services {
-				if s.ServiceName != nil && *s.ServiceName == t.ecsServiceName {
-					if s.Status != nil && *s.Status == "ACTIVE" {
-						return true, nil
-					}
-					return false, nil
-				}
-			}
-
-			return false, nil
 		},
 	}
 }
 
 func (t *Target) taskDefinitionIsActive() Check {
 	return Check{
-		Name: "task definition is active",
+		Name:        "task definition is active",
+		FailureText: "task definition is not active",
 		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			if err := t.findExistingTaskDefinition(sess); err != nil {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			var err error
+			t.taskDefinitionArn, t.taskDefinitionRevision, err = findTaskDefinition(t.taskDefinitionFamily, sess)
+			if err != nil {
 				return false, err
 			}
 
-			return t.taskDefinitionArn != "", nil
+			if t.taskDefinitionArn != "" {
+				slog.Debug("captured task definition details", "component", t.Name(), "task_definition_arn", t.taskDefinitionArn, "task_definition_revision", t.taskDefinitionRevision)
+				return true, nil
+			}
+			return false, nil
 		},
 	}
 }
@@ -719,65 +478,174 @@ func (t *Target) taskDefinitionIsInactive() Check {
 		Name:        "task definition is inactive",
 		FailureText: "task definition is active",
 		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			if err := t.findExistingTaskDefinition(sess); err != nil {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			var err error
+			t.taskDefinitionArn, t.taskDefinitionRevision, err = findTaskDefinition(t.taskDefinitionFamily, sess)
+			if err != nil {
 				return false, err
 			}
 
-			return t.taskDefinitionArn == "", nil
+			if t.taskDefinitionArn != "" {
+				slog.Debug("captured task definition details", "component", t.Name(), "task_definition_arn", t.taskDefinitionArn, "task_definition_revision", t.taskDefinitionRevision)
+				return false, nil
+			}
+			return true, nil
 		},
 	}
 }
 
-func (t *Target) serviceDiscoveryServiceExists() Check {
+func (t *Target) taskIsRunning() Check {
 	return Check{
-		Name:        "service discovery service exists",
-		FailureText: "service discovery service does not exist",
+		Name:        "task is running",
+		FailureText: "task is not running",
 		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			if err := t.findExistingServiceDiscoveryService(ctx, sess); err != nil {
+			taskArn, err := findTask(t.base.EcsClusterArn(), t.taskDefinitionFamily, sess)
+			if err != nil {
 				return false, err
 			}
 
-			return t.serviceDiscoveryServiceArn != "" && t.serviceDiscoveryServiceId != "", nil
+			t.mu.Lock()
+			t.taskArn = taskArn
+			t.mu.Unlock()
+
+			if taskArn == "" {
+				return false, nil
+			}
+
+			slog.Debug("captured task details", "component", t.Name(), "task_arn", taskArn)
+
+			running, err := isTaskRunning(ctx, sess, t.base.EcsClusterArn(), taskArn)
+			if err != nil {
+				return false, err
+			}
+
+			if !running {
+				return false, nil
+			}
+
+			svc := ecs.New(sess)
+			in := &ecs.DescribeTasksInput{
+				Cluster: aws.String(t.base.EcsClusterArn()),
+				Tasks: []*string{
+					aws.String(taskArn),
+				},
+			}
+			out, err := svc.DescribeTasks(in)
+			if err != nil {
+				return false, fmt.Errorf("describe tasks: %w", err)
+			}
+
+			if len(out.Failures) > 0 {
+				for _, f := range out.Failures {
+					warnf("target %q task: describe failure arn=%v, detail=%v, reason=%v", t.name, f.Arn, f.Detail, f.Reason)
+				}
+				return false, fmt.Errorf("failed to describe tasks")
+			}
+
+			if len(out.Tasks) != 1 {
+				return false, fmt.Errorf("unexpected number of tasks: %d", len(out.Tasks))
+			}
+
+			if out.Tasks[0] == nil {
+				return false, fmt.Errorf("nil task found")
+			}
+
+			task := *out.Tasks[0]
+			if task.ContainerInstanceArn == nil {
+				return false, fmt.Errorf("container instance arn not found")
+			}
+
+			inci := &ecs.DescribeContainerInstancesInput{
+				Cluster: aws.String(t.base.EcsClusterArn()),
+				ContainerInstances: []*string{
+					task.ContainerInstanceArn,
+				},
+			}
+			outci, err := svc.DescribeContainerInstances(inci)
+			if err != nil {
+				return false, fmt.Errorf("describe container instances: %w", err)
+			}
+
+			if len(outci.Failures) > 0 {
+				for _, f := range out.Failures {
+					warnf("target %q task: describe container instance failure arn=%v, detail=%v, reason=%v", t.name, f.Arn, f.Detail, f.Reason)
+				}
+				return false, fmt.Errorf("failed to describe container instances")
+			}
+
+			if len(outci.ContainerInstances) != 1 {
+				return false, fmt.Errorf("unexpected number of container instances: %d", len(outci.ContainerInstances))
+			}
+
+			if outci.ContainerInstances[0] == nil || outci.ContainerInstances[0].Ec2InstanceId == nil {
+				return false, fmt.Errorf("container instance id not found")
+			}
+
+			ec2svc := ec2.New(sess)
+			ini := &ec2.DescribeInstancesInput{
+				InstanceIds: []*string{
+					outci.ContainerInstances[0].Ec2InstanceId,
+				},
+			}
+			outi, err := ec2svc.DescribeInstances(ini)
+			if err != nil {
+				return false, fmt.Errorf("describe ec2 instances: %w", err)
+			}
+
+			if len(outi.Reservations) != 1 {
+				return false, fmt.Errorf("unexpected number of instance reservations found: %d", len(outi.Reservations))
+			}
+
+			if len(outi.Reservations[0].Instances) != 1 {
+				return false, fmt.Errorf("unexpected number of instances found: %d", len(outi.Reservations[0].Instances))
+			}
+
+			instance := outi.Reservations[0].Instances[0]
+
+			if instance == nil || instance.PrivateIpAddress == nil {
+				return false, fmt.Errorf("private ip address not found")
+			}
+
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			t.taskEC2InstanceID = *outci.ContainerInstances[0].Ec2InstanceId
+			t.taskPrivateIPAddress = *instance.PrivateIpAddress
+			slog.Debug("captured instance details", "component", t.Name(), "ec2_instance_id", *outci.ContainerInstances[0].Ec2InstanceId, "private_ip_address", *instance.PrivateIpAddress)
+			return true, nil
 		},
 	}
 }
 
-func (t *Target) serviceDiscoveryServiceDoesNotExist() Check {
+func (t *Target) taskIsStoppedOrStopping() Check {
 	return Check{
-		Name:        "service discovery service does not exist",
-		FailureText: "service discovery service exists",
+		Name:        "task is stopped or stopping",
+		FailureText: "task is not stopped or stopping",
 		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			if err := t.findExistingServiceDiscoveryService(ctx, sess); err != nil {
+			taskArn, err := findTask(t.base.EcsClusterArn(), t.taskDefinitionFamily, sess)
+			if err != nil {
+				return false, err
+			}
+			t.mu.Lock()
+			t.taskArn = taskArn
+			t.taskEC2InstanceID = ""
+			t.taskPrivateIPAddress = ""
+			t.mu.Unlock()
+
+			if taskArn == "" {
+				return true, nil
+			}
+			slog.Debug("captured task details", "component", t.Name(), "task_arn", taskArn)
+
+			running, err := isTaskRunning(ctx, sess, t.base.EcsClusterArn(), taskArn)
+			if err != nil {
 				return false, err
 			}
 
-			return t.serviceDiscoveryServiceArn == "" || t.serviceDiscoveryServiceId == "", nil
-		},
-	}
-}
-
-func (t *Target) ecsServiceExists() Check {
-	return Check{
-		Name:        "ecs service exists",
-		FailureText: "ecs service does not exist",
-		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			if err := t.findExistingEcsService(ctx, sess); err != nil {
-				return false, err
+			if running {
+				return false, nil
 			}
-			return t.ecsServiceArn != "", nil
-		},
-	}
-}
-
-func (t *Target) ecsServiceDoesNotExist() Check {
-	return Check{
-		Name:        "ecs service does not exist",
-		FailureText: "ecs service exists",
-		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			if err := t.findExistingEcsService(ctx, sess); err != nil {
-				return false, err
-			}
-			return t.ecsServiceArn == "", nil
+			return true, nil
 		},
 	}
 }
