@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/build"
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/exp"
+	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/build"
+	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/exp"
 	"github.com/kortschak/utter"
 	"golang.org/x/exp/slog"
 )

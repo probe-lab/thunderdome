@@ -4,19 +4,20 @@ import (
 	"fmt"
 
 	"github.com/urfave/cli/v2"
+	"golang.org/x/exp/slog"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/aws"
+	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/aws"
 )
 
-var StatusCommand = &cli.Command{
-	Name:      "status",
-	Usage:     "Report on the operational status of an experiment",
-	Action:    Status,
+var TeardownCommand = &cli.Command{
+	Name:      "teardown",
+	Usage:     "Teardown an experiment",
+	Action:    Teardown,
 	ArgsUsage: "EXPERIMENT-FILENAME",
 	Flags:     commonFlags,
 }
 
-func Status(cc *cli.Context) error {
+func Teardown(cc *cli.Context) error {
 	ctx := cc.Context
 	setupLogging()
 	if err := checkEnv(); err != nil {
@@ -30,12 +31,13 @@ func Status(cc *cli.Context) error {
 	args := cc.Args()
 	e, err := LoadExperiment(ctx, args.Get(0))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read experiment file: %w", err)
 	}
 
 	prov, err := aws.NewProvider()
 	if err != nil {
 		return err
 	}
-	return prov.Status(ctx, e)
+	slog.Info("tearing down experiment " + e.Name)
+	return prov.Teardown(ctx, e)
 }

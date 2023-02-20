@@ -9,8 +9,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/build"
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/exp"
+	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/build"
+	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/exp"
 )
 
 var ValidateCommand = &cli.Command{

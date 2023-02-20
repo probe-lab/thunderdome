@@ -206,7 +206,7 @@ var testExperiment = `{
 
 	"targets": [
 		{
-			"name": "kubo-v0.15.0",
+			"name": "kubo150",
 			"use_image": "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
 		}
 	]

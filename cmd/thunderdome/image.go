@@ -7,8 +7,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/build"
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/exp"
+	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/build"
+	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/exp"
 )
 
 var ImageCommand = &cli.Command{
@@ -68,11 +68,6 @@ var ImageCommand = &cli.Command{
 			Name:        "env-config-quoted",
 			Usage:       "Map an environment variable to a kubo config option that requires quotes (such as a string or duration). Use format 'EnvVar:ConfigOption'.",
 			Destination: &imageOpts.envConfigQuoted,
-		},
-		&cli.BoolFlag{
-			Name:   "keeptemp",
-			Usage:  "Keep the temporary working directory after ironbar exits.",
-			Hidden: true,
 		},
 		&cli.StringFlag{
 			Name:        "description",

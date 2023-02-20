@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	appName   = "ironbar"
-	envPrefix = "IRONBAR_"
+	appName   = "thunderdome"
+	envPrefix = "THUNDERDOME_"
 )
 
 var app = &cli.App{
