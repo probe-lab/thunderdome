@@ -17,7 +17,7 @@ const (
 var app = &cli.App{
 	Name:        appName,
 	Usage:       "a tool for managing experiments",
-	Description: "ironbar is a tool for managing experiments",
+	Description: "thunderdome is a tool for managing experiments",
 	Commands: []*cli.Command{
 		DeployCommand,
 		TeardownCommand,

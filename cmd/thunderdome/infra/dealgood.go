@@ -417,7 +417,7 @@ func (d *Dealgood) stopTask() Task {
 
 			in := &ecs.StopTaskInput{
 				Cluster: aws.String(d.base.EcsClusterArn()),
-				Reason:  aws.String("stopped by ironbar"),
+				Reason:  aws.String("stopped by thunderdome client"),
 				Task:    aws.String(taskArn),
 			}
 
