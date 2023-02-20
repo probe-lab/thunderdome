@@ -22,7 +22,9 @@ type BaseInfra struct {
 	grafanaAgentDealgoodConfigUrl string
 	grafanaPushSecretArn          string
 	vpcPublicSubnet               string
-	dealgood_security_group       string
+	dealgoodSecurityGroup         string
+	dealgoodImage                 string
+	ecrBaseURL                    string
 
 	mu    sync.Mutex
 	ready bool
@@ -45,7 +47,9 @@ func NewBaseInfra(experiment, awsRegion string) *BaseInfra {
 		grafanaAgentDealgoodConfigUrl: "https://pl-thunderdome-public.s3.eu-west-1.amazonaws.com/grafana-agent-config/dealgood.yaml",
 		grafanaPushSecretArn:          "arn:aws:secretsmanager:eu-west-1:147263665150:secret:grafana-push-MxjNiv",
 		vpcPublicSubnet:               "subnet-04b1073d060c42a2f",
-		dealgood_security_group:       "sg-08cd1cfcd73b3f0ea",
+		dealgoodSecurityGroup:         "sg-08cd1cfcd73b3f0ea",
+		dealgoodImage:                 "147263665150.dkr.ecr.eu-west-1.amazonaws.com/dealgood:2022-09-15__1504",
+		ecrBaseURL:                    "147263665150.dkr.ecr.eu-west-1.amazonaws.com",
 	}
 }
 
@@ -110,7 +114,7 @@ func (b *BaseInfra) VpcPublicSubnet() string {
 func (b *BaseInfra) DealgoodSecurityGroup() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.dealgood_security_group
+	return b.dealgoodSecurityGroup
 }
 
 func (b *BaseInfra) RequestSNSTopicArn() string {
@@ -129,6 +133,22 @@ func (b *BaseInfra) GrafanaAgentDealgoodConfigURL() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.grafanaAgentDealgoodConfigUrl
+}
+
+func (b *BaseInfra) DealgoodImage() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.dealgoodImage
+}
+
+func (b *BaseInfra) ECRBaseURL() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.ecrBaseURL
+}
+
+func (b *BaseInfra) DealgoodEnvironment() map[string]string {
+	return nil
 }
 
 func (b *BaseInfra) Setup(ctx context.Context) error {

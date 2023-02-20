@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +21,6 @@ type Dealgood struct {
 	base        *BaseInfra
 	image       string
 	environment map[string]string
-	targetURLs  []string
 
 	taskDefinitionFamily   string
 	taskName               string
@@ -40,16 +40,16 @@ type Dealgood struct {
 	requestSubscriptionArn string
 }
 
-func NewDealgood(experiment string, base *BaseInfra, image string, environment map[string]string, targetURLs []string) *Dealgood {
+func NewDealgood(experiment string, base *BaseInfra) *Dealgood {
 	requestQueueName := experiment + "-dealgood-requests"
 
 	env := map[string]string{
 		"DEALGOOD_EXPERIMENT":         experiment,
 		"OTEL_TRACES_EXPORTER":        "otlp",
 		"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
-		"DEALGOOD_RATE":               "10",       // TODO: request rate
-		"DEALGOOD_FILTER":             "pathonly", // TODO: request filter
-		"DEALGOOD_CONCURRENCY":        "100",      // TODO: concurrency
+		"DEALGOOD_RATE":               "10",
+		"DEALGOOD_FILTER":             "pathonly",
+		"DEALGOOD_CONCURRENCY":        "100",
 		"DEALGOOD_LOKI_URI":           "https://logs-prod-us-central1.grafana.net",
 		"DEALGOOD_LOKI_QUERY":         "{job=\"nginx\",app=\"gateway\",team=\"bifrost\"}",
 		"DEALGOOD_SQS_REGION":         base.AwsRegion(),
@@ -57,22 +57,41 @@ func NewDealgood(experiment string, base *BaseInfra, image string, environment m
 		"DEALGOOD_SQS_QUEUE":          requestQueueName,
 	}
 
-	for k, v := range environment {
+	for k, v := range base.DealgoodEnvironment() {
 		env[k] = v
 	}
 
 	return &Dealgood{
 		experiment:             experiment,
 		base:                   base,
-		image:                  image,
+		image:                  base.DealgoodImage(),
 		environment:            env,
-		targetURLs:             targetURLs,
 		taskDefinitionFamily:   experiment + "-dealgood",
 		taskName:               experiment + "-dealgood",
 		requestQueueName:       requestQueueName,
 		requestQueuePolicyName: experiment + "-dealgood-requests",
 		requestQueuePolicyPath: "/" + experiment + "-dealgood-requests/",
 	}
+}
+
+func (d *Dealgood) WithMaxRequestRate(v int) *Dealgood {
+	d.environment["DEALGOOD_RATE"] = strconv.Itoa(v)
+	return d
+}
+
+func (d *Dealgood) WithMaxConcurrency(v int) *Dealgood {
+	d.environment["DEALGOOD_CONCURRENCY"] = strconv.Itoa(v)
+	return d
+}
+
+func (d *Dealgood) WithRequestFilter(v string) *Dealgood {
+	d.environment["DEALGOOD_FILTER"] = v
+	return d
+}
+
+func (d *Dealgood) WithTargetURLs(urls []string) *Dealgood {
+	d.environment["DEALGOOD_TARGETS"] = strings.Join(urls, ",")
+	return d
 }
 
 func (d *Dealgood) Name() string {
@@ -172,12 +191,6 @@ func (d *Dealgood) createTaskDefinition() Task {
 		Name:  "create task definition",
 		Check: d.taskDefinitionIsActive(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			logger := slog.With("component", d.Name(), "family", d.taskDefinitionFamily)
-			logger.Debug("targets " + strings.Join(d.targetURLs, ","))
-			additionalEnv := map[string]string{
-				"DEALGOOD_TARGETS": strings.Join(d.targetURLs, ","),
-			}
-
 			in := &ecs.RegisterTaskDefinitionInput{
 				Family:                  aws.String(d.taskDefinitionFamily),
 				RequiresCompatibilities: []*string{aws.String("FARGATE")},
@@ -210,7 +223,7 @@ func (d *Dealgood) createTaskDefinition() Task {
 						Image:       aws.String(d.image),
 						Cpu:         aws.Int64(0),
 						Essential:   aws.Bool(true),
-						Environment: mapsToKeyValuePair(d.environment, additionalEnv),
+						Environment: mapsToKeyValuePair(d.environment),
 
 						Secrets: []*ecs.Secret{
 							// TODO: dealgood secrets
@@ -341,17 +354,6 @@ func (d *Dealgood) runTask() Task {
 		Name:  "run task",
 		Check: d.taskIsRunning(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			taskArn, err := findTask(d.base.EcsClusterArn(), d.taskDefinitionFamily, sess)
-			if err != nil {
-				return fmt.Errorf("find existing task: %w", err)
-			}
-
-			if taskArn != "" {
-				// TODO: don't assume this is configured how we want it to be
-				debugf("dealgood task: already exists with arn %s", taskArn)
-				return nil
-			}
-
 			svc := ecs.New(sess)
 
 			in := &ecs.RunTaskInput{

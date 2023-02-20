@@ -3,41 +3,56 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
+	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/build"
 	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/exp"
 	"github.com/kortschak/utter"
 	"golang.org/x/exp/slog"
 )
 
-// Resources needed
-
-// resource "aws_ecs_service" "target" {
-// resource "aws_service_discovery_service" "target" {
-// resource "aws_ecs_task_definition" "target" {
-
-// + resource "aws_iam_role" "experiment" {
-// + resource "aws_iam_role_policy_attachment" "experiment-ssm" {
-
-// resource "aws_sqs_queue" "requests" {
-// resource "aws_sqs_queue_policy" "requests" {
-// resource "aws_sns_topic_subscription" "requests_sqs_target" {
-
-// resource "aws_ecs_service" "dealgood" {
-// resource "aws_ecs_task_definition" "dealgood" {
-
 type Provider struct {
-	Region string
+	region     string
+	imageCache map[string]string
+}
+
+func NewProvider() (*Provider, error) {
+	region := os.Getenv("AWS_REGION")
+	if region == "" {
+		return nil, fmt.Errorf("Environment variable AWS_REGION should be set to the region Thunderdome is running in")
+	}
+	return &Provider{
+		region: region,
+	}, nil
 }
 
 func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
-	base := NewBaseInfra(e.Name, p.Region)
+	base := NewBaseInfra(e.Name, p.region)
 	if err := base.Setup(ctx); err != nil {
 		return fmt.Errorf("failed to setup base infra: %w", err)
 	}
 
 	if err := WaitUntil(ctx, slog.With("component", base.Name()), "is ready", base.Ready, 2*time.Second, 30*time.Second); err != nil {
 		return fmt.Errorf("base infra failed to become ready: %w", err)
+	}
+
+	// Build all the images
+	for _, t := range e.Targets {
+		if t.Image != "" {
+			continue
+		}
+
+		if t.ImageSpec == nil {
+			return fmt.Errorf("no image found for target %s", t.Name)
+		}
+
+		var err error
+		slog.Info("building docker image", "component", "target "+t.Name)
+		t.Image, err = p.BuildImage(ctx, t.ImageSpec, base.ECRBaseURL())
+		if err != nil {
+			return fmt.Errorf("failed to build image for target %s", t.Name)
+		}
 	}
 
 	components := make([]Component, 0, len(e.Targets))
@@ -56,7 +71,12 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 		targetURLs[i] = targets[i].GatewayURL()
 	}
 
-	d := NewDealgood(e.Name, base, e.Dealgood.Image, e.Dealgood.Environment, targetURLs)
+	d := NewDealgood(e.Name, base).
+		WithTargetURLs(targetURLs).
+		WithMaxRequestRate(e.MaxRequestRate).
+		WithMaxConcurrency(e.MaxConcurrency).
+		WithRequestFilter(e.RequestFilter)
+
 	if err := d.Setup(ctx); err != nil {
 		return fmt.Errorf("failed to setup dealgood: %w", err)
 	}
@@ -69,12 +89,12 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 }
 
 func (p *Provider) Teardown(ctx context.Context, e *exp.Experiment) error {
-	base := NewBaseInfra(e.Name, p.Region)
+	base := NewBaseInfra(e.Name, p.region)
 	if err := base.InspectExisting(ctx); err != nil {
 		return fmt.Errorf("failed to inspect existing infra: %w", err)
 	}
 
-	d := NewDealgood(e.Name, base, e.Dealgood.Image, e.Dealgood.Environment, []string{})
+	d := NewDealgood(e.Name, base)
 	if err := d.Teardown(ctx); err != nil {
 		return fmt.Errorf("failed to teardown dealgood: %w", err)
 	}
@@ -98,7 +118,7 @@ func (p *Provider) Teardown(ctx context.Context, e *exp.Experiment) error {
 func (p *Provider) Status(ctx context.Context, e *exp.Experiment) error {
 	allready := true
 
-	base := NewBaseInfra(e.Name, p.Region)
+	base := NewBaseInfra(e.Name, p.region)
 	ready, err := base.Ready(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to check %s ready state: %w", base.Name(), err)
@@ -117,7 +137,7 @@ func (p *Provider) Status(ctx context.Context, e *exp.Experiment) error {
 			}
 		}
 
-		d := NewDealgood(e.Name, base, e.Dealgood.Image, e.Dealgood.Environment, []string{})
+		d := NewDealgood(e.Name, base)
 		ready, err := d.Ready(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to check %s ready state: %w", d.Name(), err)
@@ -135,6 +155,30 @@ func (p *Provider) Status(ctx context.Context, e *exp.Experiment) error {
 		slog.Info("all components ready")
 	}
 	return nil
+}
+
+func (p *Provider) BuildImage(ctx context.Context, is *exp.ImageSpec, ecrBaseURL string) (string, error) {
+	tag := is.Hash()
+	image, ok := p.imageCache[tag]
+	if ok {
+		return image, nil
+	}
+
+	localImage, err := build.Build(ctx, tag, is)
+	if err != nil {
+		return "", fmt.Errorf("build image: %w", err)
+	}
+
+	if err := build.PushImage(localImage, ecrBaseURL); err != nil {
+		return "", fmt.Errorf("push image: %w", err)
+	}
+	image = fmt.Sprintf("%s/%s", ecrBaseURL, localImage)
+
+	if p.imageCache == nil {
+		p.imageCache = make(map[string]string)
+	}
+	p.imageCache[tag] = image
+	return image, err
 }
 
 func debugf(t string, args ...any) {

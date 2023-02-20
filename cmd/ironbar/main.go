@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -24,44 +23,12 @@ var app = &cli.App{
 		TeardownCommand,
 		StatusCommand,
 		ImageCommand,
+		ValidateCommand,
 	},
-	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:        "prometheus-addr",
-			Usage:       "Network address to start a prometheus metric exporter server on (example: :9991)",
-			Value:       "",
-			Destination: &commonOpts.prometheusAddr,
-			EnvVars:     []string{envPrefix + "PROMETHEUS_ADDR"},
-		},
-		&cli.StringFlag{
-			Name:        "cpuprofile",
-			Usage:       "Write a CPU profile to the specified file before exiting.",
-			Value:       "",
-			Destination: &commonOpts.cpuprofile,
-			EnvVars:     []string{envPrefix + "CPUPROFILE"},
-		},
-		&cli.StringFlag{
-			Name:        "memprofile",
-			Usage:       "Write an allocation profile to the file before exiting.",
-			Value:       "",
-			Destination: &commonOpts.memprofile,
-			EnvVars:     []string{envPrefix + "MEMPROFILE"},
-		},
-	},
-}
-
-var commonOpts struct {
-	prometheusAddr string
-	cpuprofile     string
-	memprofile     string
-	awsRegion      string
-	verbose        bool
-	veryverbose    bool
-	nocolor        bool
+	Flags: commonFlags,
 }
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.LUTC)
 	ctx := context.Background()
 	if err := app.RunContext(ctx, os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -86,4 +53,57 @@ func setupLogging() {
 		h = h.WithLevel(logLevel.Level())
 		slog.SetDefault(slog.New(h))
 	}
+}
+
+func checkBuildEnv() error {
+	if os.Getenv("AWS_PROFILE") == "" {
+		return fmt.Errorf("Environment variable AWS_PROFILE should be set to a valid AWS profile name to allow pushing of images to ECR")
+	}
+
+	return checkEnv()
+}
+
+func checkEnv() error {
+	if os.Getenv("AWS_REGION") == "" {
+		return fmt.Errorf("Environment variable AWS_REGION should be set to the region Thunderdome is running in")
+	}
+
+	return nil
+}
+
+var commonOpts struct {
+	verbose     bool
+	veryverbose bool
+	nocolor     bool
+}
+
+var commonFlags = []cli.Flag{
+	&cli.BoolFlag{
+		Name:        "verbose",
+		Aliases:     []string{"v"},
+		Usage:       "Set logging level more verbose to include info level logs",
+		Value:       true,
+		Destination: &commonOpts.verbose,
+		EnvVars:     []string{envPrefix + "VERBOSE"},
+	},
+	&cli.BoolFlag{
+		Name:        "veryverbose",
+		Aliases:     []string{"vv"},
+		Usage:       "Set logging level very verbose to include debug level logs",
+		Value:       false,
+		Destination: &commonOpts.veryverbose,
+		EnvVars:     []string{envPrefix + "VERY_VERBOSE"},
+	},
+	&cli.BoolFlag{
+		Name:        "nocolor",
+		Usage:       "Use plain, machine readable logs",
+		Value:       false,
+		Destination: &commonOpts.nocolor,
+		EnvVars:     []string{envPrefix + "NOCOLOR"},
+	},
+}
+
+func flags(fs []cli.Flag) []cli.Flag {
+	fs = append(fs, commonFlags...)
+	return fs
 }

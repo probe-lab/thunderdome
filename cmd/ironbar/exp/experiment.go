@@ -1,36 +1,11 @@
 package exp
 
 import (
+	"encoding/base32"
+	"hash/fnv"
+	"strings"
 	"time"
 )
-
-type ExperimentJSON struct {
-	Name     string `json:"name"`
-	Duration int    `json:"duration"` // in hours
-
-	MaxRequestRate int    `json:"max_request_rate"` // maximum number of requests per second to send to targets
-	MaxConcurrency int    `json:"max_concurrency"`  // maximum number of concurrent requests to have in flight for each target
-	RequestFilter  string `json:"request_filter"`   // filter to apply to incoming requests: "none", "pathonly", "validpathonly"
-
-	DefaultImage      string   `json:"default_image"`      // image to use for targets by default, can be overriden
-	SharedEnvironment []NVJSON `json:"shared_environment"` // environment variables provided to all targets
-
-	DefaultInstanceType string `json:"default_instance_type"` // instance type to use for all targets, can be overriddden, default is "c6id.8xlarge"
-
-	Targets []TargetJSON `json:"targets"`
-}
-
-type NVJSON struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-type TargetJSON struct {
-	Name         string   `json:"name"`
-	Image        string   `json:"image"`         // docker image to use. If empty, DefaultImage will be used instead
-	InstanceType string   `json:"instance_type"` // instance type to use. If empty, DefaultInstanceType will be used instead
-	Environment  []NVJSON `json:"environment"`   // additional environment variables
-}
 
 type Experiment struct {
 	Name     string
@@ -40,83 +15,62 @@ type Experiment struct {
 	MaxConcurrency int
 	RequestFilter  string
 
-	DefaultImage      string
-	SharedEnvironment map[string]string
-
-	DefaultInstanceType string
-
-	Targets  []*TargetDef
-	Dealgood DealgoodDef
+	Targets []*TargetSpec
 }
 
-type TargetDef struct {
+type TargetSpec struct {
 	Name         string
 	Image        string
+	ImageSpec    *ImageSpec
 	InstanceType string
 	Environment  map[string]string
 }
 
-type DealgoodDef struct {
-	Image       string
-	Environment map[string]string
+type ImageSpec struct {
+	Maintainer   string
+	Description  string
+	BaseImage    string
+	Git          *GitSpec
+	InitCommands []string
 }
 
-func TestExperiment() *Experiment {
-	return &Experiment{
-		Name: "ironbar_test",
-
-		Targets: []*TargetDef{
-			{
-				Name:  "target1",
-				Image: "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0",
-				Environment: map[string]string{
-					"IPFS_PROFILE": "server",
-				},
-			},
-		},
-
-		Dealgood: DealgoodDef{
-			Image:       "147263665150.dkr.ecr.eu-west-1.amazonaws.com/dealgood:2022-09-15__1504",
-			Environment: map[string]string{},
-		},
-	}
+type GitSpec struct {
+	Repo   string
+	Commit string
+	Tag    string
+	Branch string
 }
 
-/*
-	{
-		"name": "tweedles-2022-09-08",
-		"duration": 24, // hours?
+func (is *ImageSpec) Hash() string {
+	h := fnv.New64()
 
+	h.Write([]byte(is.Maintainer))
+	h.Write([]byte{0x31})
 
-		"request_stream" : {
-			"max_rate": 20,
-			"max_concurrency": 100,
-			"filter": "none",
-		}
+	h.Write([]byte(is.Description))
+	h.Write([]byte{0x31})
 
-		"request_rate": 20,
-		"request_concurrency"
+	h.Write([]byte(is.BaseImage))
+	h.Write([]byte{0x31})
 
-		"request_filter"
-
-		"default_target_image": // image to use by default, can be overriden
-		"shared_environment": // environment variables used by all targets
-
-		targets: [
-
-			{
-				"name": "target1",
-				"image": "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
-				"environment": [
-
-
-				]
-			}
-
-
-
-
-
-		]
+	if is.Git != nil {
+		h.Write([]byte(is.Git.Repo))
+		h.Write([]byte{0x31})
+		h.Write([]byte(is.Git.Commit))
+		h.Write([]byte{0x31})
+		h.Write([]byte(is.Git.Tag))
+		h.Write([]byte{0x31})
+		h.Write([]byte(is.Git.Branch))
+		h.Write([]byte{0x31})
 	}
-*/
+	h.Write([]byte{0x31})
+
+	for _, cmd := range is.InitCommands {
+		h.Write([]byte(cmd))
+		h.Write([]byte{0x31})
+	}
+	h.Write([]byte{0x31})
+
+	sum := h.Sum(nil)
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(sum))
+}

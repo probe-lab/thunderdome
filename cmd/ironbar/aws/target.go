@@ -20,11 +20,8 @@ type Target struct {
 	image       string
 	environment map[string]string
 
-	taskDefinitionFamily        string
-	serviceDiscoveryServiceName string
-	// ecsServiceName              string
-	taskName string
-	// taskRoleName                string
+	taskDefinitionFamily string
+	taskName             string
 
 	// mu guards access to fields in block directly below
 	mu                     sync.Mutex
@@ -38,16 +35,13 @@ type Target struct {
 
 func NewTarget(name, experiment string, base *BaseInfra, image string, environment map[string]string) *Target {
 	return &Target{
-		base:                        base,
-		experiment:                  experiment,
-		name:                        name,
-		image:                       image,
-		environment:                 environment,
-		taskDefinitionFamily:        experiment + "-" + name,
-		serviceDiscoveryServiceName: experiment + "-" + name,
-		// ecsServiceName:              experiment + "-" + name,
-		taskName: experiment + "-" + name,
-		// taskRoleName:                experiment + "-" + name + "_task_role",
+		base:                 base,
+		experiment:           experiment,
+		name:                 name,
+		image:                image,
+		environment:          environment,
+		taskDefinitionFamily: experiment + "-" + name,
+		taskName:             experiment + "-" + name,
 	}
 }
 
@@ -166,19 +160,8 @@ func (t *Target) createTaskDefinition() Task {
 		Name:  "create task definition",
 		Check: t.taskDefinitionIsActive(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			taskDefinitionArn, _, err := findTaskDefinition(t.taskDefinitionFamily, sess)
-			if err != nil {
-				return fmt.Errorf("find existing task definition: %w", err)
-			}
-
-			if taskDefinitionArn != "" {
-				// TODO: don't assume this is configured how we want it to be
-				debugf("task definition %q: already exists with arn %s", t.taskDefinitionFamily, taskDefinitionArn)
-				return nil
-			}
-
 			additionalEnv := map[string]string{
-				// TODO: any additiona env?
+				// TODO: any additional env?
 			}
 
 			in := &ecs.RegisterTaskDefinitionInput{
@@ -369,17 +352,6 @@ func (t *Target) runTask() Task {
 		Name:  "run task",
 		Check: t.taskIsRunning(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			taskArn, err := findTask(t.base.EcsClusterArn(), t.taskDefinitionFamily, sess)
-			if err != nil {
-				return fmt.Errorf("find task: %w", err)
-			}
-
-			if taskArn != "" {
-				// TODO: don't assume this is configured how we want it to be
-				debugf("target %q task: already exists with arn %s", t.name, taskArn)
-				return nil
-			}
-
 			svc := ecs.New(sess)
 			in := &ecs.RunTaskInput{
 				CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{

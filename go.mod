@@ -7,6 +7,7 @@ require (
 	github.com/aws/aws-sdk-go v1.44.115
 	github.com/gorilla/websocket v1.5.0
 	github.com/ipfs/go-path v0.3.0
+	github.com/kortschak/utter v1.5.0
 	github.com/pkg/profile v1.6.0
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/common v0.37.0
@@ -43,7 +44,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.4 // indirect
-	github.com/kortschak/utter v1.5.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect

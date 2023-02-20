@@ -105,7 +105,7 @@ func (ih *InteractiveHandler) Handle(r slog.Record) error {
 		msg = component + ": " + msg
 	}
 
-	fmt.Printf("%s | %15s | %-30s %s\n", prefix, r.Time.Format("15:04:05.000000"), msg, flatattrs)
+	fmt.Printf("%s | %15s | %-40s %s\n", prefix, r.Time.Format("15:04:05.000000"), msg, flatattrs)
 
 	return nil
 }
