@@ -52,19 +52,15 @@ func NewDealgood(experiment string, base *BaseInfra) *Dealgood {
 		"DEALGOOD_CONCURRENCY":        "100",
 		"DEALGOOD_LOKI_URI":           "https://logs-prod-us-central1.grafana.net",
 		"DEALGOOD_LOKI_QUERY":         "{job=\"nginx\",app=\"gateway\",team=\"bifrost\"}",
-		"DEALGOOD_SQS_REGION":         base.AwsRegion(),
+		"DEALGOOD_SQS_REGION":         base.AwsRegion,
 		"DEALGOOD_SOURCE":             "sqs",
 		"DEALGOOD_SQS_QUEUE":          requestQueueName,
-	}
-
-	for k, v := range base.DealgoodEnvironment() {
-		env[k] = v
 	}
 
 	return &Dealgood{
 		experiment:             experiment,
 		base:                   base,
-		image:                  base.DealgoodImage(),
+		image:                  base.DealgoodImage,
 		environment:            env,
 		taskDefinitionFamily:   experiment + "-dealgood",
 		taskName:               experiment + "-dealgood",
@@ -119,7 +115,7 @@ func (d *Dealgood) TaskArn() string {
 func (d *Dealgood) Setup(ctx context.Context) error {
 	slog.Info("starting setup", "component", d.Name())
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(d.base.AwsRegion()),
+		Region: aws.String(d.base.AwsRegion),
 	})
 	if err != nil {
 		return fmt.Errorf("new session: %w", err)
@@ -136,7 +132,7 @@ func (d *Dealgood) Setup(ctx context.Context) error {
 func (d *Dealgood) Teardown(ctx context.Context) error {
 	slog.Info("starting teardown", "component", d.Name())
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(d.base.AwsRegion()),
+		Region: aws.String(d.base.AwsRegion),
 	})
 	if err != nil {
 		return fmt.Errorf("new session: %w", err)
@@ -156,7 +152,7 @@ func (d *Dealgood) Ready(ctx context.Context) (bool, error) {
 	d.mu.Unlock()
 
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(d.base.AwsRegion()),
+		Region: aws.String(d.base.AwsRegion),
 	})
 	if err != nil {
 		return false, fmt.Errorf("new session: %w", err)
@@ -195,8 +191,8 @@ func (d *Dealgood) createTaskDefinition() Task {
 				Family:                  aws.String(d.taskDefinitionFamily),
 				RequiresCompatibilities: []*string{aws.String("FARGATE")},
 				NetworkMode:             aws.String("awsvpc"),
-				ExecutionRoleArn:        aws.String(d.base.EcsExecutionRoleArn()),
-				TaskRoleArn:             aws.String(d.base.DealgoodTaskRoleArn()),
+				ExecutionRoleArn:        aws.String(d.base.EcsExecutionRoleArn),
+				TaskRoleArn:             aws.String(d.base.DealgoodTaskRoleArn),
 				Cpu:                     aws.String("4096"),
 				Memory:                  aws.String("10240"),
 				Tags:                    ecsTags(d.tags()),
@@ -213,7 +209,7 @@ func (d *Dealgood) createTaskDefinition() Task {
 					{
 						Name: aws.String("efs"),
 						EfsVolumeConfiguration: &ecs.EFSVolumeConfiguration{
-							FileSystemId: aws.String(d.base.EfsFileSystemID()),
+							FileSystemId: aws.String(d.base.EfsFileSystemID),
 						},
 					},
 				},
@@ -245,8 +241,8 @@ func (d *Dealgood) createTaskDefinition() Task {
 						LogConfiguration: &ecs.LogConfiguration{
 							LogDriver: aws.String("awslogs"),
 							Options: map[string]*string{
-								"awslogs-group":         aws.String(d.base.LogGroupName()),
-								"awslogs-region":        aws.String(d.base.AwsRegion()),
+								"awslogs-group":         aws.String(d.base.LogGroupName),
+								"awslogs-region":        aws.String(d.base.AwsRegion),
 								"awslogs-stream-prefix": aws.String("ecs"),
 							},
 						},
@@ -272,7 +268,7 @@ func (d *Dealgood) createTaskDefinition() Task {
 							aws.String("-metrics.wal-directory=/data/grafana-agent"),
 							aws.String("-config.expand-env"),
 							aws.String("-enable-features=remote-configs"),
-							aws.String("-config.file=" + d.base.GrafanaAgentDealgoodConfigURL()),
+							aws.String("-config.file=" + d.base.DealgoodGrafanaAgentConfigURL),
 						},
 						Environment: []*ecs.KeyValuePair{
 							// we use these for setting labels on metrics
@@ -285,8 +281,8 @@ func (d *Dealgood) createTaskDefinition() Task {
 						LogConfiguration: &ecs.LogConfiguration{
 							LogDriver: aws.String("awslogs"),
 							Options: map[string]*string{
-								"awslogs-group":         aws.String(d.base.LogGroupName()),
-								"awslogs-region":        aws.String(d.base.AwsRegion()),
+								"awslogs-group":         aws.String(d.base.LogGroupName),
+								"awslogs-region":        aws.String(d.base.AwsRegion),
 								"awslogs-stream-prefix": aws.String("ecs"),
 							},
 						},
@@ -303,11 +299,11 @@ func (d *Dealgood) createTaskDefinition() Task {
 						Secrets: []*ecs.Secret{
 							{
 								Name:      aws.String("GRAFANA_USER"),
-								ValueFrom: aws.String(d.base.GrafanaPushSecretArn() + ":username::"),
+								ValueFrom: aws.String(d.base.GrafanaPushSecretArn + ":username::"),
 							},
 							{
 								Name:      aws.String("GRAFANA_PASS"),
-								ValueFrom: aws.String(d.base.GrafanaPushSecretArn() + ":password::"),
+								ValueFrom: aws.String(d.base.GrafanaPushSecretArn + ":password::"),
 							},
 						},
 					},
@@ -362,14 +358,14 @@ func (d *Dealgood) runTask() Task {
 					AwsvpcConfiguration: &ecs.AwsVpcConfiguration{
 						AssignPublicIp: aws.String("ENABLED"),
 						SecurityGroups: []*string{
-							aws.String(d.base.DealgoodSecurityGroup()),
+							aws.String(d.base.DealgoodSecurityGroup),
 						},
 						Subnets: []*string{
-							aws.String(d.base.VpcPublicSubnet()),
+							aws.String(d.base.VpcPublicSubnet),
 						},
 					},
 				},
-				Cluster:        aws.String(d.base.EcsClusterArn()),
+				Cluster:        aws.String(d.base.EcsClusterArn),
 				Count:          aws.Int64(1),
 				TaskDefinition: aws.String(d.taskDefinitionFamily),
 				Tags:           ecsTags(d.tags()),
@@ -404,7 +400,7 @@ func (d *Dealgood) stopTask() Task {
 		Name:  "stop task",
 		Check: d.taskIsStoppedOrStopping(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			taskArn, err := findTask(d.base.EcsClusterArn(), d.taskDefinitionFamily, sess)
+			taskArn, err := findTask(d.base.EcsClusterArn, d.taskDefinitionFamily, sess)
 			if err != nil {
 				return fmt.Errorf("find existing task: %w", err)
 			}
@@ -416,7 +412,7 @@ func (d *Dealgood) stopTask() Task {
 			svc := ecs.New(sess)
 
 			in := &ecs.StopTaskInput{
-				Cluster: aws.String(d.base.EcsClusterArn()),
+				Cluster: aws.String(d.base.EcsClusterArn),
 				Reason:  aws.String("stopped by thunderdome client"),
 				Task:    aws.String(taskArn),
 			}
@@ -496,7 +492,7 @@ func (d *Dealgood) createRequestQueue() Task {
 				      }
 				    }
 				  ]
-				}`, *queueArn, d.base.RequestSNSTopicArn())
+				}`, *queueArn, d.base.RequestSNSTopicArn)
 
 			insa := &sqs.SetQueueAttributesInput{
 				Attributes: map[string]*string{
@@ -554,7 +550,7 @@ func (d *Dealgood) createRequestQueueSubscription() Task {
 			snssvc := sns.New(sess)
 
 			insub := &sns.SubscribeInput{
-				TopicArn: aws.String(d.base.RequestSNSTopicArn()),
+				TopicArn: aws.String(d.base.RequestSNSTopicArn),
 				Protocol: aws.String("sqs"),
 				Endpoint: aws.String(d.requestQueueArn),
 			}
@@ -646,7 +642,7 @@ func (d *Dealgood) taskIsRunning() Check {
 		Name:        "task is running",
 		FailureText: "task is not running",
 		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			taskArn, err := findTask(d.base.EcsClusterArn(), d.taskDefinitionFamily, sess)
+			taskArn, err := findTask(d.base.EcsClusterArn, d.taskDefinitionFamily, sess)
 			if err != nil {
 				return false, err
 			}
@@ -659,7 +655,7 @@ func (d *Dealgood) taskIsRunning() Check {
 			}
 			slog.Debug("captured task details", "component", d.Name(), "task_arn", taskArn)
 
-			running, err := isTaskRunning(ctx, sess, d.base.EcsClusterArn(), taskArn)
+			running, err := isTaskRunning(ctx, sess, d.base.EcsClusterArn, taskArn)
 			if err != nil {
 				return false, err
 			}
@@ -677,7 +673,7 @@ func (d *Dealgood) taskIsStoppedOrStopping() Check {
 		Name:        "task is stopped or stopping",
 		FailureText: "task is not stopped or stopping",
 		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			taskArn, err := findTask(d.base.EcsClusterArn(), d.taskDefinitionFamily, sess)
+			taskArn, err := findTask(d.base.EcsClusterArn, d.taskDefinitionFamily, sess)
 			if err != nil {
 				return false, err
 			}
@@ -690,7 +686,7 @@ func (d *Dealgood) taskIsStoppedOrStopping() Check {
 			}
 			slog.Debug("captured task details", "component", d.Name(), "task_arn", taskArn)
 
-			running, err := isTaskRunning(ctx, sess, d.base.EcsClusterArn(), taskArn)
+			running, err := isTaskRunning(ctx, sess, d.base.EcsClusterArn, taskArn)
 			if err != nil {
 				return false, err
 			}
@@ -760,7 +756,7 @@ func (d *Dealgood) requestQueueSubscriptionExists() Check {
 			requestQueueArn := d.requestQueueArn
 			d.mu.Unlock()
 
-			subscriptionArn, err := findSubscription(d.base.RequestSNSTopicArn(), requestQueueArn, sess)
+			subscriptionArn, err := findSubscription(d.base.RequestSNSTopicArn, requestQueueArn, sess)
 			if err != nil {
 				return false, err
 			}
@@ -788,7 +784,7 @@ func (d *Dealgood) requestQueueSubscriptionDoesNotExist() Check {
 			requestQueueArn := d.requestQueueArn
 			d.mu.Unlock()
 
-			subscriptionArn, err := findSubscription(d.base.RequestSNSTopicArn(), requestQueueArn, sess)
+			subscriptionArn, err := findSubscription(d.base.RequestSNSTopicArn, requestQueueArn, sess)
 			if err != nil {
 				return false, err
 			}

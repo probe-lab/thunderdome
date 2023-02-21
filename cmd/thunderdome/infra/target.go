@@ -103,7 +103,7 @@ func (t *Target) Setup(ctx context.Context) error {
 	slog.Info("starting setup", "component", t.Name())
 
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(t.base.AwsRegion()),
+		Region: aws.String(t.base.AwsRegion),
 	})
 	if err != nil {
 		return fmt.Errorf("new session: %w", err)
@@ -118,7 +118,7 @@ func (t *Target) Setup(ctx context.Context) error {
 func (t *Target) Teardown(ctx context.Context) error {
 	slog.Info("starting teardown", "component", t.Name())
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(t.base.AwsRegion()),
+		Region: aws.String(t.base.AwsRegion),
 	})
 	if err != nil {
 		return fmt.Errorf("new session: %w", err)
@@ -135,7 +135,7 @@ func (t *Target) Ready(ctx context.Context) (bool, error) {
 	t.ready = false
 	t.mu.Unlock()
 	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(t.base.AwsRegion()),
+		Region: aws.String(t.base.AwsRegion),
 	})
 	if err != nil {
 		return false, fmt.Errorf("new session: %w", err)
@@ -168,8 +168,8 @@ func (t *Target) createTaskDefinition() Task {
 				Family:                  aws.String(t.taskDefinitionFamily),
 				RequiresCompatibilities: []*string{aws.String("EC2")},
 				NetworkMode:             aws.String("host"),
-				ExecutionRoleArn:        aws.String(t.base.EcsExecutionRoleArn()),
-				TaskRoleArn:             aws.String(t.base.TargetTaskRoleArn()),
+				ExecutionRoleArn:        aws.String(t.base.EcsExecutionRoleArn),
+				TaskRoleArn:             aws.String(t.base.TargetTaskRoleArn),
 				Memory:                  aws.String("30720"), // TODO: review  50*1024
 				Tags:                    ecsTags(t.tags()),
 				Volumes: []*ecs.Volume{
@@ -185,7 +185,7 @@ func (t *Target) createTaskDefinition() Task {
 					{
 						Name: aws.String("efs"),
 						EfsVolumeConfiguration: &ecs.EFSVolumeConfiguration{
-							FileSystemId: aws.String(t.base.EfsFileSystemID()),
+							FileSystemId: aws.String(t.base.EfsFileSystemID),
 						},
 					},
 				},
@@ -209,8 +209,8 @@ func (t *Target) createTaskDefinition() Task {
 						LogConfiguration: &ecs.LogConfiguration{
 							LogDriver: aws.String("awslogs"),
 							Options: map[string]*string{
-								"awslogs-group":         aws.String(t.base.LogGroupName()),
-								"awslogs-region":        aws.String(t.base.AwsRegion()),
+								"awslogs-group":         aws.String(t.base.LogGroupName),
+								"awslogs-region":        aws.String(t.base.AwsRegion),
 								"awslogs-stream-prefix": aws.String("ecs"),
 							},
 						},
@@ -236,7 +236,7 @@ func (t *Target) createTaskDefinition() Task {
 							aws.String("-metrics.wal-directory=/data/grafana-agent"),
 							aws.String("-config.expand-env"),
 							aws.String("-enable-features=remote-configs"),
-							aws.String("-config.file=" + t.base.GrafanaAgentTargetConfigURL()),
+							aws.String("-config.file=" + t.base.TargetGrafanaAgentConfigURL),
 						},
 						Environment: []*ecs.KeyValuePair{
 							// we use these for setting labels on metrics
@@ -253,8 +253,8 @@ func (t *Target) createTaskDefinition() Task {
 						LogConfiguration: &ecs.LogConfiguration{
 							LogDriver: aws.String("awslogs"),
 							Options: map[string]*string{
-								"awslogs-group":         aws.String(t.base.LogGroupName()),
-								"awslogs-region":        aws.String(t.base.AwsRegion()),
+								"awslogs-group":         aws.String(t.base.LogGroupName),
+								"awslogs-region":        aws.String(t.base.AwsRegion),
 								"awslogs-stream-prefix": aws.String("ecs"),
 							},
 						},
@@ -271,11 +271,11 @@ func (t *Target) createTaskDefinition() Task {
 						Secrets: []*ecs.Secret{
 							{
 								Name:      aws.String("GRAFANA_USER"),
-								ValueFrom: aws.String(t.base.GrafanaPushSecretArn() + ":username::"),
+								ValueFrom: aws.String(t.base.GrafanaPushSecretArn + ":username::"),
 							},
 							{
 								Name:      aws.String("GRAFANA_PASS"),
-								ValueFrom: aws.String(t.base.GrafanaPushSecretArn() + ":password::"),
+								ValueFrom: aws.String(t.base.GrafanaPushSecretArn + ":password::"),
 							},
 						},
 					},
@@ -286,8 +286,8 @@ func (t *Target) createTaskDefinition() Task {
 						LogConfiguration: &ecs.LogConfiguration{
 							LogDriver: aws.String("awslogs"),
 							Options: map[string]*string{
-								"awslogs-group":         aws.String(t.base.LogGroupName()),
-								"awslogs-region":        aws.String(t.base.AwsRegion()),
+								"awslogs-group":         aws.String(t.base.LogGroupName),
+								"awslogs-region":        aws.String(t.base.AwsRegion),
 								"awslogs-stream-prefix": aws.String("ecs"),
 							},
 						},
@@ -361,7 +361,7 @@ func (t *Target) runTask() Task {
 						Weight:           aws.Int64(1),
 					},
 				},
-				Cluster:        aws.String(t.base.EcsClusterArn()),
+				Cluster:        aws.String(t.base.EcsClusterArn),
 				Count:          aws.Int64(1),
 				TaskDefinition: aws.String(t.taskDefinitionFamily),
 				Tags:           ecsTags(t.tags()),
@@ -397,7 +397,7 @@ func (t *Target) stopTask() Task {
 		Name:  "stop task",
 		Check: t.taskIsStoppedOrStopping(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			taskArn, err := findTask(t.base.EcsClusterArn(), t.taskDefinitionFamily, sess)
+			taskArn, err := findTask(t.base.EcsClusterArn, t.taskDefinitionFamily, sess)
 			if err != nil {
 				return fmt.Errorf("find existing task: %w", err)
 			}
@@ -409,7 +409,7 @@ func (t *Target) stopTask() Task {
 			svc := ecs.New(sess)
 
 			in := &ecs.StopTaskInput{
-				Cluster: aws.String(t.base.EcsClusterArn()),
+				Cluster: aws.String(t.base.EcsClusterArn),
 				Reason:  aws.String("stopped by ironbar"),
 				Task:    aws.String(taskArn),
 			}
@@ -472,7 +472,7 @@ func (t *Target) taskIsRunning() Check {
 		Name:        "task is running",
 		FailureText: "task is not running",
 		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			taskArn, err := findTask(t.base.EcsClusterArn(), t.taskDefinitionFamily, sess)
+			taskArn, err := findTask(t.base.EcsClusterArn, t.taskDefinitionFamily, sess)
 			if err != nil {
 				return false, err
 			}
@@ -487,7 +487,7 @@ func (t *Target) taskIsRunning() Check {
 
 			slog.Debug("captured task details", "component", t.Name(), "task_arn", taskArn)
 
-			running, err := isTaskRunning(ctx, sess, t.base.EcsClusterArn(), taskArn)
+			running, err := isTaskRunning(ctx, sess, t.base.EcsClusterArn, taskArn)
 			if err != nil {
 				return false, err
 			}
@@ -498,7 +498,7 @@ func (t *Target) taskIsRunning() Check {
 
 			svc := ecs.New(sess)
 			in := &ecs.DescribeTasksInput{
-				Cluster: aws.String(t.base.EcsClusterArn()),
+				Cluster: aws.String(t.base.EcsClusterArn),
 				Tasks: []*string{
 					aws.String(taskArn),
 				},
@@ -529,7 +529,7 @@ func (t *Target) taskIsRunning() Check {
 			}
 
 			inci := &ecs.DescribeContainerInstancesInput{
-				Cluster: aws.String(t.base.EcsClusterArn()),
+				Cluster: aws.String(t.base.EcsClusterArn),
 				ContainerInstances: []*string{
 					task.ContainerInstanceArn,
 				},
@@ -594,7 +594,7 @@ func (t *Target) taskIsStoppedOrStopping() Check {
 		Name:        "task is stopped or stopping",
 		FailureText: "task is not stopped or stopping",
 		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
-			taskArn, err := findTask(t.base.EcsClusterArn(), t.taskDefinitionFamily, sess)
+			taskArn, err := findTask(t.base.EcsClusterArn, t.taskDefinitionFamily, sess)
 			if err != nil {
 				return false, err
 			}
@@ -609,7 +609,7 @@ func (t *Target) taskIsStoppedOrStopping() Check {
 			}
 			slog.Debug("captured task details", "component", t.Name(), "task_arn", taskArn)
 
-			running, err := isTaskRunning(ctx, sess, t.base.EcsClusterArn(), taskArn)
+			running, err := isTaskRunning(ctx, sess, t.base.EcsClusterArn, taskArn)
 			if err != nil {
 				return false, err
 			}

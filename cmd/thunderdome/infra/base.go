@@ -2,183 +2,145 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"sync"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ecs"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"golang.org/x/exp/slog"
 )
 
 type BaseInfra struct {
-	experiment                    string
-	awsRegion                     string
-	ecsClusterArn                 string
-	logGroupName                  string
-	ecsExecutionRoleArn           string
-	targetTaskRoleArn             string
-	dealgoodTaskRoleArn           string
-	efsFileSystemID               string
-	requestSNSTopicArn            string
-	grafanaAgentTargetConfigURL   string
-	grafanaAgentDealgoodConfigUrl string
-	grafanaPushSecretArn          string
-	vpcPublicSubnet               string
-	dealgoodSecurityGroup         string
-	dealgoodImage                 string
-	ecrBaseURL                    string
-
-	mu    sync.Mutex
-	ready bool
+	AwsRegion                     string
+	DealgoodGrafanaAgentConfigURL string
+	DealgoodImage                 string
+	DealgoodSecurityGroup         string
+	DealgoodTaskRoleArn           string
+	EcrBaseURL                    string
+	EcsClusterArn                 string
+	EcsExecutionRoleArn           string
+	EfsFileSystemID               string
+	GrafanaPushSecretArn          string
+	LogGroupName                  string
+	RequestSNSTopicArn            string
+	TargetGrafanaAgentConfigURL   string
+	TargetTaskRoleArn             string
+	VpcPublicSubnet               string
 }
 
-func NewBaseInfra(experiment, awsRegion string) *BaseInfra {
-	return &BaseInfra{
-		experiment: experiment,
-		awsRegion:  awsRegion,
+func NewBaseInfra(awsRegion string) (*BaseInfra, error) {
+	// This file is written by terraform
+	const bucket = "pl-thunderdome-private"
+	const key = "infra.json"
 
-		// TODO: get terraform to write these to an s3 bucket and read
-		ecsClusterArn:                 "arn:aws:ecs:eu-west-1:147263665150:cluster/thunderdome",
-		logGroupName:                  "thunderdome",
-		ecsExecutionRoleArn:           "arn:aws:iam::147263665150:role/ecsTaskExecutionRole",
-		targetTaskRoleArn:             "arn:aws:iam::147263665150:role/target",
-		dealgoodTaskRoleArn:           "arn:aws:iam::147263665150:role/dealgood",
-		efsFileSystemID:               "fs-006bd3d793700a2df",
-		requestSNSTopicArn:            "arn:aws:sns:eu-west-1:147263665150:gateway-requests",
-		grafanaAgentTargetConfigURL:   "https://pl-thunderdome-public.s3.eu-west-1.amazonaws.com/grafana-agent-config/target.yaml",
-		grafanaAgentDealgoodConfigUrl: "https://pl-thunderdome-public.s3.eu-west-1.amazonaws.com/grafana-agent-config/dealgood.yaml",
-		grafanaPushSecretArn:          "arn:aws:secretsmanager:eu-west-1:147263665150:secret:grafana-push-MxjNiv",
-		vpcPublicSubnet:               "subnet-04b1073d060c42a2f",
-		dealgoodSecurityGroup:         "sg-08cd1cfcd73b3f0ea",
-		dealgoodImage:                 "147263665150.dkr.ecr.eu-west-1.amazonaws.com/dealgood:2022-09-15__1504",
-		ecrBaseURL:                    "147263665150.dkr.ecr.eu-west-1.amazonaws.com",
+	base := new(BaseInfra)
+	logger := slog.With("component", base.Name())
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(awsRegion),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("new session: %w", err)
 	}
+
+	logger.Debug("initializing from s3", "region", awsRegion, "bucket", bucket, "key", key)
+	svc := s3.New(sess)
+	in := &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}
+
+	out, err := svc.GetObject(in)
+	if err != nil {
+		return nil, fmt.Errorf("get object: %w", err)
+	}
+	defer out.Body.Close()
+
+	dec := json.NewDecoder(out.Body)
+	if err := dec.Decode(base); err != nil {
+		return nil, fmt.Errorf("decode json: %w", err)
+	}
+
+	return base, nil
+
+	// return &BaseInfra{
+	// 	EcsClusterArn:                 "arn:aws:ecs:eu-west-1:147263665150:cluster/thunderdome",
+	// 	LogGroupName:                  "thunderdome",
+	// 	EcsExecutionRoleArn:           "arn:aws:iam::147263665150:role/ecsTaskExecutionRole",
+	// 	TargetTaskRoleArn:             "arn:aws:iam::147263665150:role/target",
+	// 	DealgoodTaskRoleArn:           "arn:aws:iam::147263665150:role/dealgood",
+	// 	EfsFileSystemID:               "fs-006bd3d793700a2df",
+	// 	RequestSNSTopicArn:            "arn:aws:sns:eu-west-1:147263665150:gateway-requests",
+	// 	GrafanaAgentTargetConfigURL:   "https://pl-thunderdome-public.s3.eu-west-1.amazonaws.com/grafana-agent-config/target.yaml",
+	// 	GrafanaAgentDealgoodConfigURL: "https://pl-thunderdome-public.s3.eu-west-1.amazonaws.com/grafana-agent-config/dealgood.yaml",
+	// 	GrafanaPushSecretArn:          "arn:aws:secretsmanager:eu-west-1:147263665150:secret:grafana-push-MxjNiv",
+	// 	VpcPublicSubnet:               "subnet-04b1073d060c42a2f",
+	// 	DealgoodSecurityGroup:         "sg-08cd1cfcd73b3f0ea",
+	// 	DealgoodImage:                 "147263665150.dkr.ecr.eu-west-1.amazonaws.com/dealgood:2022-09-15__1504",
+	// 	EcrBaseURL:                    "147263665150.dkr.ecr.eu-west-1.amazonaws.com",
+	// }
 }
 
 func (b *BaseInfra) Name() string {
 	return "base infra"
 }
 
-func (b *BaseInfra) AwsRegion() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.awsRegion
-}
-
-func (b *BaseInfra) LogGroupName() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.logGroupName
-}
-
-func (b *BaseInfra) EcsClusterArn() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.ecsClusterArn
-}
-
-func (b *BaseInfra) EcsExecutionRoleArn() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.ecsExecutionRoleArn
-}
-
-func (b *BaseInfra) TargetTaskRoleArn() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.targetTaskRoleArn
-}
-
-func (b *BaseInfra) DealgoodTaskRoleArn() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.dealgoodTaskRoleArn
-}
-
-func (b *BaseInfra) EfsFileSystemID() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.efsFileSystemID
-}
-
-func (b *BaseInfra) GrafanaPushSecretArn() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.grafanaPushSecretArn
-}
-
-func (b *BaseInfra) VpcPublicSubnet() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.vpcPublicSubnet
-}
-
-func (b *BaseInfra) DealgoodSecurityGroup() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.dealgoodSecurityGroup
-}
-
-func (b *BaseInfra) RequestSNSTopicArn() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.requestSNSTopicArn
-}
-
-func (b *BaseInfra) GrafanaAgentTargetConfigURL() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.grafanaAgentTargetConfigURL
-}
-
-func (b *BaseInfra) GrafanaAgentDealgoodConfigURL() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.grafanaAgentDealgoodConfigUrl
-}
-
-func (b *BaseInfra) DealgoodImage() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.dealgoodImage
-}
-
-func (b *BaseInfra) ECRBaseURL() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.ecrBaseURL
-}
-
-func (b *BaseInfra) DealgoodEnvironment() map[string]string {
-	return nil
-}
-
-func (b *BaseInfra) Setup(ctx context.Context) error {
-	slog.Info("starting setup", "component", b.Name())
-	if err := b.InspectExisting(ctx); err != nil {
-		return fmt.Errorf("inspect existing infra: %w", err)
-	}
-	return nil
-}
-
-func (b *BaseInfra) InspectExisting(ctx context.Context) error {
-	// TODO: check ecs cluster exists
-	return nil
-}
-
-func (b *BaseInfra) Teardown(ctx context.Context) error {
-	slog.Info("starting teardown", "component", b.Name())
-	if err := b.InspectExisting(ctx); err != nil {
-		return fmt.Errorf("inspect existing infra: %w", err)
-	}
-	return nil
-}
-
-func (b *BaseInfra) Ready(ctx context.Context) (bool, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if err := b.InspectExisting(ctx); err != nil {
-		return false, fmt.Errorf("inspect existing infra: %w", err)
+func (b *BaseInfra) Verify(ctx context.Context) error {
+	slog.Info("verifying", "component", b.Name())
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(b.AwsRegion),
+	})
+	if err != nil {
+		return fmt.Errorf("new session: %w", err)
 	}
 
-	return true, nil
+	ready, err := CheckSequence(ctx, sess, b.Name(),
+		b.ecsClusterExists(),
+		// TODO: check all base infra
+	)
+	if err != nil {
+		return fmt.Errorf("failed to execute all checks: %w", err)
+	}
+	if !ready {
+		return fmt.Errorf("failed to verify one or more components")
+	}
+
+	return nil
+}
+
+func (b *BaseInfra) ecsClusterExists() Check {
+	return Check{
+		Name:        "ecs cluster exists",
+		FailureText: "ecs cluster does not exist",
+		Func: func(ctx context.Context, sess *session.Session) (bool, error) {
+			logger := slog.With("component", b.Name())
+
+			logger.Debug("finding ecs cluster", "arn", b.EcsClusterArn)
+			svc := ecs.New(sess)
+			in := &ecs.DescribeClustersInput{
+				Clusters: []*string{aws.String(b.EcsClusterArn)},
+			}
+			out, err := svc.DescribeClusters(in)
+			if err != nil {
+				return false, err
+			}
+
+			if out == nil || len(out.Clusters) == 0 {
+				logger.Debug("no ecs clusters returned")
+				return false, nil
+			}
+
+			for _, c := range out.Clusters {
+				if c.ClusterArn == nil {
+					continue
+				}
+				if *c.ClusterArn == b.EcsClusterArn {
+					return true, nil
+				}
+			}
+			logger.Debug("no ecs clusters matched expected cluster arn")
+			return false, nil
+		},
+	}
 }

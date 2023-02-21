@@ -28,13 +28,12 @@ func NewProvider() (*Provider, error) {
 }
 
 func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
-	base := NewBaseInfra(e.Name, p.region)
-	if err := base.Setup(ctx); err != nil {
-		return fmt.Errorf("failed to setup base infra: %w", err)
+	base, err := NewBaseInfra(p.region)
+	if err != nil {
+		return fmt.Errorf("failed to read base infra: %w", err)
 	}
-
-	if err := WaitUntil(ctx, slog.With("component", base.Name()), "is ready", base.Ready, 2*time.Second, 30*time.Second); err != nil {
-		return fmt.Errorf("base infra failed to become ready: %w", err)
+	if err := base.Verify(ctx); err != nil {
+		return fmt.Errorf("failed to verify base infra: %w", err)
 	}
 
 	// Build all the images
@@ -49,7 +48,7 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 
 		var err error
 		slog.Info("building docker image", "component", "target "+t.Name)
-		t.Image, err = p.BuildImage(ctx, t.ImageSpec, base.ECRBaseURL())
+		t.Image, err = p.BuildImage(ctx, t.ImageSpec, base.EcrBaseURL)
 		if err != nil {
 			return fmt.Errorf("failed to build image for target %s", t.Name)
 		}
@@ -89,9 +88,12 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 }
 
 func (p *Provider) Teardown(ctx context.Context, e *exp.Experiment) error {
-	base := NewBaseInfra(e.Name, p.region)
-	if err := base.InspectExisting(ctx); err != nil {
-		return fmt.Errorf("failed to inspect existing infra: %w", err)
+	base, err := NewBaseInfra(p.region)
+	if err != nil {
+		return fmt.Errorf("failed to read base infra: %w", err)
+	}
+	if err := base.Verify(ctx); err != nil {
+		return fmt.Errorf("failed to verify base infra: %w", err)
 	}
 
 	d := NewDealgood(e.Name, base)
@@ -108,45 +110,39 @@ func (p *Provider) Teardown(ctx context.Context, e *exp.Experiment) error {
 		return err
 	}
 
-	if err := base.Teardown(ctx); err != nil {
-		return fmt.Errorf("failed to tear down base infra: %w", err)
-	}
-
 	return nil
 }
 
 func (p *Provider) Status(ctx context.Context, e *exp.Experiment) error {
 	allready := true
 
-	base := NewBaseInfra(e.Name, p.region)
-	ready, err := base.Ready(ctx)
+	base, err := NewBaseInfra(p.region)
 	if err != nil {
-		return fmt.Errorf("failed to check %s ready state: %w", base.Name(), err)
+		return fmt.Errorf("failed to read base infra: %w", err)
 	}
-	if ready {
-		for _, t := range e.Targets {
-			target := NewTarget(t.Name, e.Name, base, t.Image, t.Environment)
-			ready, err := target.Ready(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to check %s ready state: %w", target.Name(), err)
-			}
-			if ready {
-				slog.Info("ready", "component", target.Name())
-			} else {
-				allready = false
-			}
-		}
-
-		d := NewDealgood(e.Name, base)
-		ready, err := d.Ready(ctx)
+	if err := base.Verify(ctx); err != nil {
+		return fmt.Errorf("failed to verify base infra: %w", err)
+	}
+	for _, t := range e.Targets {
+		target := NewTarget(t.Name, e.Name, base, t.Image, t.Environment)
+		ready, err := target.Ready(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to check %s ready state: %w", d.Name(), err)
+			return fmt.Errorf("failed to check %s ready state: %w", target.Name(), err)
 		}
 		if ready {
-			slog.Info("ready", "component", d.Name())
+			slog.Info("ready", "component", target.Name())
 		} else {
 			allready = false
 		}
+	}
+
+	d := NewDealgood(e.Name, base)
+	ready, err := d.Ready(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to check %s ready state: %w", d.Name(), err)
+	}
+	if ready {
+		slog.Info("ready", "component", d.Name())
 	} else {
 		allready = false
 	}

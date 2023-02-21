@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"os"
 
 	"github.com/urfave/cli/v2"
 
@@ -24,7 +24,15 @@ func Status(cc *cli.Context) error {
 	}
 
 	if cc.NArg() != 1 {
-		return fmt.Errorf("filename experiment must be supplied")
+		region := os.Getenv("AWS_REGION")
+		base, err := aws.NewBaseInfra(region)
+		if err != nil {
+			return err
+		}
+		if err := base.Verify(ctx); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	args := cc.Args()
