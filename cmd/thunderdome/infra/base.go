@@ -1,4 +1,4 @@
-package aws
+package infra
 
 import (
 	"context"
@@ -22,7 +22,9 @@ type BaseInfra struct {
 	EcsClusterArn                 string
 	EcsExecutionRoleArn           string
 	EfsFileSystemID               string
+	ExperimentsTableName          string
 	GrafanaPushSecretArn          string
+	IronbarAddr                   string
 	LogGroupName                  string
 	RequestSNSTopicArn            string
 	TargetGrafanaAgentConfigURL   string
@@ -61,6 +63,8 @@ func NewBaseInfra(awsRegion string) (*BaseInfra, error) {
 	if err := dec.Decode(base); err != nil {
 		return nil, fmt.Errorf("decode json: %w", err)
 	}
+
+	base.IronbarAddr = "127.0.0.1:8321"
 
 	return base, nil
 

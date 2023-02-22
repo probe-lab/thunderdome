@@ -1,6 +1,7 @@
 package exp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,13 +15,19 @@ import (
 var reTargetName = regexp.MustCompile(`^[a-z][a-z0-9-]+$`)
 
 func Parse(ctx context.Context, r io.Reader) (*Experiment, error) {
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(r); err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+
 	ej := new(ExperimentJSON)
-	if err := json.NewDecoder(r).Decode(ej); err != nil {
+	if err := json.Unmarshal(buf.Bytes(), ej); err != nil {
 		return nil, fmt.Errorf("json decode: %w", err)
 	}
 
 	e := &Experiment{
-		Name: ej.Name,
+		Name:           ej.Name,
+		OriginalSource: string(buf.Bytes()),
 	}
 
 	if ej.Duration > 0 {

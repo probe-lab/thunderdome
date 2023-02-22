@@ -34,7 +34,7 @@ func Teardown(cc *cli.Context) error {
 		return fmt.Errorf("failed to read experiment file: %w", err)
 	}
 
-	prov, err := aws.NewProvider()
+	prov, err := infra.NewProvider()
 	if err != nil {
 		return err
 	}

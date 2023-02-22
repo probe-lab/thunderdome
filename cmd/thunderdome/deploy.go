@@ -35,7 +35,7 @@ func Deploy(cc *cli.Context) error {
 		return err
 	}
 
-	prov, err := aws.NewProvider()
+	prov, err := infra.NewProvider()
 	if err != nil {
 		return err
 	}

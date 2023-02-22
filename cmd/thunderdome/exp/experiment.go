@@ -15,7 +15,8 @@ type Experiment struct {
 	MaxConcurrency int
 	RequestFilter  string
 
-	Targets []*TargetSpec
+	Targets        []*TargetSpec
+	OriginalSource string `json:"-"`
 }
 
 type TargetSpec struct {

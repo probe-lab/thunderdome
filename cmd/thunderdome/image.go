@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -44,7 +45,7 @@ var ImageCommand = &cli.Command{
 		},
 		&cli.StringFlag{
 			Name:        "tag",
-			Usage:       "Tag to apply to image. All tags are prefixed by '" + imageBaseName + ":'.",
+			Usage:       "Tag to apply to image. All tags are prefixed by '" + build.LocalImageName("") + "'.",
 			Required:    true,
 			Destination: &imageOpts.tag,
 		},
@@ -99,15 +100,14 @@ var imageOpts struct {
 	baseConfig      string
 }
 
-const imageBaseName = "thunderdome"
-
 func Image(cc *cli.Context) error {
 	ctx := cc.Context
 	setupLogging()
 	if err := checkBuildEnv(); err != nil {
 		return err
 	}
-	imageName := imageBaseName + ":" + imageOpts.tag
+
+	region := os.Getenv("AWS_REGION")
 
 	envConfigMappings, err := parseEnvConfigMappings(imageOpts.envConfig.Value(), false)
 	if err != nil {
@@ -156,10 +156,10 @@ func Image(cc *cli.Context) error {
 	finalImage, err := build.Build(ctx, imageOpts.tag, spec)
 
 	if imageOpts.dockerRepo != "" {
-		if err := build.PushImage(imageName, imageOpts.dockerRepo); err != nil {
+		finalImage, err = build.PushImage(imageOpts.tag, region, imageOpts.dockerRepo)
+		if err != nil {
 			return err
 		}
-		finalImage = fmt.Sprintf("%s/%s", imageOpts.dockerRepo, imageName)
 	}
 
 	fmt.Println("--------------------------------------------------------------------------------")

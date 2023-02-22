@@ -51,7 +51,7 @@ func Validate(cc *cli.Context) error {
 		if t.Image != "" {
 			fmt.Printf("  Image:         %s\n", t.Image)
 		} else if t.ImageSpec != nil {
-			fmt.Printf("  Image:         %s:%s\n", build.ImageBaseName, t.ImageSpec.Hash())
+			fmt.Printf("  Image:         %s\n", build.LocalImageName(t.ImageSpec.Hash()))
 			if t.ImageSpec.BaseImage != "" {
 				fmt.Printf("  Image built:   from base image %s\n", t.ImageSpec.BaseImage)
 			} else if t.ImageSpec.Git != nil {

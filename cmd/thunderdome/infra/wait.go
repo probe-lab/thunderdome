@@ -1,4 +1,4 @@
-package aws
+package infra
 
 import (
 	"context"
@@ -55,42 +55,8 @@ func WaitUntilCheck(ctx context.Context, sess *session.Session, logger *slog.Log
 	if check.Func == nil {
 		return nil
 	}
-	first := true
-	if delay > 0 {
-		logger.Info("waiting until " + check.Name)
-		time.Sleep(delay)
-		first = false
-	}
-	done, err := check.Func(ctx, sess)
-	if err != nil {
-		return err
-	}
-	if done {
-		return nil
-	}
 
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-
-	for {
-		select {
-		case <-tick.C:
-			done, err := check.Func(ctx, sess)
-			if err != nil {
-				return err
-			}
-			if done {
-				logger.Info(check.Name)
-				return nil
-			}
-			if first {
-				first = false
-				logger.Info("waiting until " + check.Name)
-			} else {
-				logger.Info("still waiting until " + check.Name)
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+	return WaitUntil(ctx, logger, check.Name, func(ctx context.Context) (bool, error) {
+		return check.Func(ctx, sess)
+	}, delay, interval)
 }

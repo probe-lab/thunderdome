@@ -1,4 +1,4 @@
-package aws
+package infra
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecs"
 	// "github.com/aws/aws-sdk-go/service/servicediscovery"
 	"golang.org/x/exp/slog"
+
+	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
 )
 
 type Target struct {
@@ -90,6 +92,27 @@ func (t *Target) GatewayURL() string {
 		return ""
 	}
 	return "http://" + t.taskPrivateIPAddress + ":8080"
+}
+
+func (t *Target) Resources() []api.Resource {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var res []api.Resource
+	res = append(res, api.Resource{
+		Type: api.ResourceTypeEcsTask,
+		Keys: map[string]string{
+			api.ResourceKeyEcsClusterArn: t.base.EcsClusterArn,
+			api.ResourceKeyArn:           t.taskArn,
+		},
+	})
+	res = append(res, api.Resource{
+		Type: api.ResourceTypeEcsTaskDefinition,
+		Keys: map[string]string{
+			api.ResourceKeyArn: t.taskDefinitionArn,
+		},
+	})
+	return res
 }
 
 func (t *Target) tags() map[string]*string {
@@ -332,17 +355,9 @@ func (t *Target) deregisterTaskDefinition() Task {
 		Name:  "deregister task definition",
 		Check: t.taskDefinitionIsInactive(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			in := &ecs.DeregisterTaskDefinitionInput{
-				TaskDefinition: aws.String(fmt.Sprintf("%s:%d", t.taskDefinitionFamily, t.taskDefinitionRevision)),
-			}
-
-			svc := ecs.New(sess)
-			_, err := svc.DeregisterTaskDefinition(in)
-			if err != nil {
-				return fmt.Errorf("deregister task definition: %w", err)
-			}
-
-			return nil
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			return deregisterEcsTaskDefinition(ctx, sess, t.taskDefinitionArn)
 		},
 	}
 }
@@ -397,28 +412,9 @@ func (t *Target) stopTask() Task {
 		Name:  "stop task",
 		Check: t.taskIsStoppedOrStopping(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			taskArn, err := findTask(t.base.EcsClusterArn, t.taskDefinitionFamily, sess)
-			if err != nil {
-				return fmt.Errorf("find existing task: %w", err)
-			}
-
-			if taskArn == "" {
-				return nil
-			}
-
-			svc := ecs.New(sess)
-
-			in := &ecs.StopTaskInput{
-				Cluster: aws.String(t.base.EcsClusterArn),
-				Reason:  aws.String("stopped by ironbar"),
-				Task:    aws.String(taskArn),
-			}
-
-			if _, err := svc.StopTask(in); err != nil {
-				return fmt.Errorf("stop task: %w", err)
-			}
-
-			return nil
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			return stopEcsTask(ctx, sess, t.base.EcsClusterArn, t.taskArn)
 		},
 	}
 }

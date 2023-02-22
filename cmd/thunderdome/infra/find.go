@@ -1,4 +1,4 @@
-package aws
+package infra
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func findTaskDefinition(family string, sess *session.Session) (string, int64, er
 		return "", 0, fmt.Errorf("unable to read task definition arn, status or revision")
 	}
 
-	if *out.TaskDefinition.Status == "ACTIVE" {
+	if *out.TaskDefinition.Status == ecs.TaskDefinitionStatusActive {
 		return *out.TaskDefinition.TaskDefinitionArn, *out.TaskDefinition.Revision, nil
 	}
 	return "", 0, nil

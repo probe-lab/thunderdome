@@ -11,6 +11,7 @@ locals {
     EcsClusterArn                   = module.ecs-asg.cluster_id
     EcsExecutionRoleArn             = aws_iam_role.ecsTaskExecutionRole.arn
     EfsFileSystemID                 = aws_efs_file_system.thunderdome.id
+    ExperimentsTableName            = aws_dynamodb_table.experiments.name
     GrafanaPushSecretArn            = data.aws_secretsmanager_secret.grafana-push-secret.arn
     LogGroupName                    = aws_cloudwatch_log_group.logs.name
     RequestSNSTopicArn              = aws_sns_topic.gateway_requests.arn

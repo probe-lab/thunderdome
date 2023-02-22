@@ -16,10 +16,14 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-const ImageBaseName = "thunderdome"
+const imageBaseName = "thunderdome"
+
+func LocalImageName(tag string) string {
+	return imageBaseName + ":" + tag
+}
 
 func Build(ctx context.Context, tag string, spec *exp.ImageSpec) (string, error) {
-	imageName := ImageBaseName + ":" + tag
+	imageName := LocalImageName(tag)
 	logger := slog.With("component", imageName)
 	logger.Debug("building image")
 
@@ -250,20 +254,22 @@ func ConfigureImage(workDir, fromImage, imageName string, labels map[string]stri
 	return nil
 }
 
-func PushImage(imageName, ecrRepo string) error {
-	if err := DockerTag(imageName, ecrRepo+"/"+imageName); err != nil {
-		return fmt.Errorf("docker tag: %w", err)
+func PushImage(tag, awsRegion, ecrRepo string) (string, error) {
+	localName := LocalImageName(tag)
+	remoteName := ecrRepo + ":" + tag
+	if err := DockerTag(localName, remoteName); err != nil {
+		return "", fmt.Errorf("docker tag: %w", err)
 	}
 
-	if err := EcrLogin(ecrRepo, "eu-west-1"); err != nil {
-		return fmt.Errorf("docker login: %w", err)
+	if err := EcrLogin(ecrRepo, awsRegion); err != nil {
+		return "", fmt.Errorf("docker login: %w", err)
 	}
 
-	if err := DockerPush(ecrRepo + "/" + imageName); err != nil {
-		return fmt.Errorf("docker push: %w", err)
+	if err := DockerPush(remoteName); err != nil {
+		return "", fmt.Errorf("docker push: %w", err)
 	}
 
-	return nil
+	return remoteName, nil
 }
 
 func EcrLogin(dockerRepo string, awsRegion string) error {

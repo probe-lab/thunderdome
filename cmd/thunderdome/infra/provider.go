@@ -1,4 +1,4 @@
-package aws
+package infra
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/exp"
 	"github.com/kortschak/utter"
 	"golang.org/x/exp/slog"
+
+	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
 )
 
 type Provider struct {
@@ -49,6 +51,7 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 		var err error
 		slog.Info("building docker image", "component", "target "+t.Name)
 		t.Image, err = p.BuildImage(ctx, t.ImageSpec, base.EcrBaseURL)
+		slog.Debug("using docker image", "component", "target "+t.Name, "image", t.Image)
 		if err != nil {
 			return fmt.Errorf("failed to build image for target %s", t.Name)
 		}
@@ -82,6 +85,16 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 
 	if err := WaitUntil(ctx, slog.With("component", d.Name()), "is ready", d.Ready, 2*time.Second, 30*time.Second); err != nil {
 		return fmt.Errorf("dealgood failed to become ready: %w", err)
+	}
+
+	var res []api.Resource
+	res = append(res, d.Resources()...)
+	for i := range targets {
+		res = append(res, targets[i].Resources()...)
+	}
+
+	if err := WaitUntil(ctx, slog.With(), "experiment registered", RegisterExperiment(base.IronbarAddr, e, res), 2*time.Second, 30*time.Second); err != nil {
+		return fmt.Errorf("failed to register experiment: %w", err)
 	}
 
 	return nil
@@ -160,21 +173,35 @@ func (p *Provider) BuildImage(ctx context.Context, is *exp.ImageSpec, ecrBaseURL
 		return image, nil
 	}
 
-	localImage, err := build.Build(ctx, tag, is)
+	_, err := build.Build(ctx, tag, is)
 	if err != nil {
 		return "", fmt.Errorf("build image: %w", err)
 	}
 
-	if err := build.PushImage(localImage, ecrBaseURL); err != nil {
+	remoteImage, err := build.PushImage(tag, p.region, ecrBaseURL)
+	if err != nil {
 		return "", fmt.Errorf("push image: %w", err)
 	}
-	image = fmt.Sprintf("%s/%s", ecrBaseURL, localImage)
 
 	if p.imageCache == nil {
 		p.imageCache = make(map[string]string)
 	}
-	p.imageCache[tag] = image
-	return image, err
+	p.imageCache[tag] = remoteImage
+	return remoteImage, err
+}
+
+func (p *Provider) ExperimentStatus(ctx context.Context, name string) (*api.ExperimentStatusOutput, error) {
+	base, err := NewBaseInfra(p.region)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read base infra: %w", err)
+	}
+
+	out, err := GetExperimentStatus(ctx, base.IronbarAddr, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get status: %w", err)
+	}
+
+	return out, nil
 }
 
 func debugf(t string, args ...any) {

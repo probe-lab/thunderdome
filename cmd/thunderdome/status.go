@@ -1,7 +1,8 @@
 package main
 
 import (
-	"os"
+	"fmt"
+	"time"
 
 	"github.com/urfave/cli/v2"
 
@@ -10,10 +11,21 @@ import (
 
 var StatusCommand = &cli.Command{
 	Name:      "status",
-	Usage:     "Report on the operational status of an experiment",
+	Usage:     "Report on the operational status of experiments",
 	Action:    Status,
 	ArgsUsage: "EXPERIMENT-FILENAME",
-	Flags:     commonFlags,
+	Flags: flags([]cli.Flag{
+		&cli.StringFlag{
+			Name:        "experiment",
+			Aliases:     []string{"e"},
+			Usage:       "Name of experiment.",
+			Destination: &statusOpts.experiment,
+		},
+	}),
+}
+
+var statusOpts struct {
+	experiment string
 }
 
 func Status(cc *cli.Context) error {
@@ -23,27 +35,27 @@ func Status(cc *cli.Context) error {
 		return err
 	}
 
-	if cc.NArg() != 1 {
-		region := os.Getenv("AWS_REGION")
-		base, err := aws.NewBaseInfra(region)
+	prov, err := infra.NewProvider()
+	if err != nil {
+		return err
+	}
+
+	if statusOpts.experiment != "" {
+		out, err := prov.ExperimentStatus(ctx, statusOpts.experiment)
 		if err != nil {
 			return err
 		}
-		if err := base.Verify(ctx); err != nil {
-			return err
+
+		fmt.Printf("Status       : %s\n", out.Status)
+		if out.Stopped.IsZero() {
+			fmt.Printf("Running for  : %s\n", time.Since(out.Start).Round(time.Second))
+			fmt.Printf("Due to end at: %s\n", out.End.Format(time.Stamp))
+		} else {
+			fmt.Printf("Ran for      : %s\n", out.Stopped.Sub(out.Start).Round(time.Second))
+			fmt.Printf("Stopped at   : %s\n", out.Stopped.Format(time.Stamp))
+
 		}
-		return nil
 	}
 
-	args := cc.Args()
-	e, err := LoadExperiment(ctx, args.Get(0))
-	if err != nil {
-		return err
-	}
-
-	prov, err := aws.NewProvider()
-	if err != nil {
-		return err
-	}
-	return prov.Status(ctx, e)
+	return nil
 }

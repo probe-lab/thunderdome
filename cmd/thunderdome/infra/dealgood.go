@@ -1,4 +1,4 @@
-package aws
+package infra
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"golang.org/x/exp/slog"
+
+	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
 )
 
 type Dealgood struct {
@@ -25,7 +27,6 @@ type Dealgood struct {
 	taskDefinitionFamily   string
 	taskName               string
 	requestQueueName       string
-	requestQueuePolicyName string
 	requestQueuePolicyPath string
 
 	// mu guards access to fields in block directly below
@@ -36,7 +37,6 @@ type Dealgood struct {
 	taskArn                string
 	requestQueueArn        string
 	requestQueueURL        string
-	requestPolicyArn       string
 	requestSubscriptionArn string
 }
 
@@ -58,15 +58,13 @@ func NewDealgood(experiment string, base *BaseInfra) *Dealgood {
 	}
 
 	return &Dealgood{
-		experiment:             experiment,
-		base:                   base,
-		image:                  base.DealgoodImage,
-		environment:            env,
-		taskDefinitionFamily:   experiment + "-dealgood",
-		taskName:               experiment + "-dealgood",
-		requestQueueName:       requestQueueName,
-		requestQueuePolicyName: experiment + "-dealgood-requests",
-		requestQueuePolicyPath: "/" + experiment + "-dealgood-requests/",
+		experiment:           experiment,
+		base:                 base,
+		image:                base.DealgoodImage,
+		environment:          env,
+		taskDefinitionFamily: experiment + "-dealgood",
+		taskName:             experiment + "-dealgood",
+		requestQueueName:     requestQueueName,
 	}
 }
 
@@ -110,6 +108,40 @@ func (d *Dealgood) TaskArn() string {
 		return ""
 	}
 	return d.taskArn
+}
+
+func (d *Dealgood) Resources() []api.Resource {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	var res []api.Resource
+	res = append(res, api.Resource{
+		Type: api.ResourceTypeEcsTask,
+		Keys: map[string]string{
+			api.ResourceKeyEcsClusterArn: d.base.EcsClusterArn,
+			api.ResourceKeyArn:           d.taskArn,
+		},
+	})
+	res = append(res, api.Resource{
+		Type: api.ResourceTypeEcsTaskDefinition,
+		Keys: map[string]string{
+			api.ResourceKeyArn: d.taskDefinitionArn,
+		},
+	})
+	res = append(res, api.Resource{
+		Type: api.ResourceTypeEcsSnsSubscription,
+		Keys: map[string]string{
+			api.ResourceKeyArn: d.requestSubscriptionArn,
+		},
+	})
+	res = append(res, api.Resource{
+		Type: api.ResourceTypeSqsQueue,
+		Keys: map[string]string{
+			api.ResourceKeyArn:      d.requestQueueArn,
+			api.ResourceKeyQueueURL: d.requestQueueURL,
+		},
+	})
+	return res
 }
 
 func (d *Dealgood) Setup(ctx context.Context) error {
@@ -330,17 +362,9 @@ func (d *Dealgood) deregisterTaskDefinition() Task {
 		Name:  "deregister task definition",
 		Check: d.taskDefinitionIsInactive(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			in := &ecs.DeregisterTaskDefinitionInput{
-				TaskDefinition: aws.String(fmt.Sprintf("%s:%d", d.taskDefinitionFamily, d.taskDefinitionRevision)),
-			}
-
-			svc := ecs.New(sess)
-			_, err := svc.DeregisterTaskDefinition(in)
-			if err != nil {
-				return fmt.Errorf("deregister task definition: %w", err)
-			}
-
-			return nil
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			return deregisterEcsTaskDefinition(ctx, sess, d.taskDefinitionArn)
 		},
 	}
 }
@@ -400,28 +424,9 @@ func (d *Dealgood) stopTask() Task {
 		Name:  "stop task",
 		Check: d.taskIsStoppedOrStopping(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			taskArn, err := findTask(d.base.EcsClusterArn, d.taskDefinitionFamily, sess)
-			if err != nil {
-				return fmt.Errorf("find existing task: %w", err)
-			}
-
-			if taskArn == "" {
-				return nil
-			}
-
-			svc := ecs.New(sess)
-
-			in := &ecs.StopTaskInput{
-				Cluster: aws.String(d.base.EcsClusterArn),
-				Reason:  aws.String("stopped by thunderdome client"),
-				Task:    aws.String(taskArn),
-			}
-
-			if _, err := svc.StopTask(in); err != nil {
-				return fmt.Errorf("stop task: %w", err)
-			}
-
-			return nil
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			return stopEcsTask(ctx, sess, d.base.EcsClusterArn, d.taskArn)
 		},
 	}
 }
@@ -515,20 +520,9 @@ func (d *Dealgood) deleteRequestQueue() Task {
 		Name:  "delete request queue",
 		Check: d.requestQueueDoesNotExist(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			svc := sqs.New(sess)
-
 			d.mu.Lock()
 			defer d.mu.Unlock()
-
-			in := &sqs.DeleteQueueInput{
-				QueueUrl: aws.String(d.requestQueueURL),
-			}
-
-			_, err := svc.DeleteQueue(in)
-			if err != nil {
-				return fmt.Errorf("delete policy: %w", err)
-			}
-			return nil
+			return deleteSqsQueue(ctx, sess, d.requestQueueURL)
 		},
 	}
 }
@@ -574,21 +568,9 @@ func (d *Dealgood) deleteRequestQueueSubscription() Task {
 		Name:  "delete request queue subscription",
 		Check: d.requestQueueSubscriptionDoesNotExist(),
 		Func: func(ctx context.Context, sess *session.Session) error {
-			snssvc := sns.New(sess)
-
 			d.mu.Lock()
 			defer d.mu.Unlock()
-
-			in := &sns.UnsubscribeInput{
-				SubscriptionArn: aws.String(d.requestSubscriptionArn),
-			}
-
-			_, err := snssvc.Unsubscribe(in)
-			if err != nil {
-				return fmt.Errorf("unsubscribe from request topic: %w", err)
-			}
-
-			return nil
+			return unsubscribeSqsQueue(ctx, sess, d.requestSubscriptionArn)
 		},
 	}
 }
