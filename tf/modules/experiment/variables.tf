@@ -36,7 +36,10 @@ variable "dealgood_tag" {
   default = "2022-09-15__1504"
 }
 
-variable "ssm_exec_policy_arn" {
+# variable "ssm_exec_policy_arn" {
+# }
+
+variable "target_task_role_arn" {
 }
 
 variable "dealgood_task_role_arn" {

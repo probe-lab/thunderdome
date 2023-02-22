@@ -1,29 +1,37 @@
-# ironbar
+# Thunderdome Client
 
-ironbar is a tool for managing experiments
+thunderdome is a client tool for managing experiments
 
 ## Usage
 
 Invoke with a command:
 
-    ironbar <command> <flags>...
+    thunderdome <command> <flags>...
 
 Commands:
 
-	status   Report on the operational status of an experiment
-	deploy   Deploy an experiment
-	image    Build a docker image for an experiment
-	help     Shows a list of commands or help for one command
+	deploy    Deploy an experiment
+	teardown  Teardown an experiment
+	status    Report on the operational status of an experiment
+	image     Build a docker image for an experiment
+	validate  Validate an experiment definition
 
 
 ### deploy
 
-TODO
+	thunderdome deploy [command options] EXPERIMENT-FILENAME
+
+### teardown
+
+	thunderdome deploy [command options] EXPERIMENT-FILENAME
 
 ### status
 
-TODO
+	thunderdome status [command options] EXPERIMENT-FILENAME
 
+### validate
+
+	thunderdome validate [command options] EXPERIMENT-FILENAME
 
 ### image
 
@@ -63,49 +71,49 @@ The `image` command can push the image to an AWS ECR repo. This assumes that you
 Build an image from the head of the kubo Git repo, tag it as `kubo-test` and push to a container registry:
 
 ```sh
-ironbar image --from-repo=https://github.com/ipfs/kubo \
-              --tag kubo-test \
-              --push-to 123456789.dkr.ecr.eu-west-1.amazonaws.com
+thunderdome image --from-repo=https://github.com/ipfs/kubo \
+                  --tag kubo-test \
+                  --push-to 123456789.dkr.ecr.eu-west-1.amazonaws.com
 ```
 
 Build an image from commit `826c79c95` in the kubo Git repo, tag it as `kubo-826c79c95` and push to a container registry:
 
 ```sh
-ironbar image --from-repo=https://github.com/ipfs/kubo \
-              --commit 826c79c95 \
-              --tag kubo-826c79c95 \
-              --push-to 123456789.dkr.ecr.eu-west-1.amazonaws.com
+thunderdome image --from-repo=https://github.com/ipfs/kubo \
+                  --commit 826c79c95 \
+                  --tag kubo-826c79c95 \
+                  --push-to 123456789.dkr.ecr.eu-west-1.amazonaws.com
 ```
 
 Build an image from branch `paramtest` in the kubo Git repo, tag it as `kubo-paramtest`:
 
 ```sh
-ironbar image --from-repo=https://github.com/ipfs/kubo \
-              --branch paramtest \
-              --tag kubo-paramtest
+thunderdome image --from-repo=https://github.com/ipfs/kubo \
+                  --branch paramtest \
+                  --tag kubo-paramtest
 ```
 
 Build an image from the official v0.16.0 Kubo image, tag it as `kubo-v0.16.0` and push to a container registry:
 
 ```sh
-ironbar image --from-image ipfs/kubo:v0.16.0  \
-              --tag kubo-v0.16.0  \
-              --push-to 123456789.dkr.ecr.eu-west-1.amazonaws.com
+thunderdome image --from-image ipfs/kubo:v0.16.0  \
+                  --tag kubo-v0.16.0  \
+                  --push-to 123456789.dkr.ecr.eu-west-1.amazonaws.com
 ```
 
 Build an image from the official v0.16.0 Kubo image, tag it as `kubo-highlow` and enable the `Swarm.ConnMgr.HighWater` and `Swarm.ConnMgr.LowWater` config options to be configured by environment variables `$CONNMGR_HIGHWATER` and `$CONNMGR_LOWWATER`:
 
 ```sh
-ironbar image --from-image ipfs/kubo:v0.16.0  \
-              --tag kubo-highlow  \
-              --env-config=CONNMGR_HIGHWATER:Swarm.ConnMgr.HighWater \
-              --env-config=CONNMGR_LOWWATER:Swarm.ConnMgr.LowWater
+thunderdome image --from-image ipfs/kubo:v0.16.0  \
+                  --tag kubo-highlow  \
+                  --env-config=CONNMGR_HIGHWATER:Swarm.ConnMgr.HighWater \
+                  --env-config=CONNMGR_LOWWATER:Swarm.ConnMgr.LowWater
 ```
 
 Build an image from the official v0.16.0 Kubo image, tag it as `kubo-reposize` and enable the `Datastore.StorageMax` config option to be configured by the `$STORAGEMAX` environment variable. Since this config option requires a string, we must use `--env-config-quoted`:
 
 ```sh
-ironbar image --from-image ipfs/kubo:v0.16.0  \
-              --tag kubo-reposize  \
-              --env-config-quoted=STORAGEMAX:Datastore.StorageMax 
+thunderdome image --from-image ipfs/kubo:v0.16.0  \
+                  --tag kubo-reposize  \
+                  --env-config-quoted=STORAGEMAX:Datastore.StorageMax 
 ```
