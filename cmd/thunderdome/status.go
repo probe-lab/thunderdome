@@ -70,8 +70,8 @@ func Status(cc *cli.Context) error {
 	for _, it := range out.Items {
 		if it.Stopped.IsZero() {
 			age := time.Since(it.Start).Round(time.Second)
-			end := it.End.Format(time.Stamp)
-			fmt.Printf("%40s Age: %s End: %s\n", it.Name, age, end)
+			remaining := it.End.Sub(time.Now()).Round(time.Second)
+			fmt.Printf("%-40s %s remaining (running for %s)\n", it.Name, remaining, age)
 		} else {
 			fmt.Printf("%40s [stopped]\n", it.Name)
 		}
