@@ -1,5 +1,8 @@
 locals {
   dealgood_image_tag = "2022-09-15__1504"
+
+  skyfish_image_tag = "2022-09-15__1542"
+
   ironbar_image_tag = "2023-02-23-5ec5e83"
   ironbar_port_number = 8321
 

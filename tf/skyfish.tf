@@ -46,7 +46,7 @@ resource "aws_ecs_task_definition" "skyfish" {
   container_definitions = jsonencode([
     {
       name      = "skyfish"
-      image     = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/skyfish:2022-09-15__1542"
+      image     = "147263665150.dkr.ecr.eu-west-1.amazonaws.com/skyfish:${local.skyfish_image_tag}"
       cpu       = 0
       essential = true
 
