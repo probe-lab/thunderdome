@@ -8,8 +8,8 @@ COPY go.sum ./
 
 RUN go mod download
 
-COPY cmd/ironbar cmd
-COPY pkg pkg
+COPY ./cmd/ironbar ./cmd/ironbar
+COPY ./pkg ./pkg
 
 RUN ls -l
 
