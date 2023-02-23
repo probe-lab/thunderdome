@@ -1,6 +1,6 @@
 locals {
   dealgood_image_tag = "2022-09-15__1504"
-  ironbar_image_tag = "2023-02-23-c6a2432"
+  ironbar_image_tag = "2023-02-23-5ec5e83"
   ironbar_port_number = 8321
 
   infra_json = jsonencode({
