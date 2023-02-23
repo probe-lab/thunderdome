@@ -11,7 +11,7 @@ import (
 	"golang.org/x/exp/slog"
 
 	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
-	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/exp"
+	"github.com/ipfs-shipyard/thunderdome/pkg/exp"
 )
 
 func RegisterExperiment(addr string, e *exp.Experiment, res []api.Resource) func(ctx context.Context) (bool, error) {

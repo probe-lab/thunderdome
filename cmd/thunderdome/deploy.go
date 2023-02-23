@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/urfave/cli/v2"
 
@@ -13,16 +14,32 @@ var DeployCommand = &cli.Command{
 	Usage:     "Deploy an experiment",
 	Action:    Deploy,
 	ArgsUsage: "EXPERIMENT-FILENAME",
-	Flags:     commonFlags,
+	Flags: flags(
+		[]cli.Flag{
+			&cli.IntFlag{
+				Name:        "duration",
+				Required:    true,
+				Aliases:     []string{"d"},
+				Usage:       "Duration to run the experiment for, in minutes.",
+				Destination: &deployOpts.duration,
+			},
+		},
+	),
 }
 
-type deployOpts struct{}
+var deployOpts struct {
+	duration int
+}
 
 func Deploy(cc *cli.Context) error {
 	ctx := cc.Context
 	setupLogging()
 	if err := checkBuildEnv(); err != nil {
 		return err
+	}
+
+	if deployOpts.duration < 5 {
+		return fmt.Errorf("duration must be at least 5 minutes")
 	}
 
 	if cc.NArg() != 1 {
@@ -34,6 +51,7 @@ func Deploy(cc *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	e.Duration = time.Duration(deployOpts.duration) * time.Minute
 
 	prov, err := infra.NewProvider()
 	if err != nil {

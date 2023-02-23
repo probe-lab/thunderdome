@@ -8,15 +8,15 @@ import (
 )
 
 type Experiment struct {
-	Name     string
-	Duration time.Duration
+	Name        string
+	Description string
 
+	Duration       time.Duration
 	MaxRequestRate int
 	MaxConcurrency int
 	RequestFilter  string
 
-	Targets        []*TargetSpec
-	OriginalSource string `json:"-"`
+	Targets []*TargetSpec
 }
 
 type TargetSpec struct {

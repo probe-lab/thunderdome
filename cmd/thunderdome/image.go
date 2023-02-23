@@ -9,7 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/build"
-	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/exp"
+	"github.com/ipfs-shipyard/thunderdome/pkg/exp"
 )
 
 var ImageCommand = &cli.Command{
@@ -223,15 +223,4 @@ func parseEnvConfigMappings(strs []string, quote bool) ([]string, error) {
 	}
 
 	return cmds, nil
-}
-
-// nonEmptyCount returns the number the passed strings that are not empty
-func nonEmptyCount(strs ...string) int {
-	nonEmpty := 0
-	for _, s := range strs {
-		if len(s) > 0 {
-			nonEmpty++
-		}
-	}
-	return nonEmpty
 }

@@ -6,12 +6,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/build"
-	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/exp"
 	"github.com/kortschak/utter"
 	"golang.org/x/exp/slog"
 
 	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
+	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/build"
+	"github.com/ipfs-shipyard/thunderdome/pkg/exp"
 )
 
 type Provider struct {

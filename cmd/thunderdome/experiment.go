@@ -1,39 +1,94 @@
-package exp
+package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
-	"strings"
-	"time"
+
+	"github.com/ipfs-shipyard/thunderdome/pkg/exp"
 )
+
+type ExperimentJSON struct {
+	Name           string        `json:"name"`
+	Description    string        `json:"description"`
+	MaxRequestRate int           `json:"max_request_rate"` // maximum number of requests per second to send to targets
+	MaxConcurrency int           `json:"max_concurrency"`  // maximum number of concurrent requests to have in flight for each target
+	RequestFilter  string        `json:"request_filter"`   // filter to apply to incoming requests: "none", "pathonly", "validpathonly"
+	Targets        []TargetJSON  `json:"targets"`
+	Shared         *SharedJSON   `json:"shared"` // environment variables and init commands provided to all targets
+	Defaults       *DefaultsJSON `json:"defaults"`
+}
+
+type NVJSON struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type TargetJSON struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	InstanceType string   `json:"instance_type,omitempty"` // instance type to use. If empty, DefaultInstanceType will be used instead
+	Environment  []NVJSON `json:"environment,omitempty"`   // additional environment variables
+
+	BaseImage    string       `json:"base_image,omitempty"`
+	BuildFromGit *GitSpecJSON `json:"build_from_git,omitempty"`
+	// Commands that should be added to the container's container.init.d directory
+	// for example: ipfs config --json Swarm.ConnMgr.GracePeriod '"2m"'
+	InitCommands []string `json:"init_commands,omitempty"`
+
+	UseImage string `json:"use_image,omitempty"` // docker image to use. If empty, DefaultImage will be used instead. Must be pre-configured for thunderdome.
+}
+
+type DefaultsJSON struct {
+	InstanceType string       `json:"instance_type,omitempty"` // instance type to use. If empty, DefaultInstanceType will be used instead
+	Environment  []NVJSON     `json:"environment,omitempty"`   // additional environment variables
+	BaseImage    string       `json:"base_image,omitempty"`
+	BuildFromGit *GitSpecJSON `json:"build_from_git,omitempty"`
+	InitCommands []string     `json:"init_commands,omitempty"`
+	UseImage     string       `json:"use_image,omitempty"` // docker image to use. If empty, DefaultImage will be used instead. Must be pre-configured for thunderdome.
+}
+
+type SharedJSON struct {
+	Environment  []NVJSON `json:"environment,omitempty"`
+	InitCommands []string `json:"init_commands,omitempty"`
+}
+
+type GitSpecJSON struct {
+	Repo   string `json:"repo,omitempty"`
+	Commit string `json:"commit,omitempty"`
+	Tag    string `json:"tag,omitempty"`
+	Branch string `json:"branch,omitempty"`
+}
 
 // Target name must contain only lowercase letters, numbers and hyphens and must start with a letter
 var reTargetName = regexp.MustCompile(`^[a-z][a-z0-9-]+$`)
 
-func Parse(ctx context.Context, r io.Reader) (*Experiment, error) {
-	buf := new(bytes.Buffer)
-	if _, err := buf.ReadFrom(r); err != nil {
-		return nil, fmt.Errorf("read: %w", err)
+func LoadExperiment(ctx context.Context, filename string) (*exp.Experiment, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	e, err := ParseExperiment(ctx, f)
+	if err != nil {
+		return nil, fmt.Errorf("parse experiment definition: %w", err)
 	}
 
+	return e, nil
+}
+
+func ParseExperiment(ctx context.Context, r io.Reader) (*exp.Experiment, error) {
 	ej := new(ExperimentJSON)
-	if err := json.Unmarshal(buf.Bytes(), ej); err != nil {
+	if err := json.NewDecoder(r).Decode(ej); err != nil {
 		return nil, fmt.Errorf("json decode: %w", err)
 	}
 
-	e := &Experiment{
-		Name:           ej.Name,
-		OriginalSource: string(buf.Bytes()),
-	}
-
-	if ej.Duration > 0 {
-		e.Duration = time.Duration(ej.Duration) * time.Minute
-	} else {
-		return nil, fmt.Errorf("duration must be a positive number of minutes")
+	e := &exp.Experiment{
+		Name: ej.Name,
 	}
 
 	if ej.MaxRequestRate > 0 {
@@ -57,7 +112,7 @@ func Parse(ctx context.Context, r io.Reader) (*Experiment, error) {
 
 	uniqueNames := map[string]bool{}
 	for i, tj := range ej.Targets {
-		t := &TargetSpec{
+		t := &exp.TargetSpec{
 			Environment: map[string]string{},
 		}
 		if tj.Name != "" {
@@ -112,15 +167,15 @@ func Parse(ctx context.Context, r io.Reader) (*Experiment, error) {
 				if tj.BuildFromGit != nil {
 					return nil, fmt.Errorf("must not specify both base_image and build_from_git for target %s", tj.Name)
 				}
-				t.ImageSpec = &ImageSpec{
+				t.ImageSpec = &exp.ImageSpec{
 					BaseImage: tj.BaseImage,
 				}
 			} else if tj.BuildFromGit != nil {
 				if nonEmptyCount(tj.BuildFromGit.Commit, tj.BuildFromGit.Tag, tj.BuildFromGit.Branch) != 1 {
 					return nil, fmt.Errorf("must only specifiy one of commit, tag or branch in for target %s", tj.Name)
 				}
-				t.ImageSpec = &ImageSpec{
-					Git: &GitSpec{
+				t.ImageSpec = &exp.ImageSpec{
+					Git: &exp.GitSpec{
 						Repo:   tj.BuildFromGit.Repo,
 						Commit: tj.BuildFromGit.Commit,
 						Tag:    tj.BuildFromGit.Tag,
@@ -139,15 +194,15 @@ func Parse(ctx context.Context, r io.Reader) (*Experiment, error) {
 				if ej.Defaults.BuildFromGit != nil {
 					return nil, fmt.Errorf("must not specify both base_image and build_from_git  in target defaults")
 				}
-				t.ImageSpec = &ImageSpec{
+				t.ImageSpec = &exp.ImageSpec{
 					BaseImage: ej.Defaults.BaseImage,
 				}
 			} else if ej.Defaults != nil && ej.Defaults.BuildFromGit != nil {
 				if nonEmptyCount(ej.Defaults.BuildFromGit.Commit, ej.Defaults.BuildFromGit.Tag, ej.Defaults.BuildFromGit.Branch) != 1 {
 					return nil, fmt.Errorf("must only specifiy one of commit, tag or branch in for target defaults")
 				}
-				t.ImageSpec = &ImageSpec{
-					Git: &GitSpec{
+				t.ImageSpec = &exp.ImageSpec{
+					Git: &exp.GitSpec{
 						Repo:   ej.Defaults.BuildFromGit.Repo,
 						Commit: ej.Defaults.BuildFromGit.Commit,
 						Tag:    ej.Defaults.BuildFromGit.Tag,
@@ -158,7 +213,9 @@ func Parse(ctx context.Context, r io.Reader) (*Experiment, error) {
 				return nil, fmt.Errorf("must specify one of use_image, base_image or build_from_git in target %s definition", tj.Name)
 			}
 
-			// combine environment variables
+			t.ImageSpec.Description = tj.Description
+
+			// combine init commands
 			if ej.Shared != nil {
 				t.ImageSpec.InitCommands = append(t.ImageSpec.InitCommands, ej.Shared.InitCommands...)
 			}
@@ -185,85 +242,3 @@ func nonEmptyCount(strs ...string) int {
 	}
 	return nonEmpty
 }
-
-func TestExperiment() *Experiment {
-	e, err := Parse(context.Background(), strings.NewReader(testExperiment))
-	if err != nil {
-		panic(fmt.Sprintf("test experiment json invalid: %v", err))
-	}
-	return e
-}
-
-var testExperiment = `{
-	"name": "ironbar_test",
-	"duration": 30,
-	"max_request_rate": 10,
-	"max_concurrency": 100,
-	"request_filter": "pathonly",
-
-	"shared": {
-		"environment": [
-			{ "name": "IPFS_PROFILE", "value": "server" }
-		]
-	},
-
-	"defaults": {
-		"instance_type": "io_medium"
-	},
-
-	"targets": [
-		{
-			"name": "kubo150",
-			"use_image": "147263665150.dkr.ecr.eu-west-1.amazonaws.com/thunderdome:kubo-v0.15.0"
-		}
-	]
-}`
-
-func TweedlesExperiment() *Experiment {
-	e, err := Parse(context.Background(), strings.NewReader(tweedles))
-	if err != nil {
-		panic(fmt.Sprintf("tweedles experiment json invalid: %v", err))
-	}
-	return e
-}
-
-var tweedles = `{
-	"name": "tweedles-ironbar",
-	"duration": 30,
-	"max_request_rate": 20,
-	"max_concurrency": 100,
-	"request_filter": "pathonly",
-
-	"defaults": {
-		"instance_type": "io_medium",
-		"base_image": "ipfs/kubo:v0.18.1"
-	},
-
-	"shared": {
-		"init_commands" : [
-			"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
-			"ipfs config --json Datastore.BloomFilterSize '268435456'",
-			"ipfs config --json Datastore.StorageGCWatermark 90",
-			"ipfs config --json Datastore.StorageMax '\"160GB\"'",
-			"ipfs config --json Pubsub.StrictSignatureVerification false",
-			"ipfs config --json Reprovider.Interval '\"0\"'",
-			"ipfs config --json Routing.Type '\"dhtserver\"'",
-			"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
-			"ipfs config --json Swarm.ConnMgr.HighWater 5000",
-			"ipfs config --json Swarm.ConnMgr.LowWater 3000",
-			"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
-			"ipfs config --json Experimental.AcceleratedDHTClient true",
-			"ipfs config --json Experimental.StrategicProviding true"
-		]
-	},
-
-	"targets": [
-		{
-			"name": "dee"
-		},
-		{
-			"name": "dum"
-		}
-	]
-}
-`

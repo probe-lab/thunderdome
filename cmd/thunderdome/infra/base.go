@@ -64,8 +64,6 @@ func NewBaseInfra(awsRegion string) (*BaseInfra, error) {
 		return nil, fmt.Errorf("decode json: %w", err)
 	}
 
-	base.IronbarAddr = "127.0.0.1:8321"
-
 	return base, nil
 
 	// return &BaseInfra{

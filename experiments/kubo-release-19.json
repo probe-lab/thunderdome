@@ -1,6 +1,5 @@
 {
 	"name": "kubo-release-19",
-	"duration": 30,
 	"max_request_rate": 20,
 	"max_concurrency": 100,
 	"request_filter": "pathonly",
@@ -26,7 +25,43 @@
 
 	"targets": [
 		{
+			"name": "kubo190rc1-standard",
+			"description": "kubo 0.19.0-rc1 configured as a desktop",
+			"build_from_git": {
+				"repo": "github.com/ipfs/kubo",
+				"tag":"v0.19.0-rc1"
+			},
+			"init_commands" : [
+			]
+		},
+		{
+			"name": "kubo181-standard",
+			"description": "kubo 0.18.1 configured as a desktop",
+			"build_from_git": {
+				"repo": "github.com/ipfs/kubo",
+				"tag":"v0.18.1"
+			},
+			"init_commands" : [
+			]
+		},
+		{
+			"name": "kubo190rc1-server",
+			"description": "kubo 0.19.0-rc1 configured as a server",
+			"build_from_git": {
+				"repo": "github.com/ipfs/kubo",
+				"tag":"v0.19.0-rc1"
+			},
+			"init_commands" : [
+				"ipfs config --json Swarm.ConnMgr.HighWater 900",
+				"ipfs config --json Swarm.ConnMgr.LowWater 600"
+			],
+			"environment" : [
+				{ "name": "IPFS_PROFILE", "value": "server" }
+			]
+		},
+		{
 			"name": "kubo181-server",
+			"description": "kubo 0.18.1 configured as a server",
 			"build_from_git": {
 				"repo": "github.com/ipfs/kubo",
 				"tag":"v0.18.1"
@@ -39,28 +74,5 @@
 				{ "name": "IPFS_PROFILE", "value": "server" }
 			]
 		},
-		{
-			"name": "kubo190rc1-server",
-			"build_from_git": {
-				"repo": "github.com/ipfs/kubo",
-				"tag":"v0.19.0-rc1"
-			},
-			"init_commands" : [
-				"ipfs config --json Swarm.ConnMgr.HighWater 900",
-				"ipfs config --json Swarm.ConnMgr.LowWater 600"
-			],
-			"environment" : [
-				{ "name": "IPFS_PROFILE", "value": "server" }
-			]
-		},
-		{
-			"name": "kubo190rc1-standard",
-			"build_from_git": {
-				"repo": "github.com/ipfs/kubo",
-				"tag":"v0.19.0-rc1"
-			},
-			"init_commands" : [
-			]
-		}
 	]
 }

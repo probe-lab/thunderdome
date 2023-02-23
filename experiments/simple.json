@@ -1,6 +1,5 @@
 {
 	"name": "simple",
-	"duration": 5,
 	"max_request_rate": 20,
 	"max_concurrency": 100,
 	"request_filter": "pathonly",

@@ -1,16 +1,13 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/build"
-	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/exp"
 )
 
 var ValidateCommand = &cli.Command{
@@ -91,21 +88,6 @@ func Validate(cc *cli.Context) error {
 	}
 
 	return nil
-}
-
-func LoadExperiment(ctx context.Context, filename string) (*exp.Experiment, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	e, err := exp.Parse(ctx, f)
-	if err != nil {
-		return nil, fmt.Errorf("parse experiment definition: %w", err)
-	}
-
-	return e, nil
 }
 
 func durationDesc(d time.Duration) string {

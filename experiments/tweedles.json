@@ -1,6 +1,5 @@
 {
 	"name": "tweedles",
-	"duration": 30,
 	"max_request_rate": 20,
 	"max_concurrency": 100,
 	"request_filter": "pathonly",
