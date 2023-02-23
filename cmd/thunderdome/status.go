@@ -10,10 +10,9 @@ import (
 )
 
 var StatusCommand = &cli.Command{
-	Name:      "status",
-	Usage:     "Report on the operational status of experiments",
-	Action:    Status,
-	ArgsUsage: "EXPERIMENT-FILENAME",
+	Name:   "status",
+	Usage:  "Report on the operational status of experiments",
+	Action: Status,
 	Flags: flags([]cli.Flag{
 		&cli.StringFlag{
 			Name:        "experiment",
@@ -54,6 +53,27 @@ func Status(cc *cli.Context) error {
 			fmt.Printf("Ran for      : %s\n", out.Stopped.Sub(out.Start).Round(time.Second))
 			fmt.Printf("Stopped at   : %s\n", out.Stopped.Format(time.Stamp))
 
+		}
+		return nil
+	}
+
+	out, err := prov.ListExperiments(ctx)
+	if err != nil {
+		return err
+	}
+
+	if len(out.Items) == 0 {
+		fmt.Println("No experiments running or recently stopped")
+		return nil
+	}
+
+	for _, it := range out.Items {
+		if it.Stopped.IsZero() {
+			age := time.Since(it.Start).Round(time.Second)
+			end := it.End.Format(time.Stamp)
+			fmt.Printf("%40s Age: %s End: %s\n", it.Name, age, end)
+		} else {
+			fmt.Printf("%40s [stopped]\n", it.Name)
 		}
 	}
 

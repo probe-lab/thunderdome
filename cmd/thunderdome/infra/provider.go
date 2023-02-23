@@ -204,6 +204,20 @@ func (p *Provider) ExperimentStatus(ctx context.Context, name string) (*api.Expe
 	return out, nil
 }
 
+func (p *Provider) ListExperiments(ctx context.Context) (*api.ListExperimentsOutput, error) {
+	base, err := NewBaseInfra(p.region)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read base infra: %w", err)
+	}
+
+	out, err := ListExperiments(ctx, base.IronbarAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list experiments: %w", err)
+	}
+
+	return out, nil
+}
+
 func debugf(t string, args ...any) {
 	slog.Debug(fmt.Sprintf(t, args...))
 }

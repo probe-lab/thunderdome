@@ -91,3 +91,31 @@ func GetExperimentStatus(ctx context.Context, addr string, name string) (*api.Ex
 
 	return out, nil
 }
+
+func ListExperiments(ctx context.Context, addr string) (*api.ListExperimentsOutput, error) {
+	resp, err := http.Get(fmt.Sprintf("http://%s/experiments", addr))
+	if err != nil {
+		return nil, fmt.Errorf("get experiments: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("experiments not found")
+		} else {
+
+			errorResp := new(ErrorResponse)
+			if err := json.NewDecoder(resp.Body).Decode(errorResp); err != nil {
+				return nil, fmt.Errorf("status check failed, and failed to decode response: %w", err)
+			}
+
+			return nil, errorResp
+		}
+	}
+
+	out := new(api.ListExperimentsOutput)
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return out, nil
+}

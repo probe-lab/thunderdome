@@ -402,6 +402,7 @@ func (s *Server) ListExperimentsHandler(w http.ResponseWriter, r *http.Request) 
 	s.mu.Lock()
 	for _, mr := range s.managed {
 		out.Items = append(out.Items, api.ListExperimentsItem{
+			Name:    mr.Name,
 			Start:   mr.Start,
 			End:     mr.End,
 			Stopped: mr.Deleted,
