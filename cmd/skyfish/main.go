@@ -131,7 +131,7 @@ func Run(cc *cli.Context) error {
 	rg.Add(source)
 
 	if flags.prometheusAddr != "" {
-		ps, err := prom.NewPrometheusServer(flags.prometheusAddr, appName)
+		ps, err := prom.NewPrometheusServer(flags.prometheusAddr, "/metrics", appName)
 		if err != nil {
 			return fmt.Errorf("start prometheus: %w", err)
 		}

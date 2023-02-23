@@ -3,12 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/exp/slog"
 
@@ -131,7 +128,7 @@ func Run(cc *cli.Context) error {
 
 	// Init metric reporting if required
 	if options.diagnosticsAddr != "" {
-		ps, err := prom.NewPrometheusServer(options.diagnosticsAddr, appName)
+		ps, err := prom.NewPrometheusServer(options.diagnosticsAddr, "/metrics", appName)
 		if err != nil {
 			return fmt.Errorf("start prometheus: %w", err)
 		}
@@ -143,48 +140,17 @@ func Run(cc *cli.Context) error {
 		TableName: options.experimentsTableName,
 	}
 
-	svr := NewServer(
+	svr, err := NewServer(
 		ctx,
 		db,
 		options.awsRegion,
 		time.Duration(options.monitorInterval)*time.Minute,
 		time.Duration(options.settle)*time.Minute,
 	)
+	if err != nil {
+		return fmt.Errorf("create server: %w", err)
+	}
 	rg.Add(svr)
 
 	return rg.RunAndWait(ctx)
-}
-
-type DiagRunner struct {
-	addr string
-}
-
-func (dr *DiagRunner) Run(ctx context.Context) error {
-	diagListener, err := net.Listen("tcp", dr.addr)
-	if err != nil {
-		return fmt.Errorf("failed to listen on %q: %w", dr.addr, err)
-	}
-
-	pe, err := RegisterPrometheusExporter("tracecatcher")
-	if err != nil {
-		return fmt.Errorf("failed to register prometheus exporter: %w", err)
-	}
-
-	mx := mux.NewRouter()
-	mx.Handle("/metrics", pe)
-
-	srv := &http.Server{
-		Handler:     mx,
-		BaseContext: func(net.Listener) context.Context { return ctx },
-	}
-
-	go func() {
-		<-ctx.Done()
-		if err := srv.Shutdown(context.Background()); err != nil {
-			slog.Error("failed to shut down diagnostics server", err)
-		}
-	}()
-
-	slog.Info("starting diagnostics server", "addr", dr.addr)
-	return srv.Serve(diagListener)
 }

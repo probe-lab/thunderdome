@@ -16,6 +16,7 @@ import (
 	"golang.org/x/exp/slog"
 
 	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
+	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
 )
 
 type Server struct {
@@ -23,6 +24,10 @@ type Server struct {
 	monitorInterval time.Duration
 	settle          time.Duration
 	awsRegion       string
+
+	upGauge            prom.Gauge
+	managedGauge       prom.Gauge
+	checkErrorsCounter prom.Counter
 
 	mu      sync.Mutex
 	managed map[string]*ManagedResources
@@ -36,14 +41,48 @@ type ManagedResources struct {
 	Deleted   time.Time
 }
 
-func NewServer(ctx context.Context, db *DB, awsRegion string, monitorInterval time.Duration, settle time.Duration) *Server {
-	return &Server{
+func NewServer(ctx context.Context, db *DB, awsRegion string, monitorInterval time.Duration, settle time.Duration) (*Server, error) {
+	s := &Server{
 		db:              db,
 		awsRegion:       awsRegion,
 		monitorInterval: monitorInterval,
 		settle:          settle,
 		managed:         make(map[string]*ManagedResources),
 	}
+
+	commonLabels := map[string]string{}
+	var err error
+	s.upGauge, err = prom.NewPrometheusGauge(
+		appName,
+		"up",
+		"Indicates whether the application is running.",
+		commonLabels,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
+	s.managedGauge, err = prom.NewPrometheusGauge(
+		appName,
+		"managed_experiments",
+		"The total number of active experiments being managed.",
+		commonLabels,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new gauge: %w", err)
+	}
+
+	s.checkErrorsCounter, err = prom.NewPrometheusCounter(
+		appName,
+		"check_errors_total",
+		"The total number of errors encountered while checking resources.",
+		commonLabels,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new counter: %w", err)
+	}
+
+	return s, nil
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -119,7 +158,10 @@ func (s *Server) ConfigureRoutes(r *mux.Router) {
 
 func (s *Server) MonitorResources(ctx context.Context) {
 	slog.Info("starting monitoring of resources", "interval", s.monitorInterval)
-
+	s.upGauge.Set(1)
+	defer func() {
+		s.upGauge.Set(0)
+	}()
 	slog.Debug("checking resources")
 	s.CheckResources(ctx)
 
@@ -150,6 +192,7 @@ func (s *Server) CheckResources(ctx context.Context) {
 		return
 	}
 
+	activeManaged := 0
 	now := time.Now().UTC()
 	for name, mr := range s.managed {
 		if !mr.Deleted.IsZero() {
@@ -179,6 +222,7 @@ func (s *Server) CheckResources(ctx context.Context) {
 				active, err := isTaskActive(ctx, sess, res.Keys[api.ResourceKeyEcsClusterArn], res.Keys[api.ResourceKeyArn])
 				if err != nil {
 					logger.Error("failed to check whether task is active", err, "arn", res.Keys[api.ResourceKeyArn], "cluster_arn", res.Keys[api.ResourceKeyEcsClusterArn])
+					s.checkErrorsCounter.Add(1)
 					continue
 				}
 				if !active {
@@ -189,12 +233,14 @@ func (s *Server) CheckResources(ctx context.Context) {
 				logger.Info("task is active, stopping it")
 				if err := stopEcsTask(ctx, sess, res.Keys[api.ResourceKeyEcsClusterArn], res.Keys[api.ResourceKeyArn]); err != nil {
 					logger.Error("failed to stop task", err, "arn", res.Keys[api.ResourceKeyArn], "cluster_arn", res.Keys[api.ResourceKeyEcsClusterArn])
+					s.checkErrorsCounter.Add(1)
 				}
 
 			case api.ResourceTypeEcsTaskDefinition:
 				active, err := isTaskDefinitionActive(ctx, sess, res.Keys[api.ResourceKeyArn])
 				if err != nil {
 					logger.Error("failed to check whether task definition is active", err, "arn", res.Keys[api.ResourceKeyArn])
+					s.checkErrorsCounter.Add(1)
 					continue
 				}
 				if !active {
@@ -205,28 +251,33 @@ func (s *Server) CheckResources(ctx context.Context) {
 				logger.Info("task definition is active, deregistering it")
 				if err := deregisterEcsTaskDefinition(ctx, sess, res.Keys[api.ResourceKeyArn]); err != nil {
 					logger.Error("failed to deregister task definition", err, "arn", res.Keys[api.ResourceKeyArn])
+					s.checkErrorsCounter.Add(1)
 				}
 
 			case api.ResourceTypeEcsSnsSubscription:
 				active, err := isSnsSubscriptionActive(ctx, sess, res.Keys[api.ResourceKeyArn])
 				if err != nil {
 					logger.Error("failed to check whether subscription is active", err, "arn", res.Keys[api.ResourceKeyArn])
+					s.checkErrorsCounter.Add(1)
 					continue
 				}
 				if !active {
 					logger.Debug("subscription is not active")
+					s.checkErrorsCounter.Add(1)
 					continue
 				}
 				anyActive = true
 				logger.Info("subscription is active, unsubscribing")
 				if err := unsubscribeSqsQueue(ctx, sess, res.Keys[api.ResourceKeyArn]); err != nil {
 					logger.Error("failed to unsubscribe queue", err, "arn", res.Keys[api.ResourceKeyArn])
+					s.checkErrorsCounter.Add(1)
 				}
 
 			case api.ResourceTypeSqsQueue:
 				active, err := isSqsQueueActive(ctx, sess, res.Keys[api.ResourceKeyQueueURL])
 				if err != nil {
 					logger.Error("failed to check whether queue is active", err, "url", res.Keys[api.ResourceKeyQueueURL])
+					s.checkErrorsCounter.Add(1)
 					continue
 				}
 				if !active {
@@ -237,26 +288,30 @@ func (s *Server) CheckResources(ctx context.Context) {
 				logger.Info("queue is active, deleting")
 				if err := deleteSqsQueue(ctx, sess, res.Keys[api.ResourceKeyQueueURL]); err != nil {
 					logger.Error("failed to delete queue", err, "url", res.Keys[api.ResourceKeyQueueURL])
+					s.checkErrorsCounter.Add(1)
 				}
 
 			default:
 				anyActive = true
 				logger.Warn("unknown resource type, cannot remove", "type", res.Type)
+				s.checkErrorsCounter.Add(1)
 			}
 		}
 
 		if anyActive {
 			logger.Info("some resources are still active or stopping, will check again")
+			activeManaged++
 		} else {
 			logger.Info("no resources are active")
 			if err := s.db.RemoveExperiment(ctx, name); err != nil {
 				logger.Error("failed to remove experiment", err)
+				s.checkErrorsCounter.Add(1)
 				continue
 			}
 			mr.Deleted = time.Now().UTC()
 		}
-
 	}
+	s.managedGauge.Set(float64(activeManaged))
 }
 
 func (s *Server) NotFoundHandler(w http.ResponseWriter, r *http.Request) {
