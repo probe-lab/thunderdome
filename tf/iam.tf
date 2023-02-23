@@ -149,6 +149,67 @@ resource "aws_iam_role_policy_attachment" "skyfish-sns" {
   policy_arn = aws_iam_policy.sns_publish.arn
 }
 
+
+resource "aws_iam_role" "ironbar" {
+  name = "ironbar"
+  inline_policy {
+    name = "ironbar_inline"
+    policy = jsonencode({
+      "Version": "2012-10-17",
+      "Statement": [
+          {
+              "Sid": "ironbar",
+              "Effect": "Allow",
+              "Action": [
+                  "dynamodb:BatchGetItem",
+                  "dynamodb:BatchWriteItem",
+                  "dynamodb:PutItem",
+                  "dynamodb:DescribeTable",
+                  "dynamodb:DeleteItem",
+                  "dynamodb:GetItem",
+                  "dynamodb:Scan",
+                  "dynamodb:Query",
+                  "dynamodb:UpdateItem",
+                  "dynamodb:UpdateTable",
+                  "ecs:DescribeTasks",
+                  "ecs:DescribeTaskDefinition",
+                  "ecs:DeregisterTaskDefinition",
+                  "sns:GetSubscriptionAttributes",
+                  "ecs:StopTask",
+                  "sns:Unsubscribe",
+                  "sqs:DeleteQueue",
+                  "sqs:GetQueueAttributes"
+              ],
+              "Resource": "*"
+          }
+      ]
+    })
+  }
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Sid    = ""
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      },
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Sid    = ""
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      },
+    ]
+  })
+}
+
+
+
 resource "aws_iam_policy" "testbox_policy" {
   name        = "testbox-policy"
   path        = "/"

@@ -2,7 +2,8 @@ locals {
   agent_configs = toset([
     "dealgood",
     "skyfish",
-    "target"
+    "target",
+    "ironbar"
   ])
 }
 resource "aws_iam_user" "grafana" {

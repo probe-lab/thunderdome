@@ -73,6 +73,21 @@ resource "aws_eip" "nat" {
   vpc   = true
 }
 
+resource "aws_eip" "ecs" {
+  count = 1
+  vpc   = true
+}
+
+resource "aws_lb" "ecs" {
+  name               = "ecs"
+  load_balancer_type = "network"
+
+  subnet_mapping {
+    subnet_id     = module.vpc.public_subnets[0]
+    allocation_id = aws_eip.ecs[0].id
+  }
+}
+
 resource "aws_ecr_repository" "thunderdome" {
   name                 = "thunderdome"
   image_tag_mutability = "MUTABLE"

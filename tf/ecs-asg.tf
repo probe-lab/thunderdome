@@ -207,3 +207,5 @@ resource "aws_cloudwatch_log_group" "this" {
   name              = "/aws/ecs/thunderdome-asg"
   retention_in_days = 7
 }
+
+

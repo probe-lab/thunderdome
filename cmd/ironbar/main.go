@@ -45,7 +45,7 @@ var app = &cli.App{
 		&cli.StringFlag{
 			Name:        "addr",
 			Aliases:     []string{"a"},
-			Usage:       "Listen for traces on `ADDRESS:PORT`",
+			Usage:       "Listen on `ADDRESS:PORT`",
 			Value:       ":8321",
 			EnvVars:     []string{envPrefix + "ADDR"},
 			Destination: &options.addr,
