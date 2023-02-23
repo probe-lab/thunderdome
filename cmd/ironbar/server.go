@@ -152,6 +152,7 @@ func (s *Server) ConfigureRoutes(r *mux.Router) {
 	r.Path("/experiments").Methods("POST").HandlerFunc(s.NewExperimentHandler)
 	r.Path("/experiments").Methods("GET").HandlerFunc(s.ListExperimentsHandler)
 	r.Path("/experiments/{name}/status").Methods("GET").HandlerFunc(s.ExperimentStatusHandler)
+	r.Path("/experiments/{name}").Methods("GET").HandlerFunc(s.GetExperimentHandler)
 	r.Path("/experiments/{name}").Methods("DELETE").HandlerFunc(s.DeleteExperimentHandler)
 	r.Path("/").Methods("GET").HandlerFunc(s.RootHandler)
 }
@@ -527,4 +528,38 @@ func (s *Server) DeleteExperimentHandler(w http.ResponseWriter, r *http.Request)
 func (s *Server) RootHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Hello, this is ironbar\n"))
+}
+
+func (s *Server) GetExperimentHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	vars := mux.Vars(r)
+
+	name := vars["name"]
+	if len(name) == 0 {
+		s.NotFoundHandler(w, r)
+		return
+	}
+
+	s.mu.Lock()
+	mr, ok := s.managed[name]
+	s.mu.Unlock()
+
+	if !ok {
+		s.NotFoundHandler(w, r)
+		return
+	}
+
+	er, err := s.db.GetExperiment(ctx, name)
+	if err != nil {
+		slog.Error("failed to get experiment", err)
+	}
+
+	out := &api.GetExperimentOutput{
+		Name:       name,
+		Start:      mr.Start,
+		End:        mr.End,
+		Stopped:    mr.Deleted,
+		Definition: er.Definition,
+	}
+	s.WriteAsJSON(w, http.StatusOK, out)
 }

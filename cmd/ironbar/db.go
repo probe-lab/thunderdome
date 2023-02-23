@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -23,6 +24,8 @@ type ExperimentRecord struct {
 	Definition string
 	Resources  string
 }
+
+var ErrNotFound = errors.New("not found")
 
 func (d *DB) RecordExperimentStart(ctx context.Context, rec *ExperimentRecord) error {
 	logger := slog.With("experiment", rec.Name)
@@ -200,4 +203,79 @@ func (d *DB) ListExperiments(ctx context.Context) ([]ExperimentRecord, error) {
 	}
 
 	return recs, nil
+}
+
+func (d *DB) GetExperiment(ctx context.Context, name string) (*ExperimentRecord, error) {
+	slog.Debug("getting experiment")
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(d.AwsRegion),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("new session: %w", err)
+	}
+
+	svc := dynamodb.New(sess)
+
+	in := &dynamodb.GetItemInput{
+		TableName: aws.String(d.TableName),
+		Key: map[string]*dynamodb.AttributeValue{
+			"name": {
+				S: aws.String(name),
+			},
+		},
+
+		ExpressionAttributeNames: map[string]*string{
+			"#name":  aws.String("name"),
+			"#end":   aws.String("end"),
+			"#start": aws.String("start"),
+		},
+		ProjectionExpression: aws.String("#name,#start,#end,resources,definition"),
+	}
+
+	out, err := svc.GetItem(in)
+	if err != nil {
+		if _, ok := err.(*dynamodb.ResourceNotFoundException); ok {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("get item: %w", err)
+	}
+
+	if out.Item == nil {
+		return nil, ErrNotFound
+	}
+
+	var rec ExperimentRecord
+
+	if nameAtt, ok := out.Item["name"]; ok && nameAtt != nil && nameAtt.S != nil && *nameAtt.S != "" {
+		rec.Name = *nameAtt.S
+		slog.Debug("reading experiment record", "name", rec.Name)
+	} else {
+		slog.Warn("no name found for item")
+	}
+
+	if startAtt, ok := out.Item["start"]; ok && startAtt != nil && startAtt.N != nil {
+		rec.Start, err = strconv.ParseInt(*startAtt.N, 10, 64)
+		if err != nil {
+			slog.Error("invalid start time", err, "name", rec.Name)
+		}
+	} else {
+		slog.Warn("no start time found for item", "name", rec.Name)
+	}
+
+	if endAtt, ok := out.Item["end"]; ok && endAtt != nil && endAtt.N != nil {
+		rec.End, err = strconv.ParseInt(*endAtt.N, 10, 64)
+		if err != nil {
+			slog.Error("invalid end time", err, "name", rec.Name)
+		}
+	} else {
+		slog.Warn("no end time found for item", "name", rec.Name)
+	}
+
+	if resourcesAtt, ok := out.Item["resources"]; ok && resourcesAtt != nil && resourcesAtt.S != nil && *resourcesAtt.S != "" {
+		rec.Resources = *resourcesAtt.S
+	} else {
+		slog.Warn("no resources found for item", "name", rec.Name)
+	}
+
+	return &rec, nil
 }

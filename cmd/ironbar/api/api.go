@@ -55,3 +55,11 @@ type ExperimentStatusOutput struct {
 }
 
 type DeleteExperimentOutput struct{}
+
+type GetExperimentOutput struct {
+	Name       string    `json:"name"`
+	Start      time.Time `json:"start"`
+	End        time.Time `json:"end"`
+	Stopped    time.Time `json:"stopped"`
+	Definition string    `json:"definition"`
+}
