@@ -205,11 +205,13 @@ func (s *Server) CheckResources(ctx context.Context) {
 
 		if mr.Start.After(now.Add(s.settle)) {
 			logger.Info("waiting for experiment to settle before checking resources")
+			activeManaged++
 			continue
 		}
 
 		if mr.End.After(now) {
 			logger.Debug("experiment is not due to end yet")
+			activeManaged++
 			continue
 		}
 
