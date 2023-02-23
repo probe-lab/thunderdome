@@ -5,6 +5,7 @@ go 1.19
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/aws/aws-sdk-go v1.44.202
+	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/ipfs/go-path v0.3.0
 	github.com/kortschak/utter v1.5.0
