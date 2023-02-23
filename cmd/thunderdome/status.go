@@ -73,7 +73,7 @@ func Status(cc *cli.Context) error {
 			remaining := it.End.Sub(time.Now()).Round(time.Second)
 			fmt.Printf("%-40s %s remaining (running for %s)\n", it.Name, remaining, age)
 		} else {
-			fmt.Printf("%40s [stopped]\n", it.Name)
+			fmt.Printf("%-40s [stopped]\n", it.Name)
 		}
 	}
 
