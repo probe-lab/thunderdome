@@ -20,7 +20,7 @@ build-dealgood:
 
 .PHONY: build-ironbar
 build-ironbar:
-	docker build -f Dockerfile-skyfish -t skyfish:${TAG} .
+	docker build -f Dockerfile-ironbar -t ironbar:${TAG} .
 
 .PHONY: build-skyfish
 build-skyfish:
