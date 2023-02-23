@@ -395,6 +395,20 @@ func (s *Server) NewExperimentHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ListExperimentsHandler(w http.ResponseWriter, r *http.Request) {
+	out := &api.ListExperimentsOutput{
+		Items: []api.ListExperimentsItem{},
+	}
+
+	s.mu.Lock()
+	for _, mr := range s.managed {
+		out.Items = append(out.Items, api.ListExperimentsItem{
+			Start:   mr.Start,
+			End:     mr.End,
+			Stopped: mr.Deleted,
+		})
+	}
+	s.mu.Unlock()
+	s.WriteAsJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) ExperimentStatusHandler(w http.ResponseWriter, r *http.Request) {

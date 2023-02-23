@@ -36,10 +36,16 @@ type NewExperimentOutput struct {
 	StatusURL string `json:"status_url"`
 }
 
-type (
-	ListExperimentsInput  struct{}
-	ListExperimentsOutput struct{}
-)
+type ListExperimentsOutput struct {
+	Items []ListExperimentsItem `json:"items"`
+}
+
+type ListExperimentsItem struct {
+	Name    string    `json:"name"`
+	Start   time.Time `json:"start"`
+	End     time.Time `json:"end"`
+	Stopped time.Time `json:"stopped"`
+}
 
 type ExperimentStatusOutput struct {
 	Start   time.Time `json:"start"`
@@ -48,7 +54,4 @@ type ExperimentStatusOutput struct {
 	Status  string    `json:"status"`
 }
 
-type (
-	DeleteExperimentInput  struct{}
-	DeleteExperimentOutput struct{}
-)
+type DeleteExperimentOutput struct{}
