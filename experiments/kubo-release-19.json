@@ -28,7 +28,7 @@
 			"name": "kubo190rc1-standard",
 			"description": "kubo 0.19.0-rc1 configured as a desktop",
 			"build_from_git": {
-				"repo": "github.com/ipfs/kubo",
+				"repo": "https://github.com/ipfs/kubo.git",
 				"tag":"v0.19.0-rc1"
 			},
 			"init_commands" : [
@@ -38,7 +38,7 @@
 			"name": "kubo181-standard",
 			"description": "kubo 0.18.1 configured as a desktop",
 			"build_from_git": {
-				"repo": "github.com/ipfs/kubo",
+				"repo": "https://github.com/ipfs/kubo.git",
 				"tag":"v0.18.1"
 			},
 			"init_commands" : [
@@ -48,7 +48,7 @@
 			"name": "kubo190rc1-server",
 			"description": "kubo 0.19.0-rc1 configured as a server",
 			"build_from_git": {
-				"repo": "github.com/ipfs/kubo",
+				"repo": "https://github.com/ipfs/kubo.git",
 				"tag":"v0.19.0-rc1"
 			},
 			"init_commands" : [
@@ -63,7 +63,7 @@
 			"name": "kubo181-server",
 			"description": "kubo 0.18.1 configured as a server",
 			"build_from_git": {
-				"repo": "github.com/ipfs/kubo",
+				"repo": "https://github.com/ipfs/kubo.git",
 				"tag":"v0.18.1"
 			},
 			"init_commands" : [
@@ -73,6 +73,6 @@
 			"environment" : [
 				{ "name": "IPFS_PROFILE", "value": "server" }
 			]
-		},
+		}
 	]
 }

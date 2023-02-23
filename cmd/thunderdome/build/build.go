@@ -177,11 +177,14 @@ func BuildImageFromGitTag(workDir string, gitRepo string, gitTag string, imageNa
 		return "", fmt.Errorf("git clone: %w", err)
 	}
 
+	gitRepoDir := filepath.Join(workDir, cloneName)
+	if err := GitFetchTags(gitRepoDir); err != nil {
+		return "", fmt.Errorf("git fetch tags: %w", err)
+	}
+
 	if !strings.HasPrefix(gitTag, "tags/") {
 		gitTag = "tags/" + gitTag
 	}
-
-	gitRepoDir := filepath.Join(workDir, cloneName)
 	if err := GitCheckout(gitRepoDir, gitTag); err != nil {
 		return "", fmt.Errorf("git checkout: %w", err)
 	}

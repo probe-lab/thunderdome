@@ -42,3 +42,15 @@ func GitCheckout(gitRepoDir string, ref string) error {
 	}
 	return cmd.Wait()
 }
+
+func GitFetchTags(workdir string) error {
+	cmd := exec.Command("git", "fetch", "origin", "--tags")
+	cmd.Dir = workdir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	slog.Debug(cmd.String())
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Wait()
+}
