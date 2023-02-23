@@ -3,7 +3,7 @@ locals {
 
   skyfish_image_tag = "2022-09-15__1542"
 
-  ironbar_image_tag = "2023-02-23-11cccec"
+  ironbar_image_tag = "2023-02-23-593eecc"
   ironbar_port_number = 8321
 
   infra_json = jsonencode({
