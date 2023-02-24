@@ -30,6 +30,12 @@ type BaseInfra struct {
 	TargetGrafanaAgentConfigURL   string
 	TargetTaskRoleArn             string
 	VpcPublicSubnet               string
+	CapacityProviders             map[string]CapacityProvider // currently staticly setup
+}
+
+type CapacityProvider struct {
+	Name         string
+	InstanceType InstanceType
 }
 
 func NewBaseInfra(awsRegion string) (*BaseInfra, error) {
@@ -64,24 +70,10 @@ func NewBaseInfra(awsRegion string) (*BaseInfra, error) {
 		return nil, fmt.Errorf("decode json: %w", err)
 	}
 
-	return base, nil
+	// TODO: read from json
+	base.setupCapacityProviders()
 
-	// return &BaseInfra{
-	// 	EcsClusterArn:                 "arn:aws:ecs:eu-west-1:147263665150:cluster/thunderdome",
-	// 	LogGroupName:                  "thunderdome",
-	// 	EcsExecutionRoleArn:           "arn:aws:iam::147263665150:role/ecsTaskExecutionRole",
-	// 	TargetTaskRoleArn:             "arn:aws:iam::147263665150:role/target",
-	// 	DealgoodTaskRoleArn:           "arn:aws:iam::147263665150:role/dealgood",
-	// 	EfsFileSystemID:               "fs-006bd3d793700a2df",
-	// 	RequestSNSTopicArn:            "arn:aws:sns:eu-west-1:147263665150:gateway-requests",
-	// 	GrafanaAgentTargetConfigURL:   "https://pl-thunderdome-public.s3.eu-west-1.amazonaws.com/grafana-agent-config/target.yaml",
-	// 	GrafanaAgentDealgoodConfigURL: "https://pl-thunderdome-public.s3.eu-west-1.amazonaws.com/grafana-agent-config/dealgood.yaml",
-	// 	GrafanaPushSecretArn:          "arn:aws:secretsmanager:eu-west-1:147263665150:secret:grafana-push-MxjNiv",
-	// 	VpcPublicSubnet:               "subnet-04b1073d060c42a2f",
-	// 	DealgoodSecurityGroup:         "sg-08cd1cfcd73b3f0ea",
-	// 	DealgoodImage:                 "147263665150.dkr.ecr.eu-west-1.amazonaws.com/dealgood:2022-09-15__1504",
-	// 	EcrBaseURL:                    "147263665150.dkr.ecr.eu-west-1.amazonaws.com",
-	// }
+	return base, nil
 }
 
 func (b *BaseInfra) Name() string {
@@ -143,6 +135,64 @@ func (b *BaseInfra) ecsClusterExists() Check {
 			}
 			logger.Debug("no ecs clusters matched expected cluster arn")
 			return false, nil
+		},
+	}
+}
+
+type InstanceType struct {
+	Name        string
+	MaxMemory   int // in gigabytes
+	MaxCPU      int // in cores
+	CostPerHour int // in cents
+}
+
+func (b *BaseInfra) setupCapacityProviders() {
+	// These are defined in terraform
+	b.CapacityProviders = map[string]CapacityProvider{
+		"compute_large": {
+			Name: "compute_large",
+			InstanceType: InstanceType{
+				Name:        "c6id.8xlarge",
+				MaxMemory:   64,
+				MaxCPU:      32,
+				CostPerHour: 161,
+			},
+		},
+		"compute_medium": {
+			Name: "compute_medium",
+			InstanceType: InstanceType{
+				Name:        "c6id.4xlarge",
+				MaxMemory:   32,
+				MaxCPU:      16,
+				CostPerHour: 81,
+			},
+		},
+		"compute_small": {
+			Name: "compute_small",
+			InstanceType: InstanceType{
+				Name:        "c6id.2xlarge",
+				MaxMemory:   16,
+				MaxCPU:      8,
+				CostPerHour: 40,
+			},
+		},
+		"io_large": {
+			Name: "io_large",
+			InstanceType: InstanceType{
+				Name:        "i3en.2xlarge",
+				MaxMemory:   64,
+				MaxCPU:      8,
+				CostPerHour: 63,
+			},
+		},
+		"io_medium": {
+			Name: "io_medium",
+			InstanceType: InstanceType{
+				Name:        "i3en.xlarge",
+				MaxMemory:   32,
+				MaxCPU:      4,
+				CostPerHour: 31,
+			},
 		},
 	}
 }

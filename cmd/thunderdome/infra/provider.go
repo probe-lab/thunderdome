@@ -38,7 +38,12 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 		return fmt.Errorf("failed to verify base infra: %w", err)
 	}
 
+	if err := p.validateRequirmentsWithBase(ctx, e, base); err != nil {
+		return err
+	}
+
 	// Build all the images
+	// TODO: optimise this by checking if image already exists and by reusing checked out sources
 	for _, t := range e.Targets {
 		if t.Image != "" {
 			continue
@@ -60,7 +65,7 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 	components := make([]Component, 0, len(e.Targets))
 	targets := make([]*Target, 0, len(e.Targets))
 	for _, t := range e.Targets {
-		t := NewTarget(t.Name, e.Name, base, t.Image, t.Environment)
+		t := NewTarget(t.Name, e.Name, base, t.Image, t.InstanceType, t.Environment)
 		targets = append(targets, t)
 		components = append(components, t)
 	}
@@ -74,7 +79,7 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 	}
 
 	d := NewDealgood(e.Name, base).
-		WithTargetURLs(targetURLs).
+		WithTargets(targets).
 		WithMaxRequestRate(e.MaxRequestRate).
 		WithMaxConcurrency(e.MaxConcurrency).
 		WithRequestFilter(e.RequestFilter)
@@ -97,6 +102,9 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 		return fmt.Errorf("failed to register experiment: %w", err)
 	}
 
+	dashboard := fmt.Sprintf("https://protocollabs.grafana.net/d/GE2JD7ZVz/experiment-timeline?orgId=1&from=now-1h&to=now&var-experiment=%s", e.Name)
+	slog.Info("Grafana dashboard: " + dashboard)
+
 	return nil
 }
 
@@ -116,7 +124,7 @@ func (p *Provider) Teardown(ctx context.Context, e *exp.Experiment) error {
 
 	components := make([]Component, 0)
 	for _, t := range e.Targets {
-		t := NewTarget(t.Name, e.Name, base, t.Image, t.Environment)
+		t := NewTarget(t.Name, e.Name, base, t.Image, t.InstanceType, t.Environment)
 		components = append(components, t)
 	}
 	if err := TeardownInParallel(ctx, components); err != nil {
@@ -137,13 +145,13 @@ func (p *Provider) Status(ctx context.Context, e *exp.Experiment) error {
 		return fmt.Errorf("failed to verify base infra: %w", err)
 	}
 	for _, t := range e.Targets {
-		target := NewTarget(t.Name, e.Name, base, t.Image, t.Environment)
+		target := NewTarget(t.Name, e.Name, base, t.Image, t.InstanceType, t.Environment)
 		ready, err := target.Ready(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to check %s ready state: %w", target.Name(), err)
+			return fmt.Errorf("failed to check %s ready state: %w", target.ComponentName(), err)
 		}
 		if ready {
-			slog.Info("ready", "component", target.Name())
+			slog.Info("ready", "component", target.ComponentName())
 		} else {
 			allready = false
 		}
@@ -173,8 +181,22 @@ func (p *Provider) BuildImage(ctx context.Context, is *exp.ImageSpec, ecrBaseURL
 		return image, nil
 	}
 
-	_, err := build.Build(ctx, tag, is)
+	if p.imageCache == nil {
+		p.imageCache = make(map[string]string)
+	}
+
+	exists, err := build.ImageExists(tag, p.region, ecrBaseURL)
 	if err != nil {
+		return "", fmt.Errorf("checking if image exists: %w", err)
+	}
+
+	if exists {
+		remoteImage := ecrBaseURL + ":" + tag
+		p.imageCache[tag] = remoteImage
+		return remoteImage, err
+	}
+
+	if _, err := build.Build(ctx, tag, is); err != nil {
 		return "", fmt.Errorf("build image: %w", err)
 	}
 
@@ -183,11 +205,31 @@ func (p *Provider) BuildImage(ctx context.Context, is *exp.ImageSpec, ecrBaseURL
 		return "", fmt.Errorf("push image: %w", err)
 	}
 
-	if p.imageCache == nil {
-		p.imageCache = make(map[string]string)
-	}
 	p.imageCache[tag] = remoteImage
 	return remoteImage, err
+}
+
+func (p *Provider) ValidateRequirements(ctx context.Context, e *exp.Experiment) error {
+	base, err := NewBaseInfra(p.region)
+	if err != nil {
+		return fmt.Errorf("failed to read base infra: %w", err)
+	}
+	if err := base.Verify(ctx); err != nil {
+		return fmt.Errorf("failed to verify base infra: %w", err)
+	}
+
+	return p.validateRequirmentsWithBase(ctx, e, base)
+}
+
+func (p *Provider) validateRequirmentsWithBase(ctx context.Context, e *exp.Experiment, base *BaseInfra) error {
+	for _, t := range e.Targets {
+		_, ok := base.CapacityProviders[t.InstanceType]
+		if !ok {
+			return fmt.Errorf("target %s has unsupported instance type %q", t.Name, t.InstanceType)
+		}
+	}
+
+	return nil
 }
 
 func (p *Provider) ExperimentStatus(ctx context.Context, name string) (*api.ExperimentStatusOutput, error) {
@@ -216,18 +258,6 @@ func (p *Provider) ListExperiments(ctx context.Context) (*api.ListExperimentsOut
 	}
 
 	return out, nil
-}
-
-func debugf(t string, args ...any) {
-	slog.Debug(fmt.Sprintf(t, args...))
-}
-
-func warnf(t string, args ...any) {
-	slog.Warn(fmt.Sprintf(t, args...))
-}
-
-func errorf(t string, args ...any) {
-	slog.Log(slog.LevelError, fmt.Sprintf(t, args...))
 }
 
 func dump(vs ...any) {

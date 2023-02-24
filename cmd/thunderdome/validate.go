@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/build"
+	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/infra"
 )
 
 var ValidateCommand = &cli.Command{
@@ -32,6 +33,15 @@ func Validate(cc *cli.Context) error {
 	e, err := LoadExperiment(ctx, args.Get(0))
 	if err != nil {
 		return err
+	}
+
+	prov, err := infra.NewProvider()
+	if err != nil {
+		fmt.Println("NOTE: could not check current infrastructure so validation will not check target resource requirements")
+	} else {
+		if err := prov.ValidateRequirements(ctx, e); err != nil {
+			return err
+		}
 	}
 
 	fmt.Printf("Experiment:                  %s\n", e.Name)

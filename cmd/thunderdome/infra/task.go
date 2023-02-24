@@ -98,7 +98,7 @@ func TaskSequence(ctx context.Context, sess *session.Session, component string, 
 }
 
 type Component interface {
-	Name() string
+	ComponentName() string
 	Setup(ctx context.Context) error
 	Ready(ctx context.Context) (bool, error)
 	Teardown(context.Context) error
@@ -111,10 +111,10 @@ func DeployInParallel(ctx context.Context, comps []Component) error {
 		c := c // ugh, hurry up https://github.com/golang/go/discussions/56010
 		g.Go(func() error {
 			if err := c.Setup(ctx); err != nil {
-				return fmt.Errorf("%s failed to setup: %w", c.Name(), err)
+				return fmt.Errorf("%s failed to setup: %w", c.ComponentName(), err)
 			}
-			if err := WaitUntil(ctx, slog.With("component", c.Name()), "is ready", c.Ready, 2*time.Second, 30*time.Second); err != nil {
-				return fmt.Errorf("%s failed to become ready: %w", c.Name(), err)
+			if err := WaitUntil(ctx, slog.With("component", c.ComponentName()), "is ready", c.Ready, 2*time.Second, 30*time.Second); err != nil {
+				return fmt.Errorf("%s failed to become ready: %w", c.ComponentName(), err)
 			}
 			return nil
 		})
@@ -136,7 +136,7 @@ func TeardownInParallel(ctx context.Context, comps []Component) error {
 		c := c // ugh, hurry up https://github.com/golang/go/discussions/56010
 		g.Go(func() error {
 			if err := c.Teardown(ctx); err != nil {
-				return fmt.Errorf("%s failed to tear down: %w", c.Name(), err)
+				return fmt.Errorf("%s failed to tear down: %w", c.ComponentName(), err)
 			}
 			return nil
 		})

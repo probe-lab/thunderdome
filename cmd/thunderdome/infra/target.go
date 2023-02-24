@@ -3,7 +3,9 @@ package infra
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -16,11 +18,12 @@ import (
 )
 
 type Target struct {
-	name        string
-	experiment  string
-	base        *BaseInfra
-	image       string
-	environment map[string]string
+	name             string
+	experiment       string
+	base             *BaseInfra
+	image            string
+	capacityProvider string
+	environment      map[string]string
 
 	taskDefinitionFamily string
 	taskName             string
@@ -35,19 +38,22 @@ type Target struct {
 	taskPrivateIPAddress   string
 }
 
-func NewTarget(name, experiment string, base *BaseInfra, image string, environment map[string]string) *Target {
+func NewTarget(name, experiment string, base *BaseInfra, image string, capacityProvider string, environment map[string]string) *Target {
 	return &Target{
 		base:                 base,
 		experiment:           experiment,
 		name:                 name,
 		image:                image,
+		capacityProvider:     capacityProvider,
 		environment:          environment,
 		taskDefinitionFamily: experiment + "-" + name,
 		taskName:             experiment + "-" + name,
 	}
 }
 
-func (t *Target) Name() string { return fmt.Sprintf("target %s", t.name) }
+func (t *Target) Name() string { return t.name }
+
+func (t *Target) ComponentName() string { return fmt.Sprintf("target %s", t.name) }
 
 func (t *Target) TaskDefinitionArn() string {
 	t.mu.Lock()
@@ -118,12 +124,12 @@ func (t *Target) Resources() []api.Resource {
 func (t *Target) tags() map[string]*string {
 	return map[string]*string{
 		"experiment": aws.String(t.experiment),
-		"component":  aws.String(t.Name()),
+		"component":  aws.String(t.ComponentName()),
 	}
 }
 
 func (t *Target) Setup(ctx context.Context) error {
-	slog.Info("starting setup", "component", t.Name())
+	slog.Info("starting setup", "component", t.ComponentName())
 
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(t.base.AwsRegion),
@@ -132,14 +138,14 @@ func (t *Target) Setup(ctx context.Context) error {
 		return fmt.Errorf("new session: %w", err)
 	}
 
-	return TaskSequence(ctx, sess, t.Name(),
+	return TaskSequence(ctx, sess, t.ComponentName(),
 		t.createTaskDefinition(),
 		t.runTask(),
 	)
 }
 
 func (t *Target) Teardown(ctx context.Context) error {
-	slog.Info("starting teardown", "component", t.Name())
+	slog.Info("starting teardown", "component", t.ComponentName())
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(t.base.AwsRegion),
 	})
@@ -147,7 +153,7 @@ func (t *Target) Teardown(ctx context.Context) error {
 		return fmt.Errorf("new session: %w", err)
 	}
 
-	return TaskSequence(ctx, sess, t.Name(),
+	return TaskSequence(ctx, sess, t.ComponentName(),
 		t.stopTask(),
 		t.deregisterTaskDefinition(),
 	)
@@ -164,7 +170,7 @@ func (t *Target) Ready(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("new session: %w", err)
 	}
 
-	ready, err := CheckSequence(ctx, sess, t.Name(),
+	ready, err := CheckSequence(ctx, sess, t.ComponentName(),
 		t.taskDefinitionIsActive(),
 		t.taskIsRunning(),
 	)
@@ -183,6 +189,11 @@ func (t *Target) createTaskDefinition() Task {
 		Name:  "create task definition",
 		Check: t.taskDefinitionIsActive(),
 		Func: func(ctx context.Context, sess *session.Session) error {
+			cp, ok := t.base.CapacityProviders[t.capacityProvider]
+			if !ok {
+				return fmt.Errorf("unsupported capacity provider %q for %s", t.capacityProvider, t.ComponentName())
+			}
+
 			additionalEnv := map[string]string{
 				// TODO: any additional env?
 			}
@@ -191,9 +202,9 @@ func (t *Target) createTaskDefinition() Task {
 				Family:                  aws.String(t.taskDefinitionFamily),
 				RequiresCompatibilities: []*string{aws.String("EC2")},
 				NetworkMode:             aws.String("host"),
+				Memory:                  aws.String(strconv.Itoa(1024 * (cp.InstanceType.MaxMemory - 2))),
 				ExecutionRoleArn:        aws.String(t.base.EcsExecutionRoleArn),
 				TaskRoleArn:             aws.String(t.base.TargetTaskRoleArn),
-				Memory:                  aws.String("30720"), // TODO: review  50*1024
 				Tags:                    ecsTags(t.tags()),
 				Volumes: []*ecs.Volume{
 					{
@@ -372,37 +383,56 @@ func (t *Target) runTask() Task {
 				CapacityProviderStrategy: []*ecs.CapacityProviderStrategyItem{
 					{
 						Base:             aws.Int64(0),
-						CapacityProvider: aws.String("io_medium"),
+						CapacityProvider: aws.String(t.capacityProvider),
 						Weight:           aws.Int64(1),
 					},
 				},
 				Cluster:        aws.String(t.base.EcsClusterArn),
 				Count:          aws.Int64(1),
 				TaskDefinition: aws.String(t.taskDefinitionFamily),
-				Tags:           ecsTags(t.tags()),
+				Group:          aws.String(t.experiment),
+				PlacementStrategy: []*ecs.PlacementStrategy{
+					{
+						Field: aws.String("instanceId"),
+						Type:  aws.String("spread"),
+					},
+				},
+				Tags: ecsTags(t.tags()),
 			}
 
-			out, err := svc.RunTask(in)
-			if err != nil {
-				return fmt.Errorf("run task: %w", err)
-			}
+			attempts := 3
+			for attempts > 0 {
+				attempts--
 
-			if out == nil {
-				return fmt.Errorf("no run task output found")
-			}
-
-			if len(out.Failures) > 0 {
-				for _, f := range out.Failures {
-					warnf("target %q task: run failure arn=%v, detail=%v, reason=%v", t.name, f.Arn, f.Detail, f.Reason)
+				out, err := svc.RunTask(in)
+				if err != nil {
+					return fmt.Errorf("run task: %w", err)
 				}
-				return fmt.Errorf("run task returned with failures")
-			}
 
-			if len(out.Tasks) != 1 {
-				return fmt.Errorf("unexpected number of tasks: %d", len(out.Tasks))
-			}
+				if out == nil {
+					return fmt.Errorf("no run task output found")
+				}
 
-			return nil
+				if len(out.Failures) > 0 {
+					for _, f := range out.Failures {
+						slog.Warn("run task failure", "component", t.ComponentName(), "arn", dstr(f.Arn), "detail", dstr(f.Detail), "reason", dstr(f.Reason))
+					}
+					if attempts > 0 {
+						slog.Debug("waiting before trying again", "component", t.ComponentName())
+						time.Sleep(time.Minute)
+						continue
+					}
+					return fmt.Errorf("run task returned failures too many times")
+				}
+
+				if len(out.Tasks) != 1 {
+					return fmt.Errorf("unexpected number of tasks: %d", len(out.Tasks))
+				}
+
+				return nil
+
+			}
+			return fmt.Errorf("all attempts to run task failed")
 		},
 	}
 }
@@ -433,7 +463,7 @@ func (t *Target) taskDefinitionIsActive() Check {
 			}
 
 			if t.taskDefinitionArn != "" {
-				slog.Debug("captured task definition details", "component", t.Name(), "task_definition_arn", t.taskDefinitionArn, "task_definition_revision", t.taskDefinitionRevision)
+				slog.Debug("captured task definition details", "component", t.ComponentName(), "task_definition_arn", t.taskDefinitionArn, "task_definition_revision", t.taskDefinitionRevision)
 				return true, nil
 			}
 			return false, nil
@@ -455,7 +485,7 @@ func (t *Target) taskDefinitionIsInactive() Check {
 			}
 
 			if t.taskDefinitionArn != "" {
-				slog.Debug("captured task definition details", "component", t.Name(), "task_definition_arn", t.taskDefinitionArn, "task_definition_revision", t.taskDefinitionRevision)
+				slog.Debug("captured task definition details", "component", t.ComponentName(), "task_definition_arn", t.taskDefinitionArn, "task_definition_revision", t.taskDefinitionRevision)
 				return false, nil
 			}
 			return true, nil
@@ -481,7 +511,7 @@ func (t *Target) taskIsRunning() Check {
 				return false, nil
 			}
 
-			slog.Debug("captured task details", "component", t.Name(), "task_arn", taskArn)
+			slog.Debug("captured task details", "component", t.ComponentName(), "task_arn", taskArn)
 
 			running, err := isTaskRunning(ctx, sess, t.base.EcsClusterArn, taskArn)
 			if err != nil {
@@ -506,7 +536,7 @@ func (t *Target) taskIsRunning() Check {
 
 			if len(out.Failures) > 0 {
 				for _, f := range out.Failures {
-					warnf("target %q task: describe failure arn=%v, detail=%v, reason=%v", t.name, f.Arn, f.Detail, f.Reason)
+					slog.Warn("desctibe tasks failure", "component", t.ComponentName(), "arn", dstr(f.Arn), "detail", dstr(f.Detail), "reason", dstr(f.Reason))
 				}
 				return false, fmt.Errorf("failed to describe tasks")
 			}
@@ -537,7 +567,7 @@ func (t *Target) taskIsRunning() Check {
 
 			if len(outci.Failures) > 0 {
 				for _, f := range out.Failures {
-					warnf("target %q task: describe container instance failure arn=%v, detail=%v, reason=%v", t.name, f.Arn, f.Detail, f.Reason)
+					slog.Warn("desctibe container instances", "component", t.ComponentName(), "arn", dstr(f.Arn), "detail", dstr(f.Detail), "reason", dstr(f.Reason))
 				}
 				return false, fmt.Errorf("failed to describe container instances")
 			}
@@ -579,7 +609,7 @@ func (t *Target) taskIsRunning() Check {
 			defer t.mu.Unlock()
 			t.taskEC2InstanceID = *outci.ContainerInstances[0].Ec2InstanceId
 			t.taskPrivateIPAddress = *instance.PrivateIpAddress
-			slog.Debug("captured instance details", "component", t.Name(), "ec2_instance_id", *outci.ContainerInstances[0].Ec2InstanceId, "private_ip_address", *instance.PrivateIpAddress)
+			slog.Debug("captured instance details", "component", t.ComponentName(), "ec2_instance_id", *outci.ContainerInstances[0].Ec2InstanceId, "private_ip_address", *instance.PrivateIpAddress)
 			return true, nil
 		},
 	}
@@ -603,7 +633,7 @@ func (t *Target) taskIsStoppedOrStopping() Check {
 			if taskArn == "" {
 				return true, nil
 			}
-			slog.Debug("captured task details", "component", t.Name(), "task_arn", taskArn)
+			slog.Debug("captured task details", "component", t.ComponentName(), "task_arn", taskArn)
 
 			running, err := isTaskRunning(ctx, sess, t.base.EcsClusterArn, taskArn)
 			if err != nil {

@@ -174,13 +174,12 @@ func newRequest(ctx context.Context, t *Target, r *request.Request) (*http.Reque
 }
 
 // targetsReady
-func targetsReady(ctx context.Context, targets []*Target, quiet bool, interactive bool) error {
-	if !interactive {
-		const preProbeWait = 300
+func targetsReady(ctx context.Context, targets []*Target, quiet bool, interactive bool, preProbeWaitSeconds int) error {
+	if preProbeWaitSeconds > 0 && !interactive {
 		if !quiet {
-			fmt.Printf("waiting %s for targets to be start before probing\n", durationDesc(preProbeWait))
+			fmt.Printf("waiting %s for targets to be start before probing\n", durationDesc(preProbeWaitSeconds))
 		}
-		time.Sleep(preProbeWait * time.Second)
+		time.Sleep(time.Duration(preProbeWaitSeconds) * time.Second)
 	}
 
 	const readyTimeout = 60

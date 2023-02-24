@@ -1,0 +1,97 @@
+{
+	"name": "kubo-delayfix",
+	"description": "Compare the effect of the fix in github.com/libp2p/go-libp2p-routing-helpers/pull/71 on kubo at various provider delays, using versions of kubo before and after the commit",
+	"max_request_rate": 20,
+	"max_concurrency": 100,
+	"request_filter": "pathonly",
+
+	"defaults": {
+		"instance_type": "io_medium"
+	},
+
+	"shared": {
+		"init_commands" : [
+			"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
+			"ipfs config --json Datastore.BloomFilterSize '268435456'",
+			"ipfs config --json Datastore.StorageGCWatermark 90",
+			"ipfs config --json Datastore.StorageMax '\"160GB\"'",
+			"ipfs config --json Pubsub.StrictSignatureVerification false",
+			"ipfs config --json Reprovider.Interval '\"0\"'",
+			"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
+			"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
+			"ipfs config --json Swarm.ConnMgr.LowWater 32",
+			"ipfs config --json Swarm.ConnMgr.HighWater 96",
+			"ipfs config --json Experimental.AcceleratedDHTClient true",
+			"ipfs config --json Experimental.StrategicProviding true"
+		]
+	},
+
+	"targets": [
+		{
+			"name": "kubo-withdelayfix-1000",
+			"description": "kubo commit 82ede5 configured with 1000ms provider search delay",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"commit":"82ede56636d487aa4f4bb895dc41cd740efca786"
+			},
+			"init_commands" : [
+				"ipfs config --json Internal.Bitswap.ProviderSearchDelay '\"1000ms\"'"
+			]
+		},
+		{
+			"name": "kubo-withdelayfix-500",
+			"description": "kubo commit 82ede5 configured with 500ms provider search delay",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"commit":"82ede56636d487aa4f4bb895dc41cd740efca786"
+			},
+			"init_commands" : [
+				"ipfs config --json Internal.Bitswap.ProviderSearchDelay '\"500ms\"'"
+			]
+		},
+		{
+			"name": "kubo-withdelayfix-0",
+			"description": "kubo commit 82ede5 configured with 0 provider search delay",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"commit":"82ede56636d487aa4f4bb895dc41cd740efca786"
+			},
+			"init_commands" : [
+				"ipfs config --json Internal.Bitswap.ProviderSearchDelay '\"0\"'"
+			]
+		},
+		{
+			"name": "kubo-predelayfix-1000",
+			"description": "kubo commit 799e5a configured with 1000ms provider search delay",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"commit":"799e5ac0a5a6600e844aad585282ad23789a88e7"
+			},
+			"init_commands" : [
+				"ipfs config --json Internal.Bitswap.ProviderSearchDelay '\"1000ms\"'"
+			]
+		},
+		{
+			"name": "kubo-predelayfix-500",
+			"description": "kubo commit 799e5a configured with 1000ms provider search delay",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"commit":"799e5ac0a5a6600e844aad585282ad23789a88e7"
+			},
+			"init_commands" : [
+				"ipfs config --json Internal.Bitswap.ProviderSearchDelay '\"500ms\"'"
+			]
+		},
+		{
+			"name": "kubo-predelayfix-0",
+			"description": "kubo commit 799e5a configured with 1000ms provider search delay",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"commit":"799e5ac0a5a6600e844aad585282ad23789a88e7"
+			},
+			"init_commands" : [
+				"ipfs config --json Internal.Bitswap.ProviderSearchDelay '\"0\"'"
+			]
+		}
+	]
+}

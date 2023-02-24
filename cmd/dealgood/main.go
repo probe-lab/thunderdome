@@ -197,6 +197,13 @@ var app = &cli.App{
 			Destination: &flags.sqsRegion,
 			EnvVars:     []string{"DEALGOOD_SQS_REGION"},
 		},
+		&cli.IntFlag{
+			Name:        "pre-probe-wait",
+			Usage:       "Delay to wait (in seconds) before starting to probe targets. Set to 0 if targets are already started.",
+			Value:       300,
+			Destination: &flags.preProbeWait,
+			EnvVars:     []string{"DEALGOOD_PRE_PROBE_WAIT"},
+		},
 	},
 }
 
@@ -224,6 +231,7 @@ var flags struct {
 	sqsRegion      string
 	interactive    bool
 	filter         string
+	preProbeWait   int
 }
 
 func main() {
@@ -365,7 +373,7 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("set tracer provider: %w", err)
 	}
 
-	if err := targetsReady(ctx, exp.Targets, flags.quiet, flags.interactive); err != nil {
+	if err := targetsReady(ctx, exp.Targets, flags.quiet, flags.interactive, flags.preProbeWait); err != nil {
 		return fmt.Errorf("targets ready check: %w", err)
 	}
 

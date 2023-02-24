@@ -115,3 +115,10 @@ func deleteSqsQueue(ctx context.Context, sess *session.Session, requestQueueURL 
 	}
 	return nil
 }
+
+func dstr(v *string) string {
+	if v == nil {
+		return "<nil>"
+	}
+	return *v
+}

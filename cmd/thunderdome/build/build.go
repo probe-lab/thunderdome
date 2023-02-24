@@ -275,6 +275,20 @@ func PushImage(tag, awsRegion, ecrRepo string) (string, error) {
 	return remoteName, nil
 }
 
+func ImageExists(tag, awsRegion, ecrRepo string) (bool, error) {
+	remoteName := ecrRepo + ":" + tag
+	slog.Info("checking if image exists in repo", "image", remoteName)
+	if err := EcrLogin(ecrRepo, awsRegion); err != nil {
+		return false, fmt.Errorf("docker login: %w", err)
+	}
+
+	if err := DockerInspect(remoteName); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 func EcrLogin(dockerRepo string, awsRegion string) error {
 	awsPwd, err := GetAwsEcrPassword(awsRegion)
 	if err != nil {
@@ -284,7 +298,7 @@ func EcrLogin(dockerRepo string, awsRegion string) error {
 	// docker login -u AWS -p $(aws ecr get-login-password --region eu-west-1) "$ECR_REPO"
 	cmd := exec.Command("docker", "login", "-u", "AWS", "-p", awsPwd, dockerRepo)
 	slog.Debug("docker login -u AWS -p REDACTED " + dockerRepo)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = io.Discard
 	cmd.Stderr = os.Stderr
 
 	cmd.Env = []string{

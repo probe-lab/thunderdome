@@ -86,7 +86,7 @@ func (ih *InteractiveHandler) Handle(r slog.Record) error {
 		}
 		b.WriteString(" ")
 		if !ih.nocolor {
-			b.WriteString(colorYellow)
+			b.WriteString(colorBlue)
 		}
 		b.WriteString(a.Key)
 		if !ih.nocolor {

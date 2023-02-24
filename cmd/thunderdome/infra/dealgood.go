@@ -55,6 +55,7 @@ func NewDealgood(experiment string, base *BaseInfra) *Dealgood {
 		"DEALGOOD_SQS_REGION":         base.AwsRegion,
 		"DEALGOOD_SOURCE":             "sqs",
 		"DEALGOOD_SQS_QUEUE":          requestQueueName,
+		"DEALGOOD_PRE_PROBE_WAIT":     "0",
 	}
 
 	return &Dealgood{
@@ -83,12 +84,21 @@ func (d *Dealgood) WithRequestFilter(v string) *Dealgood {
 	return d
 }
 
-func (d *Dealgood) WithTargetURLs(urls []string) *Dealgood {
-	d.environment["DEALGOOD_TARGETS"] = strings.Join(urls, ",")
+func (d *Dealgood) WithTargets(targets []*Target) *Dealgood {
+	targetURLs := make([]string, len(targets))
+	for i := range targets {
+		targetURLs[i] = targets[i].Name() + "::" + targets[i].GatewayURL()
+	}
+
+	d.environment["DEALGOOD_TARGETS"] = strings.Join(targetURLs, ",")
 	return d
 }
 
 func (d *Dealgood) Name() string {
+	return "dealgood"
+}
+
+func (d *Dealgood) ComponentName() string {
 	return "dealgood"
 }
 
@@ -253,17 +263,7 @@ func (d *Dealgood) createTaskDefinition() Task {
 						Essential:   aws.Bool(true),
 						Environment: mapsToKeyValuePair(d.environment),
 
-						Secrets: []*ecs.Secret{
-							// TODO: dealgood secrets
-							// {
-							// 	Name:      aws.String("GRAFANA_USER"),
-							// 	ValueFrom: aws.String(grafana_push_secret_arn + ":username::"),
-							// },
-							// {
-							// 	Name:      aws.String("GRAFANA_PASS"),
-							// 	ValueFrom: aws.String(grafana_push_secret_arn + ":password::"),
-							// },
-						},
+						Secrets: []*ecs.Secret{},
 						MountPoints: []*ecs.MountPoint{
 							{
 								SourceVolume:  aws.String("efs"),
@@ -406,7 +406,7 @@ func (d *Dealgood) runTask() Task {
 
 			if len(out.Failures) > 0 {
 				for _, f := range out.Failures {
-					warnf("dealgood task: run failure arn=%v, detail=%v, reason=%v", f.Arn, f.Detail, f.Reason)
+					slog.Warn("run task failure", "component", d.Name(), "arn", dstr(f.Arn), "detail", dstr(f.Detail), "reason", dstr(f.Reason))
 				}
 			}
 
