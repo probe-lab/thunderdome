@@ -27,7 +27,7 @@ Commands:
 
 ### status
 
-	thunderdome status [command options] EXPERIMENT-FILENAME
+	thunderdome status [command options]
 
 ### validate
 
@@ -117,3 +117,198 @@ thunderdome image --from-image ipfs/kubo:v0.16.0  \
                   --tag kubo-reposize  \
                   --env-config-quoted=STORAGEMAX:Datastore.StorageMax 
 ```
+
+
+## Experiment File Syntax
+
+The experiment file is a JSON document that describes the setup for the experiment.
+
+Use the `thunderdome validate FILENAME` command to validate a file. 
+The command also expands each target's configuration, taking into account defaults and shared configuration.
+
+### Name and Description
+
+The following top level fields provide metadata about the experiment:
+
+ - `name` - a short name for the experiment, it must contain only lowercase letters, numbers and hyphens and must start with a letter.
+ - `description` - a free form description, used for documentation of the purpose of the experiment.
+
+### Request Stream
+
+The following top level fields configure the characteristics of the request stream sent to each target:
+
+ - `max_request_rate` - the maximum number of requests per second to send to each target. Must be a positive integer.
+ - `max_concurrency` - the maximum number of requests that may be in flight at any one time for each target. Must be a positive integer. This should be tuned to the expected capacity of the target. Each request increments the in-flight count, and each received response decreases it. If the configured maximum concurrency is reached, subsequent requests will be dropped.
+ - `request_filter` - the type of filtering to apply on the stream of gateway logs. Valid values are:
+   - `none` - no filtering is applied.
+   - `pathonly` - only requests with a path prefix of `/ipfs` or `/ipns` will be sent to the target.
+   - `validpathonly` - same filtering as `pathonly` but the path is also pre-parsed to ensure it is valid.
+
+### Target Configuration
+
+Targets are defined in the `targets` top level field, which takes an array of target definitions that describe how the docker image for the target should be built.
+
+The following fields describe the target:
+
+ - `name` (required) - a short name for the target. Like experiment names it must contain only lowercase letters, numbers and hyphens and must start with a letter.
+ - `description` (optional) - a free-form description that will be included in the target's docker image.
+
+These fields configure the docker image for the target. Only one of `use_image`, `base_image` or `build_from_git` can be supplied.
+
+ - `use_image` (optional) - the pre-built docker image to use for this target. This overrides any `use_image` value set in the `defaults` section of the experiment. WARNING: only use images that have been built by thunderdome and contain the additional thunderdome configuration.
+ - `base_image` (optional) - a docker image that will be used as a base. The build process wraps the docker image with an init section that configures it for use in thunderdome and executes any defined `init_commands`.
+ - `build_from_git` (optional) - instructions for building an image contained in a Git repository. See below for details.
+ - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These override any specified in the `defaults` section of the experiment and are appended to any in the `shared` section, so they are executed in-order, after the shared commands. Each entry is a string containing a single command. 
+
+The following fields provide additional configuration for the target's execution environment:
+
+ - `instance_type` (optional) - the type of instance to use. This overrides any instance type specified in the `defaults` section of the experiment.
+ - `environment`(optional) - a list of environment variables that will be passed to the container when it is executed. These override any environment specified in the `defaults` section of the experiment and are merged with any in the `shared` section, overwriting any entries with duplicate names. Each entry is specified as a JSON object with a `name` field and a `value` field. For example: `{ "name": "IPFS_PROFILE", "value": "server" }`.
+
+### Target Defaults and Shared Configuration
+
+The top-level `shared` field is used to specify configuration that is applied to all targets. It expects an object with the following fields:
+
+ - `environment` (optional) - a list of environment variables that will be passed to the container when it is executed. These are merged with any defined by the target, with the target's taking precedent if there are any equal names. Each entry is specified as a JSON object with a `name` field and a `value` field.
+ - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These are merged with any defined by the target and are executed in-order, before the target's commands. Each entry is a string containing a single command. 
+
+
+The top-level `defaults` field is used to specify configuration that is applied to targets if they don't override it. It expects an object with the following fields:
+
+ - `instance_type` (optional) - the type of instance to use. This is used as a fallback for any target that does not specify its own value.
+ - `environment` (optional) - a list of environment variables that will be passed to the container when it is executed. These are ignored if the target defines any of its own, otherwise they are merged with any shared variables, taking precedent if there are any equal names. Each entry is specified as a JSON object with a `name` field and a `value` field.
+ - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These are ignored if the target defines any of its own, otherwise they are merged with any defined by the target and are executed in-order, after the shared commands. Each entry is a string containing a single command. 
+
+Like targets, only one of `use_image`, `base_image` or `build_from_git` can be supplied as `defaults`:
+
+ - `use_image` (optional) - the pre-built docker image to use if the target does not provide one and does not provide values for its `base_image` or `build_from_git` fields. WARNING: only use images that have been built by thunderdome and contain the additional thunderdome configuration.
+ - `base_image` (optional) - a docker image that will be used as a base if the target does not provide one. The build process wraps the docker image with an init section that configures it for use in thunderdome and executes any defined `init_commands`.
+ - `build_from_git` (optional) - instructions for building an image contained in a Git repository that will be used if the target does not provide any. See below for details.
+
+### Building from Git
+
+Thunderdome can build a docker image from a Git repository. The `build_from_git` field expects an object with the following fields. Only one of `commit`, `tag` or `branch` can be specified:
+
+ - `repo` (required) - the repository to clone
+ - `commit` (optional) - the commit to checkout in the repository
+ - `tag` (optional) -  the tag to checkout in the repository
+ - `branch` (optional) -  the branch to switch to in the repository
+
+### Experiment File Examples
+
+The following simple experiment defines one target based on the `ipfs/kubo:v0.18.1` image, that will be sent up to 10 requests per second, keeping up to 100 in flight at any one time:
+
+	{
+		"name": "simple",
+		"max_request_rate": 10,
+		"max_concurrency": 100,
+		"request_filter": "pathonly",
+
+		"targets": [
+			{
+				"name": "first"
+				"instance_type": "io_medium",
+				"base_image": "ipfs/kubo:v0.18.1"
+			}
+		]
+	}
+
+The following experiment compares a pre-release of Kubo with the previous released version. Up to 20 requests per second are sent and each instance is configured with the same Kubo settings:
+
+	{
+		"name": "kubo-release-19",
+		"max_request_rate": 20,
+		"max_concurrency": 100,
+		"request_filter": "pathonly",
+
+		"defaults": {
+			"instance_type": "io_medium"
+		},
+
+		"shared": {
+			"init_commands" : [
+				"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
+				"ipfs config --json Datastore.BloomFilterSize '268435456'",
+				"ipfs config --json Datastore.StorageGCWatermark 90",
+				"ipfs config --json Datastore.StorageMax '\"160GB\"'",
+				"ipfs config --json Pubsub.StrictSignatureVerification false",
+				"ipfs config --json Reprovider.Interval '\"0\"'",
+				"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
+				"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
+				"ipfs config --json Experimental.AcceleratedDHTClient true",
+				"ipfs config --json Experimental.StrategicProviding true"
+			]
+		},
+
+		"targets": [
+			{
+				"name": "kubo190rc1",
+				"description": "kubo 0.19.0-rc1",
+				"build_from_git": {
+					"repo": "https://github.com/ipfs/kubo.git",
+					"tag":"v0.19.0-rc1"
+				}
+			},
+			{
+				"name": "kubo181",
+				"description": "kubo 0.18.",
+				"build_from_git": {
+					"repo": "https://github.com/ipfs/kubo.git",
+					"tag":"v0.18.1"
+				}
+			}
+		]
+	}
+
+The following experiment compares a version of Kubo operating in a desktop style setting with one operating in a server setting:
+
+	{
+		"name": "kubo-181-server-vs-desktop",
+		"max_request_rate": 20,
+		"max_concurrency": 100,
+		"request_filter": "pathonly",
+
+		"shared": {
+			"init_commands" : [
+				"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
+				"ipfs config --json Datastore.BloomFilterSize '268435456'",
+				"ipfs config --json Datastore.StorageGCWatermark 90",
+				"ipfs config --json Datastore.StorageMax '\"160GB\"'",
+				"ipfs config --json Pubsub.StrictSignatureVerification false",
+				"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
+				"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
+				"ipfs config --json Experimental.StrategicProviding true"
+			]
+		},
+
+		"targets": [
+			{
+				"name": "kubo181-desktop",
+				"description": "kubo 0.18.1 configured as a desktop",
+				"instance_type": "io_medium",
+				"build_from_git": {
+					"repo": "https://github.com/ipfs/kubo.git",
+					"tag":"v0.18.1"
+				},
+				"init_commands" : [
+				]
+			},
+			{
+				"name": "kubo181-server",
+				"description": "kubo 0.18.1 configured as a server",
+				"instance_type": "io_large",
+				"build_from_git": {
+					"repo": "https://github.com/ipfs/kubo.git",
+					"tag":"v0.18.1"
+				},
+				"init_commands" : [
+					"ipfs config --json Experimental.AcceleratedDHTClient true",
+					"ipfs config --json Swarm.ConnMgr.HighWater 900",
+					"ipfs config --json Swarm.ConnMgr.LowWater 600"
+				],
+				"environment" : [
+					{ "name": "IPFS_PROFILE", "value": "server" }
+				]
+			}
+		]
+	}

@@ -4,10 +4,6 @@
 	"max_concurrency": 100,
 	"request_filter": "pathonly",
 
-	"defaults": {
-		"instance_type": "io_medium"
-	},
-
 	"shared": {
 		"init_commands" : [
 			"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
@@ -15,18 +11,17 @@
 			"ipfs config --json Datastore.StorageGCWatermark 90",
 			"ipfs config --json Datastore.StorageMax '\"160GB\"'",
 			"ipfs config --json Pubsub.StrictSignatureVerification false",
-			"ipfs config --json Reprovider.Interval '\"0\"'",
 			"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
 			"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
-			"ipfs config --json Experimental.AcceleratedDHTClient true",
 			"ipfs config --json Experimental.StrategicProviding true"
 		]
 	},
 
 	"targets": [
 		{
-			"name": "kubo181-standard",
+			"name": "kubo181-desktop",
 			"description": "kubo 0.18.1 configured as a desktop",
+			"instance_type": "io_medium",
 			"build_from_git": {
 				"repo": "https://github.com/ipfs/kubo.git",
 				"tag":"v0.18.1"
@@ -37,11 +32,13 @@
 		{
 			"name": "kubo181-server",
 			"description": "kubo 0.18.1 configured as a server",
+			"instance_type": "io_large",
 			"build_from_git": {
 				"repo": "https://github.com/ipfs/kubo.git",
 				"tag":"v0.18.1"
 			},
 			"init_commands" : [
+				"ipfs config --json Experimental.AcceleratedDHTClient true",
 				"ipfs config --json Swarm.ConnMgr.HighWater 900",
 				"ipfs config --json Swarm.ConnMgr.LowWater 600"
 			],

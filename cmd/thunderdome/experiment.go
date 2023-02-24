@@ -66,6 +66,9 @@ type GitSpecJSON struct {
 // Target name must contain only lowercase letters, numbers and hyphens and must start with a letter
 var reTargetName = regexp.MustCompile(`^[a-z][a-z0-9-]+$`)
 
+// Experiment name must contain only lowercase letters, numbers and hyphens and must start with a letter
+var reExperimentName = regexp.MustCompile(`^[a-z][a-z0-9-]+$`)
+
 func LoadExperiment(ctx context.Context, filename string) (*exp.Experiment, error) {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -85,6 +88,10 @@ func ParseExperiment(ctx context.Context, r io.Reader) (*exp.Experiment, error) 
 	ej := new(ExperimentJSON)
 	if err := json.NewDecoder(r).Decode(ej); err != nil {
 		return nil, fmt.Errorf("json decode: %w", err)
+	}
+
+	if !reExperimentName.MatchString(ej.Name) {
+		return nil, fmt.Errorf("experiment name must start with a letter and contain only lowercase letters, numbers and hyphens: %q", ej.Name)
 	}
 
 	e := &exp.Experiment{
