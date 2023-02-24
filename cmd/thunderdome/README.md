@@ -16,6 +16,8 @@ Commands:
 	image     Build a docker image for an experiment
 	validate  Validate an experiment definition
 
+See the [Experiment File Syntax](#experiment-file-syntax) section below for more details on how to create an experiment file.
+
 
 ### deploy
 
