@@ -198,117 +198,123 @@ Thunderdome can build a docker image from a Git repository. The `build_from_git`
 
 The following simple experiment defines one target based on the `ipfs/kubo:v0.18.1` image, that will be sent up to 10 requests per second, keeping up to 100 in flight at any one time:
 
-	{
-		"name": "simple",
-		"max_request_rate": 10,
-		"max_concurrency": 100,
-		"request_filter": "pathonly",
+```json
+{
+	"name": "simple",
+	"max_request_rate": 10,
+	"max_concurrency": 100,
+	"request_filter": "pathonly",
 
-		"targets": [
-			{
-				"name": "first"
-				"instance_type": "io_medium",
-				"base_image": "ipfs/kubo:v0.18.1"
-			}
-		]
-	}
+	"targets": [
+		{
+			"name": "first"
+			"instance_type": "io_medium",
+			"base_image": "ipfs/kubo:v0.18.1"
+		}
+	]
+}
+```
 
 The following experiment compares a pre-release of Kubo with the previous released version. Up to 20 requests per second are sent and each instance is configured with the same Kubo settings:
 
-	{
-		"name": "kubo-release-19",
-		"max_request_rate": 20,
-		"max_concurrency": 100,
-		"request_filter": "pathonly",
+```json
+{
+	"name": "kubo-release-19",
+	"max_request_rate": 20,
+	"max_concurrency": 100,
+	"request_filter": "pathonly",
 
-		"defaults": {
-			"instance_type": "io_medium"
-		},
+	"defaults": {
+		"instance_type": "io_medium"
+	},
 
-		"shared": {
-			"init_commands" : [
-				"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
-				"ipfs config --json Datastore.BloomFilterSize '268435456'",
-				"ipfs config --json Datastore.StorageGCWatermark 90",
-				"ipfs config --json Datastore.StorageMax '\"160GB\"'",
-				"ipfs config --json Pubsub.StrictSignatureVerification false",
-				"ipfs config --json Reprovider.Interval '\"0\"'",
-				"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
-				"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
-				"ipfs config --json Experimental.AcceleratedDHTClient true",
-				"ipfs config --json Experimental.StrategicProviding true"
-			]
-		},
-
-		"targets": [
-			{
-				"name": "kubo190rc1",
-				"description": "kubo 0.19.0-rc1",
-				"build_from_git": {
-					"repo": "https://github.com/ipfs/kubo.git",
-					"tag":"v0.19.0-rc1"
-				}
-			},
-			{
-				"name": "kubo181",
-				"description": "kubo 0.18.",
-				"build_from_git": {
-					"repo": "https://github.com/ipfs/kubo.git",
-					"tag":"v0.18.1"
-				}
-			}
+	"shared": {
+		"init_commands" : [
+			"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
+			"ipfs config --json Datastore.BloomFilterSize '268435456'",
+			"ipfs config --json Datastore.StorageGCWatermark 90",
+			"ipfs config --json Datastore.StorageMax '\"160GB\"'",
+			"ipfs config --json Pubsub.StrictSignatureVerification false",
+			"ipfs config --json Reprovider.Interval '\"0\"'",
+			"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
+			"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
+			"ipfs config --json Experimental.AcceleratedDHTClient true",
+			"ipfs config --json Experimental.StrategicProviding true"
 		]
-	}
+	},
+
+	"targets": [
+		{
+			"name": "kubo190rc1",
+			"description": "kubo 0.19.0-rc1",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.19.0-rc1"
+			}
+		},
+		{
+			"name": "kubo181",
+			"description": "kubo 0.18.",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.18.1"
+			}
+		}
+	]
+}
+```
 
 The following experiment compares a version of Kubo operating in a desktop style setting with one operating in a server setting:
 
-	{
-		"name": "kubo-181-server-vs-desktop",
-		"max_request_rate": 20,
-		"max_concurrency": 100,
-		"request_filter": "pathonly",
+```json
+{
+	"name": "kubo-181-server-vs-desktop",
+	"max_request_rate": 20,
+	"max_concurrency": 100,
+	"request_filter": "pathonly",
 
-		"shared": {
+	"shared": {
+		"init_commands" : [
+			"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
+			"ipfs config --json Datastore.BloomFilterSize '268435456'",
+			"ipfs config --json Datastore.StorageGCWatermark 90",
+			"ipfs config --json Datastore.StorageMax '\"160GB\"'",
+			"ipfs config --json Pubsub.StrictSignatureVerification false",
+			"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
+			"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
+			"ipfs config --json Experimental.StrategicProviding true"
+		]
+	},
+
+	"targets": [
+		{
+			"name": "kubo181-desktop",
+			"description": "kubo 0.18.1 configured as a desktop",
+			"instance_type": "io_medium",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.18.1"
+			},
 			"init_commands" : [
-				"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
-				"ipfs config --json Datastore.BloomFilterSize '268435456'",
-				"ipfs config --json Datastore.StorageGCWatermark 90",
-				"ipfs config --json Datastore.StorageMax '\"160GB\"'",
-				"ipfs config --json Pubsub.StrictSignatureVerification false",
-				"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
-				"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
-				"ipfs config --json Experimental.StrategicProviding true"
 			]
 		},
-
-		"targets": [
-			{
-				"name": "kubo181-desktop",
-				"description": "kubo 0.18.1 configured as a desktop",
-				"instance_type": "io_medium",
-				"build_from_git": {
-					"repo": "https://github.com/ipfs/kubo.git",
-					"tag":"v0.18.1"
-				},
-				"init_commands" : [
-				]
+		{
+			"name": "kubo181-server",
+			"description": "kubo 0.18.1 configured as a server",
+			"instance_type": "io_large",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.18.1"
 			},
-			{
-				"name": "kubo181-server",
-				"description": "kubo 0.18.1 configured as a server",
-				"instance_type": "io_large",
-				"build_from_git": {
-					"repo": "https://github.com/ipfs/kubo.git",
-					"tag":"v0.18.1"
-				},
-				"init_commands" : [
-					"ipfs config --json Experimental.AcceleratedDHTClient true",
-					"ipfs config --json Swarm.ConnMgr.HighWater 900",
-					"ipfs config --json Swarm.ConnMgr.LowWater 600"
-				],
-				"environment" : [
-					{ "name": "IPFS_PROFILE", "value": "server" }
-				]
-			}
-		]
-	}
+			"init_commands" : [
+				"ipfs config --json Experimental.AcceleratedDHTClient true",
+				"ipfs config --json Swarm.ConnMgr.HighWater 900",
+				"ipfs config --json Swarm.ConnMgr.LowWater 600"
+			],
+			"environment" : [
+				{ "name": "IPFS_PROFILE", "value": "server" }
+			]
+		}
+	]
+}
+```
