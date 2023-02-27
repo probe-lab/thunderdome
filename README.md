@@ -10,8 +10,6 @@ Thunderdome collects metrics from each target and sends them to Grafana where th
 
 Thunderdome differs from other tooling such as testground because it aims to simulate realistic load conditions using close to real time requests.
 
-## How does it work?
-
 ## What is in this repo?
 
 This repository contains everything needed to setup and operate Thunderdome. 
@@ -21,7 +19,7 @@ The infrastructure is managed using Terraform and the tooling is written in Go.
 
 The thunderdome client is in [/cmd/thunderdome](cmd/thunderdome/README.md). 
 It's a command line utility that allows users to deploy and manage Thunderdome experiments.
-See the [Thunderdome Client Documentation](cmd/thunderdome/README.md) for information on how to get started.
+See the [Thunderdome Client Documentation](cmd/thunderdome/README.md) for information on how to use the client and the [Experiment File Syntax](https://github.com/ipfs-shipyard/thunderdome/blob/main/cmd/thunderdome/README.md#experiment-file-syntax) to understand how to define an experiment.
 
 ### Thunderdome Infrastructure
 
