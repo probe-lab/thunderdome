@@ -9,12 +9,14 @@ const (
 	ResourceTypeEcsTaskDefinition  = "ecs_task_definition"
 	ResourceTypeEcsSnsSubscription = "sns_subscription"
 	ResourceTypeSqsQueue           = "sqs_queue"
+	ResourceTypeEc2Instance        = "ec2_instance"
 )
 
 const (
 	ResourceKeyArn           = "arn"
 	ResourceKeyEcsClusterArn = "ecs_cluster_arn"
 	ResourceKeyQueueURL      = "queue_url"
+	ResourceKeyEc2InstanceID = "ecs_instance_id"
 )
 
 type NewExperimentInput struct {

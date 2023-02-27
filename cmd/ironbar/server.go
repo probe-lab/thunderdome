@@ -294,6 +294,14 @@ func (s *Server) CheckResources(ctx context.Context) {
 					s.checkErrorsCounter.Add(1)
 				}
 
+			case api.ResourceTypeEc2Instance:
+				_, err := isEc2InstanceActive(ctx, sess, res.Keys[api.ResourceKeyEc2InstanceID])
+				if err != nil {
+					logger.Error("failed to check whether ec2 instance is active", err, "instance_id", res.Keys[api.ResourceKeyEc2InstanceID])
+					s.checkErrorsCounter.Add(1)
+					continue
+				}
+
 			default:
 				anyActive = true
 				logger.Warn("unknown resource type, cannot remove", "type", res.Type)
@@ -389,7 +397,7 @@ func (s *Server) NewExperimentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.WriteAsJSON(w, http.StatusOK, &api.NewExperimentOutput{
-		Message:   "Deployment started",
+		Message:   "Experiment recorded",
 		URL:       "/experiments/" + in.Name,
 		StatusURL: "/experiments/" + in.Name + "/status",
 	})

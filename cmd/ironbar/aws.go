@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/aws/aws-sdk-go/service/sqs"
@@ -200,4 +201,32 @@ func deleteSqsQueue(ctx context.Context, sess *session.Session, queueURL string)
 		return fmt.Errorf("delete queue: %w", err)
 	}
 	return nil
+}
+
+func isEc2InstanceActive(ctx context.Context, sess *session.Session, instanceID string) (bool, error) {
+	logger := slog.With("instance_id", instanceID)
+	logger.Debug("checking if ec2 instance is active")
+
+	svc := ec2.New(sess)
+	in := &ec2.DescribeInstancesInput{
+		InstanceIds: []*string{
+			aws.String(instanceID),
+		},
+	}
+	out, err := svc.DescribeInstances(in)
+	if err != nil {
+		return true, fmt.Errorf("describe ec2 instances: %w", err)
+	}
+
+	switch len(out.Reservations) {
+	case 0:
+		logger.Debug("no reservations found")
+		return false, nil
+	case 1:
+		logger.Debug("reservation still active")
+		return true, nil
+	default:
+		logger.Warn(fmt.Sprintf("unexpected number of instance reservations found: %d", len(out.Reservations)))
+		return true, nil
+	}
 }

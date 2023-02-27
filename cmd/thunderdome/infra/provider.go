@@ -105,6 +105,10 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 	dashboard := fmt.Sprintf("https://protocollabs.grafana.net/d/GE2JD7ZVz/experiment-timeline?orgId=1&from=now-1h&to=now&var-experiment=%s", e.Name)
 	slog.Info("Grafana dashboard: " + dashboard)
 
+	for _, t := range targets {
+		slog.Info("target running on ec2", "component", t.ComponentName(), "instance_id", t.EC2InstanceID(), "private_ip", t.PrivateIPAddress())
+	}
+
 	return nil
 }
 
@@ -185,15 +189,10 @@ func (p *Provider) BuildImage(ctx context.Context, is *exp.ImageSpec, ecrBaseURL
 		p.imageCache = make(map[string]string)
 	}
 
-	exists, err := build.ImageExists(tag, p.region, ecrBaseURL)
-	if err != nil {
-		return "", fmt.Errorf("checking if image exists: %w", err)
-	}
-
-	if exists {
+	if exists, _ := build.ImageExists(tag, p.region, ecrBaseURL); exists {
 		remoteImage := ecrBaseURL + ":" + tag
 		p.imageCache[tag] = remoteImage
-		return remoteImage, err
+		return remoteImage, nil
 	}
 
 	if _, err := build.Build(ctx, tag, is); err != nil {

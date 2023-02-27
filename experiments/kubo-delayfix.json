@@ -1,7 +1,7 @@
 {
 	"name": "kubo-delayfix",
 	"description": "Compare the effect of the fix in github.com/libp2p/go-libp2p-routing-helpers/pull/71 on kubo at various provider delays, using versions of kubo before and after the commit",
-	"max_request_rate": 20,
+	"max_request_rate": 10,
 	"max_concurrency": 100,
 	"request_filter": "pathonly",
 

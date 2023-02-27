@@ -118,6 +118,12 @@ func (t *Target) Resources() []api.Resource {
 			api.ResourceKeyArn: t.taskDefinitionArn,
 		},
 	})
+	res = append(res, api.Resource{
+		Type: api.ResourceTypeEc2Instance,
+		Keys: map[string]string{
+			api.ResourceKeyEc2InstanceID: t.taskEC2InstanceID,
+		},
+	})
 	return res
 }
 
