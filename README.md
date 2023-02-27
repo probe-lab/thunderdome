@@ -19,13 +19,11 @@ The infrastructure is managed using Terraform and the tooling is written in Go.
 
 ### Thunderdome Client
 
-The thunderdome client is in `/cmd/thunderdome`. 
+The thunderdome client is in [/cmd/thunderdome](cmd/thunderdome/README.md). 
 It's a command line utility that allows users to deploy and manage Thunderdome experiments.
-See the [Thunderdome Client Documentation][cmd/thunderdome/README.md] for information on how to get started.
+See the [Thunderdome Client Documentation](cmd/thunderdome/README.md) for information on how to get started.
 
 ### Thunderdome Infrastructure
-
-### /tf
 
 The Terraform definition of the base infrastructure needed to run experiments is held in `/tf`. 
 It can be used to set up a new Thunderdome environment from scratch and is also used to deploy upgraded versions of each tool.
