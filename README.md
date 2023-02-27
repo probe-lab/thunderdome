@@ -1,68 +1,42 @@
 # Thunderdome 
 
-## Setup
+Thunderdome is a system to compare the performance of different versions of IPFS gateways by using real HTTP traffic streamed from the public gateways operated by Protocol Labs.
 
-We use [asdf](https://asdf-vm.com/) to pin versions of the tools we are using. 
+## What does it do?
 
-We use [direnv](https://direnv.net/)'s `dotenv` module to configure the
-environment automatically when you enter the project folder . We set in `.env`
-AWS profile / region info so that tooling such as the AWS cli works. Copy
-`.env.example` to `.env` to enable it
+A user can define an experiment that details what software they want to put under test, with any special configuration and test conditions. Each combination of software and configuration is called a *target*. Thunderdome deploys each target, connects them to the IPFS network and begins sending real-world requests at the chosen rate. Each target in the experiment receives exactly the same request at the same time. 
 
-## Terraform
+Thunderdome collects metrics from each target and sends them to Grafana where they can be graphed and analysed. Once the experiment is done the deployed target are shut down to save resources, but they can be started once again if the experiment, or a variant, needs to be repeated. We use it to compare different implementations of the gateway spec, the impact of changing configuration settings or look for performance changes between releases.
 
-### Formatting 
+Thunderdome differs from other tooling such as testground because it aims to simulate realistic load conditions using close to real time requests.
 
-We format with `terraform fmt`, in vscode you can do it automatically with:
+## How does it work?
 
-```json
-  "[terraform]": {
-    "editor.defaultFormatter": "hashicorp.terraform",
-    "editor.formatOnSave": true,
-    "editor.formatOnSaveMode": "file"
-  },
-```
+## What is in this repo?
 
-### Usage
+This repository contains everything needed to setup and operate Thunderdome. 
+The infrastructure is managed using Terraform and the tooling is written in Go.
 
-```
-terraform init
-```
+### Thunderdome Client
 
-```
-terraform plan
-```
+The thunderdome client is in `/cmd/thunderdome`. 
+It's a command line utility that allows users to deploy and manage Thunderdome experiments.
+See the [Thunderdome Client Documentation][cmd/thunderdome/README.md] for information on how to get started.
 
-```
-terraform apply
-```
+### Thunderdome Infrastructure
 
-As usual
+### /tf
+
+The Terraform definition of the base infrastructure needed to run experiments is held in `/tf`. 
+It can be used to set up a new Thunderdome environment from scratch and is also used to deploy upgraded versions of each tool.
+
+Thunderdome uses three service components that are written in Go and deployed by Terraform:
+
+ - [/cmd/skyfish](cmd/skyfish/README.md) - skyfish is responsible for transmitting requests from the Protocol Labs gateway infrastructure to Thunderdome. The logs are currently relayed from a sample of gateways to Grafana Loki and skyfish tails these logs and announces them in batches on an SNS topic. 
+ - [/cmd/dealgood](cmd/dealgood/README.md) - dealgood is the component that sends requests to each target in an experiment. It reports metrics on the performance of the targets by measuring timings, numbers of requests sent and the types of response received. Each experiment deploys its own instance of dealgood. Dealgood receives requests via a dedicated SQS queue connected to the skyfish SNS topic.
+ - [/cmd/ironbar](cmd/ironbar/README.md) - ironbar manages the shutdown of experiments. When an experiment is deployed by the thunderdome client a manifest of the deployed resources is sent to ironbar. After a defined lifetime ironbar will shut down the resources to terminate the experiment. One instance of ironbar manages all the running experiments.
 
 
-### Grafana Agent Config
-
-The Grafana agent sidecar is configured for targets and dealgood using separate config files held in an S3 bucket:
-
-	http://pl-thunderdome-public.s3.amazonaws.com/grafana-agent-config/
-
-The config files can be found in ./tf/files/grafana-agent-config
 
 
-## Getting a console on a running container
 
-ECS can inject an SSM agent into any running container so that you can
-effectively "SSH" into it.
-
-* Setup your credentials for an IAM user/role that has SSM permissions
-* [Install AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-* [Install the Session Manager plugin for AWS CLI](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
-* Find the ECS task ID that you want to SSH into:
-  - Log in to the AWS Console
-  - Go to ECS
-  - Select the eu-west-1 region
-  - Select Clusters -> thunderdome
-  - Select the Tasks tab
-  - The Task ID is the UUID in the first column
-* `export TASK_ID=<task_id> CONTAINER=gateway`
-* `aws ecs execute-command --task $TASK_ID  --cluster thunderdome --container $CONTAINER --command '/bin/sh' --interactive`
