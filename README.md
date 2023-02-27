@@ -23,7 +23,7 @@ See the [Thunderdome Client Documentation](cmd/thunderdome/README.md) for inform
 
 ### Thunderdome Infrastructure
 
-The Terraform definition of the base infrastructure needed to run experiments is held in `/tf`. 
+The Terraform definition of the base infrastructure needed to run experiments is held in [/tf](tf/README.md). 
 It can be used to set up a new Thunderdome environment from scratch and is also used to deploy upgraded versions of each tool.
 
 Thunderdome uses three service components that are written in Go and deployed by Terraform:
@@ -33,6 +33,5 @@ Thunderdome uses three service components that are written in Go and deployed by
  - [/cmd/ironbar](cmd/ironbar/README.md) - ironbar manages the shutdown of experiments. When an experiment is deployed by the thunderdome client a manifest of the deployed resources is sent to ironbar. After a defined lifetime ironbar will shut down the resources to terminate the experiment. One instance of ironbar manages all the running experiments.
 
 
-
-
+![Diagram of Thunderdome Architecture](/architecture.png?raw=true "Thunderdome Architecture")
 
