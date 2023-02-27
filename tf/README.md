@@ -1,4 +1,12 @@
-# Thunderdome Terraform
+# Thunderdome Infrastructure
+
+This directory contains a Terraform definition of the infrastructure used by Thunderdome.
+
+
+
+
+
+
 
 ## Setup
 

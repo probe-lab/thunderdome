@@ -21,6 +21,10 @@ variable "admins" {
   }
 }
 
+locals {
+  deployers = tolist(["gus.eggert"])
+}
+
 
 resource "aws_iam_user" "admin" {
   for_each = var.admins
@@ -57,3 +61,5 @@ resource "aws_eip" "testbox" {
   instance = each.value.id
   vpc      = true
 }
+
+

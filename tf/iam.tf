@@ -208,7 +208,65 @@ resource "aws_iam_role" "ironbar" {
   })
 }
 
+resource "aws_iam_user" "deployer" {
+  for_each = toset(local.deployers)
+  name     = each.key
+}
 
+resource "aws_iam_group" "deployers" {
+  name = "deployers"
+}
+
+
+resource "aws_iam_user_group_membership" "deployer" {
+  for_each = aws_iam_user.deployer
+  user = each.value.name
+
+  groups = [
+    aws_iam_group.deployers.name,
+  ]
+}
+
+resource "aws_iam_group_policy" "deployers" {
+  name = "deployers"
+  group = aws_iam_group.deployers.name
+  policy = jsonencode({
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ironbar",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeInstances",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:CompleteLayerUpload",
+                "ecr:DescribeImages",
+                "ecr:GetAuthorizationToken",
+                "ecr:UploadLayerPart",
+                "ecr:InitiateLayerUpload",
+                "ecr:PutImage",
+                "ecs:DeregisterTaskDefinition",
+                "ecs:DescribeClusters",
+                "ecs:DescribeTasks",
+                "ecs:DescribeTaskDefinition",
+                "ecs:DescribeContainerInstances",
+                "ecs:RegisterTaskDefinition",
+                "ecs:RunTask",
+                "ecs:StopTask",
+                "s3:GetObject",
+                "sns:GetSubscriptionAttributes",
+                "sns:Subscribe",
+                "sns:Unsubscribe",
+                "sqs:CreateQueue",
+                "sqs:DeleteQueue",
+                "sqs:GetQueueAttributes",
+                "sqs:SetQueueAttributes"
+            ],
+            "Resource": "*"
+        }
+    ]
+  })
+}
 
 resource "aws_iam_policy" "testbox_policy" {
   name        = "testbox-policy"
@@ -341,3 +399,5 @@ resource "aws_iam_policy" "sqs_subscribe" {
     ]
   })
 }
+
+

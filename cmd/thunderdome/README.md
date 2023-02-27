@@ -18,6 +18,29 @@ Commands:
 
 See the [Experiment File Syntax](#experiment-file-syntax) section below for more details on how to create an experiment file.
 
+### Credentials
+
+To use the client you need to have deployer or admin rights in the AWS infrastructure. 
+The user needs to be created in the Terraform and then an access key and secret can be generated in the AWS console.
+
+Add the user and credentials to an AWS profile
+
+Create an AWS profile for thunderdome by adding the following to `~/.aws/config`:
+
+	[profile thunderdome]
+	region = eu-west-1
+	output = json
+
+Add credentials to `~/.aws/credentials`:
+
+	[thunderdome]
+	aws_access_key_id=......
+	aws_secret_access_key=....
+
+Then ensure that the AWS_PROFILE environment variable is set when you invoke the `thunderdome` command line tool:
+
+	AWS_PROFILE=thunderdome thunderdome deploy ...
+
 
 ### deploy
 
