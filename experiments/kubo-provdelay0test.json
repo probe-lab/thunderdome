@@ -1,0 +1,53 @@
+{
+	"name": "kubo-provdelay0test",
+	"description": "Compare performance between provider delay 0 and provider delay non-zero but still tiny to detect issues with using zero as a value",
+	"max_request_rate": 10,
+	"max_concurrency": 100,
+	"request_filter": "pathonly",
+
+	"defaults": {
+		"instance_type": "io_medium"
+	},
+
+	"shared": {
+		"init_commands" : [
+			"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
+			"ipfs config --json Datastore.BloomFilterSize '268435456'",
+			"ipfs config --json Datastore.StorageGCWatermark 90",
+			"ipfs config --json Datastore.StorageMax '\"160GB\"'",
+			"ipfs config --json Pubsub.StrictSignatureVerification false",
+			"ipfs config --json Reprovider.Interval '\"0\"'",
+			"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
+			"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
+			"ipfs config --json Swarm.ConnMgr.LowWater 32",
+			"ipfs config --json Swarm.ConnMgr.HighWater 96",
+			"ipfs config --json Experimental.AcceleratedDHTClient true",
+			"ipfs config --json Experimental.StrategicProviding true"
+		]
+	},
+
+	"targets": [
+		{
+			"name": "kubo-provdelay0test-0",
+			"description": "kubo 0.18.1 configured with 0 provider search delay",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.18.1"
+			},
+			"init_commands" : [
+				"ipfs config --json Internal.Bitswap.ProviderSearchDelay '\"0\"'"
+			]
+		},
+		{
+			"name": "kubo-provdelay0test-1",
+			"description": "kubo 0.18.1 configured with 1ms provider search delay",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.18.1"
+			},
+			"init_commands" : [
+				"ipfs config --json Internal.Bitswap.ProviderSearchDelay '\"1ms\"'"
+			]
+		}
+	]
+}
