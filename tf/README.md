@@ -2,11 +2,28 @@
 
 This directory contains a Terraform definition of the infrastructure used by Thunderdome.
 
+## Instance Types
 
+The following instance types are currently defined for use by experiments. 
+They are assigned using the `instance_type` field in the experiment file.
 
+(Instance types correspond to ECS auti-scaling group capacity providers)
 
-
-
+ - `compute_large`
+   - EC2 instance type: c6id.8xlarge
+   - 64GB RAM, 32 CPU, 12.5 Gigabit, ~$1.61 hourly
+ - `compute_medium`
+   - EC2 instance type: c6id.4xlarge
+   - 32GB RAM, 16 CPU, Up to 12.5 Gigabit, ~$0.81 hourly
+ - `compute_small`
+   - EC2 instance type: c6id.2xlarge
+   - 16GB RAM, 8 CPU, Up to 12.5 Gigabit, ~$0.40 hourly
+ - `io_large`
+   - EC2 instance type: i3en.2xlarge
+   - 64GB RAM, 8 CPU, Up to 25 Gigabit, ~$0.62 hourly
+ - `io_medium`
+   - EC2 instance type: i3en.xlarge
+   - 32GB RAM, 4 CPU, Up to 25 Gigabit, ~$0.31 hourly
 
 ## Setup
 

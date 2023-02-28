@@ -46,21 +46,51 @@ Then ensure that the AWS_PROFILE environment variable is set when you invoke the
 
 	thunderdome deploy [command options] EXPERIMENT-FILENAME
 
+Deploy deploys the experiment defined by the supplied file. 
+The `--duration/-d` option must be supplied, specifying how long the experiment should run, in minutes.
+
+The steps the deploy takes are:
+
+ 1. reads the experiment file and determines a list of docker images that must be built or used for each target
+ 2. builds each image in turn and pushes them to the Thunderdome ECR docker repo
+ 3. creates an ECS task definition for each target and runs a task using it
+ 4. creates an SQS queue for the experiment and subscribes it to the gateway requests topic
+ 5. creates an ECS task definition for [dealgood](/cmd/dealgood/README.md) connecting it to the queue and runs a task
+ 6. registers the experiment with [ironbar](/cmd/ironbar/README.md) which will manage its termination
+
+At this point the experiment will be running. 
+A link to the Grafana dashboard for the experiment is logged.
+Dealgood will pause for a few minutes to before sending requests to the targets so some charts will have a delay before populating.
+
+
+**Note:** in the future the build and deployment of an experiment will be delegated to `ironbar`.
+
 ### teardown
 
 	thunderdome deploy [command options] EXPERIMENT-FILENAME
+
+Teardown stops an experiment and removes all resources (tasks, task definitions and queues) used.
+It's only needed if you need to cancel an experiment part way through. 
+`ironbar` will take care of shutting down an experiment at the end of it's configured duration.
 
 ### status
 
 	thunderdome status [command options]
 
+Status reports on the status of running or recently stopped experiments.
+Without any options it prints a list of known experiments and whether they are stopped or not.
+When an experiment name is specified with the `--experiment/-e` option it prints the status of the requested experiment, asking `ironbar` to perform a full check on the operational status of each resource used.
+
 ### validate
 
 	thunderdome validate [command options] EXPERIMENT-FILENAME
 
+Validate checks an experiment file for errors. 
+It also prints the canonical version of the experiment, with the exact build steps for each target.
+
 ### image
 
-The `image` command prepares docker images for use in experiments. Thunderdome expects images to be configured for the deployment environment and type of traffic sent by `dealgood`. This command wraps a base image in the necessary configuration to produce an image that can be used in Thunderdome.
+The `image` command prepares docker images for use in experiments. The deploy command does this automatically but this command can be used to pre-build images for later use. Thunderdome expects images to be configured for the deployment environment and type of traffic sent by `dealgood`. This command wraps a base image in the necessary configuration to produce an image that can be used in Thunderdome.
 
 It can use an existing published image as the base or build one from a git repository using the head of the repo, a specific commit, a tag or a branch. 
 
@@ -184,10 +214,10 @@ These fields configure the docker image for the target. Only one of `use_image`,
  - `base_image` (optional) - a docker image that will be used as a base. The build process wraps the docker image with an init section that configures it for use in thunderdome and executes any defined `init_commands`.
  - `build_from_git` (optional) - instructions for building an image contained in a Git repository. See below for details.
  - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These override any specified in the `defaults` section of the experiment and are appended to any in the `shared` section, so they are executed in-order, after the shared commands. Each entry is a string containing a single command. 
-
+q
 The following fields provide additional configuration for the target's execution environment:
 
- - `instance_type` (optional) - the type of instance to use. This overrides any instance type specified in the `defaults` section of the experiment.
+ - `instance_type` (optional) - the type of instance to use. This overrides any instance type specified in the `defaults` section of the experiment. See [list of instance types](/tf/README.md#instance-types) for allowed values.
  - `environment`(optional) - a list of environment variables that will be passed to the container when it is executed. These override any environment specified in the `defaults` section of the experiment and are merged with any in the `shared` section, overwriting any entries with duplicate names. Each entry is specified as a JSON object with a `name` field and a `value` field. For example: `{ "name": "IPFS_PROFILE", "value": "server" }`.
 
 ### Target Defaults and Shared Configuration
@@ -200,7 +230,7 @@ The top-level `shared` field is used to specify configuration that is applied to
 
 The top-level `defaults` field is used to specify configuration that is applied to targets if they don't override it. It expects an object with the following fields:
 
- - `instance_type` (optional) - the type of instance to use. This is used as a fallback for any target that does not specify its own value.
+ - `instance_type` (optional) - the type of instance to use. This is used as a fallback for any target that does not specify its own value.  See [list of instance types](/tf/README.md#instance-types) for allowed values.
  - `environment` (optional) - a list of environment variables that will be passed to the container when it is executed. These are ignored if the target defines any of its own, otherwise they are merged with any shared variables, taking precedent if there are any equal names. Each entry is specified as a JSON object with a `name` field and a `value` field.
  - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These are ignored if the target defines any of its own, otherwise they are merged with any defined by the target and are executed in-order, after the shared commands. Each entry is a string containing a single command. 
 
