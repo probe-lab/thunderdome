@@ -18,11 +18,17 @@ variable "admins" {
       instance_type     = "t2.small"
       ami               = "ami-0333305f9719618c7" # ubuntu
     }
+    "gus.eggert" = {
+      key_name          = "gus.eggert"
+      provision_workbox = false
+      instance_type     = "t2.small"
+      ami               = "ami-0333305f9719618c7" # ubuntu
+    }
   }
 }
 
 locals {
-  deployers = ["gus.eggert"]
+  deployers = []
 }
 
 
