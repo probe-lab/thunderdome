@@ -229,6 +229,8 @@ func (d *Dealgood) createTaskDefinition() Task {
 		Name:  "create task definition",
 		Check: d.taskDefinitionIsActive(),
 		Func: func(ctx context.Context, sess *session.Session) error {
+			logStreamPrefix := fmt.Sprintf("%s-dealgood", d.experiment)
+
 			in := &ecs.RegisterTaskDefinitionInput{
 				Family:                  aws.String(d.taskDefinitionFamily),
 				RequiresCompatibilities: []*string{aws.String("FARGATE")},
@@ -275,7 +277,7 @@ func (d *Dealgood) createTaskDefinition() Task {
 							Options: map[string]*string{
 								"awslogs-group":         aws.String(d.base.LogGroupName),
 								"awslogs-region":        aws.String(d.base.AwsRegion),
-								"awslogs-stream-prefix": aws.String("ecs"),
+								"awslogs-stream-prefix": aws.String(logStreamPrefix),
 							},
 						},
 						PortMappings: []*ecs.PortMapping{
@@ -315,7 +317,7 @@ func (d *Dealgood) createTaskDefinition() Task {
 							Options: map[string]*string{
 								"awslogs-group":         aws.String(d.base.LogGroupName),
 								"awslogs-region":        aws.String(d.base.AwsRegion),
-								"awslogs-stream-prefix": aws.String("ecs"),
+								"awslogs-stream-prefix": aws.String(logStreamPrefix),
 							},
 						},
 						MountPoints: []*ecs.MountPoint{

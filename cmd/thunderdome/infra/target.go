@@ -204,6 +204,8 @@ func (t *Target) createTaskDefinition() Task {
 				// TODO: any additional env?
 			}
 
+			logStreamPrefix := fmt.Sprintf("%s-%s", t.experiment, t.name)
+
 			in := &ecs.RegisterTaskDefinitionInput{
 				Family:                  aws.String(t.taskDefinitionFamily),
 				RequiresCompatibilities: []*string{aws.String("EC2")},
@@ -251,7 +253,7 @@ func (t *Target) createTaskDefinition() Task {
 							Options: map[string]*string{
 								"awslogs-group":         aws.String(t.base.LogGroupName),
 								"awslogs-region":        aws.String(t.base.AwsRegion),
-								"awslogs-stream-prefix": aws.String("ecs"),
+								"awslogs-stream-prefix": aws.String(logStreamPrefix),
 							},
 						},
 						PortMappings: []*ecs.PortMapping{
@@ -295,7 +297,7 @@ func (t *Target) createTaskDefinition() Task {
 							Options: map[string]*string{
 								"awslogs-group":         aws.String(t.base.LogGroupName),
 								"awslogs-region":        aws.String(t.base.AwsRegion),
-								"awslogs-stream-prefix": aws.String("ecs"),
+								"awslogs-stream-prefix": aws.String(logStreamPrefix),
 							},
 						},
 						MountPoints: []*ecs.MountPoint{
@@ -328,7 +330,7 @@ func (t *Target) createTaskDefinition() Task {
 							Options: map[string]*string{
 								"awslogs-group":         aws.String(t.base.LogGroupName),
 								"awslogs-region":        aws.String(t.base.AwsRegion),
-								"awslogs-stream-prefix": aws.String("ecs"),
+								"awslogs-stream-prefix": aws.String(logStreamPrefix),
 							},
 						},
 						MountPoints: []*ecs.MountPoint{
