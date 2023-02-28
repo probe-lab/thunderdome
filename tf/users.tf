@@ -22,7 +22,7 @@ variable "admins" {
 }
 
 locals {
-  deployers = tolist(["gus.eggert"])
+  deployers = ["gus.eggert"]
 }
 
 
