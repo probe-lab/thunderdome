@@ -174,7 +174,7 @@ func newRequest(ctx context.Context, t *Target, r *request.Request) (*http.Reque
 }
 
 // targetsReady
-func targetsReady(ctx context.Context, targets []*Target, quiet bool, interactive bool, preProbeWaitSeconds int) error {
+func targetsReady(ctx context.Context, targets []*Target, quiet bool, interactive bool, preProbeWaitSeconds int, readyTimeout int) error {
 	if preProbeWaitSeconds > 0 && !interactive {
 		if !quiet {
 			fmt.Printf("waiting %s for targets to be start before probing\n", durationDesc(preProbeWaitSeconds))
@@ -182,13 +182,12 @@ func targetsReady(ctx context.Context, targets []*Target, quiet bool, interactiv
 		time.Sleep(time.Duration(preProbeWaitSeconds) * time.Second)
 	}
 
-	const readyTimeout = 60
 	var lastErr error
 
 	start := time.Now()
 	for {
 		running := time.Since(start)
-		if running > readyTimeout*time.Second {
+		if readyTimeout > 0 && running > time.Duration(readyTimeout)*time.Second {
 			return fmt.Errorf("unable to connect to all targets within %s: %w", durationDesc(readyTimeout), lastErr)
 		}
 

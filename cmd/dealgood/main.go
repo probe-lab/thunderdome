@@ -204,6 +204,13 @@ var app = &cli.App{
 			Destination: &flags.preProbeWait,
 			EnvVars:     []string{"DEALGOOD_PRE_PROBE_WAIT"},
 		},
+		&cli.IntFlag{
+			Name:        "ready-timeout",
+			Usage:       "Time to wait (in seconds) before giving up on probing targets to see if they are ready. Set to 0 to wait forever.",
+			Value:       300,
+			Destination: &flags.readyTimeout,
+			EnvVars:     []string{"DEALGOOD_READY_TIMEOUT"},
+		},
 	},
 }
 
@@ -232,6 +239,7 @@ var flags struct {
 	interactive    bool
 	filter         string
 	preProbeWait   int
+	readyTimeout   int
 }
 
 func main() {
@@ -373,7 +381,7 @@ func Run(cc *cli.Context) error {
 		return fmt.Errorf("set tracer provider: %w", err)
 	}
 
-	if err := targetsReady(ctx, exp.Targets, flags.quiet, flags.interactive, flags.preProbeWait); err != nil {
+	if err := targetsReady(ctx, exp.Targets, flags.quiet, flags.interactive, flags.preProbeWait, flags.readyTimeout); err != nil {
 		return fmt.Errorf("targets ready check: %w", err)
 	}
 
