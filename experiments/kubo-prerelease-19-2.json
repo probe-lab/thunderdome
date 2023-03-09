@@ -1,5 +1,5 @@
 {
-	"name": "kubo-release-19",
+	"name": "kubo-prerelease-19-2",
 	"max_request_rate": 10,
 	"max_concurrency": 100,
 	"request_filter": "pathonly",
@@ -9,9 +9,6 @@
 	},
 
 	"shared": {
-		"environment" : [
-			{ "name": "GOLOG_LOG_LEVEL", "value": "info" }
-		],
 		"init_commands" : [
 			"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
 			"ipfs config --json Datastore.BloomFilterSize '268435456'",
@@ -28,16 +25,16 @@
 
 	"targets": [
 		{
-			"name": "kubo190rc1",
-			"description": "kubo 0.19.0-rc1",
+			"name": "kubo190-cf9276",
+			"description": "kubo commit ",
 			"build_from_git": {
 				"repo": "https://github.com/ipfs/kubo.git",
-				"tag":"v0.19.0-rc1"
+				"commit":"cf9276db027aa0727e2097b9b5651955899ef0b5"
 			}
 		},
 		{
 			"name": "kubo181",
-			"description": "kubo 0.18.",
+			"description": "kubo 0.18.1",
 			"build_from_git": {
 				"repo": "https://github.com/ipfs/kubo.git",
 				"tag":"v0.18.1"
