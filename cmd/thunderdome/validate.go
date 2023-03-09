@@ -75,7 +75,7 @@ func Validate(cc *cli.Context) error {
 			if len(t.ImageSpec.InitCommands) > 0 {
 				fmt.Println("  Init commands run when image starts:")
 				for _, cmd := range t.ImageSpec.InitCommands {
-					fmt.Println("    " + cmd)
+					fmt.Println(indent(cmd, "    "))
 				}
 			} else {
 				fmt.Println("  Init commands run when image starts: none")
@@ -109,4 +109,9 @@ func durationDesc(d time.Duration) string {
 		s = s[:len(s)-2]
 	}
 	return s
+}
+
+func indent(s string, prefix string) string {
+	s = strings.ReplaceAll(s, "\n", "\n"+prefix)
+	return prefix + s
 }

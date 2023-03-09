@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 
 	"github.com/ipfs-shipyard/thunderdome/pkg/exp"
@@ -37,23 +38,26 @@ type TargetJSON struct {
 	BuildFromGit *GitSpecJSON `json:"build_from_git,omitempty"`
 	// Commands that should be added to the container's container.init.d directory
 	// for example: ipfs config --json Swarm.ConnMgr.GracePeriod '"2m"'
-	InitCommands []string `json:"init_commands,omitempty"`
+	InitCommands     []string `json:"init_commands,omitempty"`
+	InitCommandsFrom string   `json:"init_commands_from,omitempty"`
 
 	UseImage string `json:"use_image,omitempty"` // docker image to use. If empty, DefaultImage will be used instead. Must be pre-configured for thunderdome.
 }
 
 type DefaultsJSON struct {
-	InstanceType string       `json:"instance_type,omitempty"` // instance type to use. If empty, DefaultInstanceType will be used instead
-	Environment  []NVJSON     `json:"environment,omitempty"`   // additional environment variables
-	BaseImage    string       `json:"base_image,omitempty"`
-	BuildFromGit *GitSpecJSON `json:"build_from_git,omitempty"`
-	InitCommands []string     `json:"init_commands,omitempty"`
-	UseImage     string       `json:"use_image,omitempty"` // docker image to use. If empty, DefaultImage will be used instead. Must be pre-configured for thunderdome.
+	InstanceType     string       `json:"instance_type,omitempty"` // instance type to use. If empty, DefaultInstanceType will be used instead
+	Environment      []NVJSON     `json:"environment,omitempty"`   // additional environment variables
+	BaseImage        string       `json:"base_image,omitempty"`
+	BuildFromGit     *GitSpecJSON `json:"build_from_git,omitempty"`
+	InitCommands     []string     `json:"init_commands,omitempty"`
+	InitCommandsFrom string       `json:"init_commands_from,omitempty"`
+	UseImage         string       `json:"use_image,omitempty"` // docker image to use. If empty, DefaultImage will be used instead. Must be pre-configured for thunderdome.
 }
 
 type SharedJSON struct {
-	Environment  []NVJSON `json:"environment,omitempty"`
-	InitCommands []string `json:"init_commands,omitempty"`
+	Environment      []NVJSON `json:"environment,omitempty"`
+	InitCommands     []string `json:"init_commands,omitempty"`
+	InitCommandsFrom string   `json:"init_commands_from,omitempty"`
 }
 
 type GitSpecJSON struct {
@@ -76,7 +80,9 @@ func LoadExperiment(ctx context.Context, filename string) (*exp.Experiment, erro
 	}
 	defer f.Close()
 
-	e, err := ParseExperiment(ctx, f)
+	dir := filepath.Dir(filename)
+
+	e, err := ParseExperiment(ctx, f, dir)
 	if err != nil {
 		return nil, fmt.Errorf("parse experiment definition: %w", err)
 	}
@@ -84,9 +90,13 @@ func LoadExperiment(ctx context.Context, filename string) (*exp.Experiment, erro
 	return e, nil
 }
 
-func ParseExperiment(ctx context.Context, r io.Reader) (*exp.Experiment, error) {
+func ParseExperiment(ctx context.Context, r io.Reader, baseDir string) (*exp.Experiment, error) {
 	ej := new(ExperimentJSON)
-	if err := json.NewDecoder(r).Decode(ej); err != nil {
+
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(ej); err != nil {
 		return nil, fmt.Errorf("json decode: %w", err)
 	}
 
@@ -117,6 +127,31 @@ func ParseExperiment(ctx context.Context, r io.Reader) (*exp.Experiment, error) 
 		return nil, fmt.Errorf("unsupported request filter")
 	}
 
+	if ej.Shared.InitCommandsFrom != "" {
+		if len(ej.Shared.InitCommands) > 0 {
+			return nil, fmt.Errorf("cannot specify both init_commands and init_commands_from for target shared config")
+		}
+
+		fromFile := filepath.Join(baseDir, ej.Shared.InitCommandsFrom)
+		content, err := os.ReadFile(fromFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed reading init_commands_from in target shared config: %w", err)
+		}
+		ej.Shared.InitCommands = []string{string(content)}
+	}
+
+	if ej.Defaults.InitCommandsFrom != "" {
+		if len(ej.Defaults.InitCommands) > 0 {
+			return nil, fmt.Errorf("cannot specify both init_commands and init_commands_from for target default config")
+		}
+		fromFile := filepath.Join(baseDir, ej.Defaults.InitCommandsFrom)
+		content, err := os.ReadFile(fromFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed reading init_commands_from in target default config: %w", err)
+		}
+		ej.Defaults.InitCommands = []string{string(content)}
+	}
+
 	uniqueNames := map[string]bool{}
 	for i, tj := range ej.Targets {
 		t := &exp.TargetSpec{
@@ -126,6 +161,18 @@ func ParseExperiment(ctx context.Context, r io.Reader) (*exp.Experiment, error) 
 			t.Name = tj.Name
 		} else {
 			return nil, fmt.Errorf("name must be supplied for target %d", i+1)
+		}
+
+		if tj.InitCommandsFrom != "" {
+			if len(tj.InitCommands) > 0 {
+				return nil, fmt.Errorf("cannot specify both init_commands and init_commands_from for target %d", i+1)
+			}
+			fromFile := filepath.Join(baseDir, tj.InitCommandsFrom)
+			content, err := os.ReadFile(fromFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed reading init_commands_from in target %d: %w", i+1, err)
+			}
+			tj.InitCommands = []string{string(content)}
 		}
 
 		if uniqueNames[t.Name] {

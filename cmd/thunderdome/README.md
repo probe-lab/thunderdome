@@ -213,8 +213,10 @@ These fields configure the docker image for the target. Only one of `use_image`,
  - `use_image` (optional) - the pre-built docker image to use for this target. This overrides any `use_image` value set in the `defaults` section of the experiment. WARNING: only use images that have been built by thunderdome and contain the additional thunderdome configuration.
  - `base_image` (optional) - a docker image that will be used as a base. The build process wraps the docker image with an init section that configures it for use in thunderdome and executes any defined `init_commands`.
  - `build_from_git` (optional) - instructions for building an image contained in a Git repository. See below for details.
- - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These override any specified in the `defaults` section of the experiment and are appended to any in the `shared` section, so they are executed in-order, after the shared commands. Each entry is a string containing a single command. 
-q
+ - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These override any specified in the `defaults` section of the experiment and are appended to any in the `shared` section, so they are executed in-order, after the shared commands. Each entry is a string containing a single command. Only one of `init_commands` or `init_commands_from` may be specified.
+- `init_commands_from` (optional) -  a filename containing commands that will be run in the container at init time before the target daemon is executed. This overrides any `init_commands` or `init_commands_from` specified in the `defaults` section of the experiment and are appended to any in the `shared` section. Only one of `init_commands` or `init_commands_from` may be specified.
+
+
 The following fields provide additional configuration for the target's execution environment:
 
  - `instance_type` (optional) - the type of instance to use. This overrides any instance type specified in the `defaults` section of the experiment. See [list of instance types](/tf/README.md#instance-types) for allowed values.
@@ -226,13 +228,15 @@ The top-level `shared` field is used to specify configuration that is applied to
 
  - `environment` (optional) - a list of environment variables that will be passed to the container when it is executed. These are merged with any defined by the target, with the target's taking precedent if there are any equal names. Each entry is specified as a JSON object with a `name` field and a `value` field.
  - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These are merged with any defined by the target and are executed in-order, before the target's commands. Each entry is a string containing a single command. 
+- `init_commands_from` (optional) -  a filename containing commands that will be run in the container at init time before the target daemon is executed. These are merged with any defined by the target and are executed in-order, before the target's commands. Only one of `init_commands` or `init_commands_from` may be specified.
 
 
 The top-level `defaults` field is used to specify configuration that is applied to targets if they don't override it. It expects an object with the following fields:
 
  - `instance_type` (optional) - the type of instance to use. This is used as a fallback for any target that does not specify its own value.  See [list of instance types](/tf/README.md#instance-types) for allowed values.
  - `environment` (optional) - a list of environment variables that will be passed to the container when it is executed. These are ignored if the target defines any of its own, otherwise they are merged with any shared variables, taking precedent if there are any equal names. Each entry is specified as a JSON object with a `name` field and a `value` field.
- - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These are ignored if the target defines any of its own, otherwise they are merged with any defined by the target and are executed in-order, after the shared commands. Each entry is a string containing a single command. 
+ - `init_commands` (optional) - a list of commands that will be run in the container at init time before the target daemon is executed. These are ignored if the target defines any of its own, otherwise they are executed in-order, after the shared commands. Each entry is a string containing a single command. 
+- `init_commands_from` (optional) -  a filename containing commands that will be run in the container at init time before the target daemon is executed. This is ignored if the target defines `init_commands` or `init_commands_from` of its own, otherwise the commands are executed in-order, after any shared commands. Only one of `init_commands` or `init_commands_from` may be specified.
 
 Like targets, only one of `use_image`, `base_image` or `build_from_git` can be supplied as `defaults`:
 
