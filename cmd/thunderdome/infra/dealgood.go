@@ -56,6 +56,7 @@ func NewDealgood(experiment string, base *BaseInfra) *Dealgood {
 		"DEALGOOD_SOURCE":             "sqs",
 		"DEALGOOD_SQS_QUEUE":          requestQueueName,
 		"DEALGOOD_PRE_PROBE_WAIT":     "0",
+		"DEALGOOD_READY_TIMEOUT":      "0",
 	}
 
 	return &Dealgood{
