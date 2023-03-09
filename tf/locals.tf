@@ -1,5 +1,5 @@
 locals {
-  dealgood_image_tag = "2022-09-15__1504"
+  dealgood_image_tag = "2023-03-09-f727914"
 
   skyfish_image_tag = "2022-09-15__1542"
 
