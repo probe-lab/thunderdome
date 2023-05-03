@@ -47,6 +47,8 @@ func NewDealgood(experiment string, base *BaseInfra) *Dealgood {
 		"DEALGOOD_EXPERIMENT":         experiment,
 		"OTEL_TRACES_EXPORTER":        "otlp",
 		"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+		"DEALGOOD_DURATION":           "-1",
+		"DEALGOOD_PROMETHEUS_ADDR":    ":9090",
 		"DEALGOOD_RATE":               "10",
 		"DEALGOOD_FILTER":             "pathonly",
 		"DEALGOOD_CONCURRENCY":        "100",
@@ -56,7 +58,7 @@ func NewDealgood(experiment string, base *BaseInfra) *Dealgood {
 		"DEALGOOD_SOURCE":             "sqs",
 		"DEALGOOD_SQS_QUEUE":          requestQueueName,
 		"DEALGOOD_PRE_PROBE_WAIT":     "0",
-		"DEALGOOD_READY_TIMEOUT":      "1200",
+		"DEALGOOD_READY_TIMEOUT":      "1200", // seconds
 	}
 
 	return &Dealgood{

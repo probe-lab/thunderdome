@@ -53,6 +53,7 @@ func nogui(ctx context.Context, source RequestSource, exp *Experiment, printHead
 
 	latest := coll.Latest()
 	printSampleTimings(ctx, latest, exp)
+	fmt.Fprintf(os.Stderr, "Stopping\n")
 
 	return nil
 }

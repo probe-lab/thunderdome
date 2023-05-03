@@ -39,7 +39,7 @@
 		},
 		{
 			"name": "kubo181",
-			"description": "kubo 0.18.",
+			"description": "kubo 0.18.1",
 			"build_from_git": {
 				"repo": "https://github.com/ipfs/kubo.git",
 				"tag":"v0.18.1"

@@ -1,11 +1,15 @@
 {
-	"name": "kubo-release-19",
+	"name": "kubo-release-19-resmgr",
 	"max_request_rate": 10,
 	"max_concurrency": 100,
 	"request_filter": "pathonly",
 
 	"defaults": {
-		"instance_type": "io_medium"
+		"instance_type": "io_medium",
+		"build_from_git": {
+			"repo": "https://github.com/ipfs/kubo.git",
+			"tag":"v0.19.0-rc1"
+		}
 	},
 
 	"shared": {
@@ -21,27 +25,19 @@
 			"ipfs config --json Reprovider.Interval '\"0\"'",
 			"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
 			"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
-			"ipfs config --json Experimental.AcceleratedDHTClient true",
 			"ipfs config --json Experimental.StrategicProviding true"
 		]
 	},
 
 	"targets": [
 		{
-			"name": "kubo190rc1",
-			"description": "kubo 0.19.0-rc1",
-			"build_from_git": {
-				"repo": "https://github.com/ipfs/kubo.git",
-				"tag":"v0.19.0-rc1"
-			}
+			"name": "kubo190rc1"
 		},
 		{
-			"name": "kubo181",
-			"description": "kubo 0.18.1",
-			"build_from_git": {
-				"repo": "https://github.com/ipfs/kubo.git",
-				"tag":"v0.18.1"
-			}
+			"name": "kubo190rc1-noresmgr",
+			"init_commands" : [
+				"ipfs config --json Swarm.ResourceMgr.Enabled false"
+			]
 		}
 	]
 }

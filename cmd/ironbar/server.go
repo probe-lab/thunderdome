@@ -515,7 +515,7 @@ func (s *Server) ExperimentStatusHandler(w http.ResponseWriter, r *http.Request)
 			out.Status = "Error"
 		} else if allActive {
 			out.Status = "Running"
-		} else if allActive {
+		} else {
 			out.Status = "Degraded"
 		}
 	}
