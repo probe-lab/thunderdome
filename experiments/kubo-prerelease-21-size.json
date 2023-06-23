@@ -1,0 +1,104 @@
+{
+	"name": "kubo-prerelease-21-size",
+	"max_request_rate": 10,
+	"max_concurrency": 100,
+	"request_filter": "pathonly",
+
+	"defaults": {
+		"instance_type": "io_medium"
+	},
+
+	"shared": {
+		"environment": [
+			{ "name": "GOLOG_LOG_LEVEL", "value": "info" }
+		],
+		"init_commands" : [
+			"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
+			"ipfs config --json Datastore.BloomFilterSize '268435456'",
+			"ipfs config --json Datastore.StorageGCWatermark 90",
+			"ipfs config --json Datastore.StorageMax '\"160GB\"'",
+			"ipfs config --json Pubsub.StrictSignatureVerification false",
+			"ipfs config --json Reprovider.Interval '\"0\"'",
+			"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
+			"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
+			"ipfs config --json Experimental.StrategicProviding true"
+		]
+	},
+
+	"targets": [
+		{
+			"name": "kubo21-rc1-m",
+			"instance_type": "io_medium",
+			"description": "kubo 0.21.0-rc1",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.21.0-rc1"
+			},
+			"init_commands" : [
+				"ipfs config --json Routing.AcceleratedDHTClient true"
+			]
+
+		},
+		{
+			"name": "kubo21-rc1-l",
+			"instance_type": "io_large",
+			"description": "kubo 0.21.0-rc1",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.21.0-rc1"
+			},
+			"init_commands" : [
+				"ipfs config --json Routing.AcceleratedDHTClient true"
+			]
+
+		},
+		{
+			"name": "kubo21-rc2-m",
+			"instance_type": "io_medium",
+			"description": "kubo 0.21.0-rc2",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.21.0-rc2"
+			},
+			"init_commands" : [
+				"ipfs config --json Routing.AcceleratedDHTClient true"
+			]
+		},
+		{
+			"name": "kubo21-rc2-l",
+			"instance_type": "io_large",
+			"description": "kubo 0.21.0-rc2",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.21.0-rc2"
+			},
+			"init_commands" : [
+				"ipfs config --json Routing.AcceleratedDHTClient true"
+			]
+		},
+		{
+			"name": "kubo20-m",
+			"instance_type": "io_medium",
+			"description": "kubo 0.20.0",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.20.0"
+			},
+			"init_commands" : [
+				"ipfs config --json Experimental.AcceleratedDHTClient true"
+			]
+		},
+		{
+			"name": "kubo20-l",
+			"instance_type": "io_large",
+			"description": "kubo 0.20.0",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.20.0"
+			},
+			"init_commands" : [
+				"ipfs config --json Experimental.AcceleratedDHTClient true"
+			]
+		}
+	]
+}

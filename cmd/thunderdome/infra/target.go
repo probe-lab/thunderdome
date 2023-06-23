@@ -236,6 +236,7 @@ func (t *Target) createTaskDefinition() Task {
 						Name:        aws.String("gateway"),
 						Image:       aws.String(t.image),
 						Cpu:         aws.Int64(0),
+						Memory:      aws.Int64(1024 * 20),
 						Essential:   aws.Bool(true),
 						Environment: mapsToKeyValuePair(t.environment, additionalEnv),
 						MountPoints: []*ecs.MountPoint{
