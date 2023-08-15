@@ -154,6 +154,9 @@ func Image(cc *cli.Context) error {
 	spec.InitCommands = append(spec.InitCommands, envConfigMappingsQuoted...)
 
 	finalImage, err := build.Build(ctx, imageOpts.tag, spec)
+	if err != nil {
+		return err
+	}
 
 	if imageOpts.dockerRepo != "" {
 		finalImage, err = build.PushImage(imageOpts.tag, region, imageOpts.dockerRepo)
@@ -219,7 +222,7 @@ func parseEnvConfigMappings(strs []string, quote bool) ([]string, error) {
 		} else {
 			cmds = append(cmds, fmt.Sprintf(`  ipfs config --json %s "$%s"`, configOption, envVar))
 		}
-		cmds = append(cmds, fmt.Sprintf(`fi`))
+		cmds = append(cmds, `fi`)
 	}
 
 	return cmds, nil

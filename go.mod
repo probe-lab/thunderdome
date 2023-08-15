@@ -1,6 +1,6 @@
 module github.com/ipfs-shipyard/thunderdome
 
-go 1.19
+go 1.20
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -8,7 +8,6 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/ipfs/go-path v0.3.0
-	github.com/kortschak/utter v1.5.0
 	github.com/pkg/profile v1.6.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/common v0.37.0

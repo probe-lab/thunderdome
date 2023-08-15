@@ -8,7 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
@@ -37,13 +36,6 @@ func ecsTags(m map[string]*string) []*ecs.Tag {
 		})
 	}
 	return tags
-}
-
-func iamIsNoSuchEntity(err error) bool {
-	if aerr, ok := err.(awserr.Error); ok {
-		return aerr.Code() == iam.ErrCodeNoSuchEntityException
-	}
-	return false
 }
 
 func sqsIsQueueDoesNotExist(err error) bool {

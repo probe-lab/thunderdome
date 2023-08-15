@@ -92,6 +92,10 @@ func CopyDockerAssets(buildDir string, system string) error {
 	systemPath := filepath.Join("dockerassets", system)
 	pathPrefix := systemPath + string(filepath.Separator)
 	err := fs.WalkDir(dockerAssets, systemPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("walk error: %w", err)
+		}
+
 		if !strings.HasPrefix(path, pathPrefix) {
 			return nil
 		}
