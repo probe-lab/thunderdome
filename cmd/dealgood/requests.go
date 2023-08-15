@@ -347,14 +347,6 @@ func sampleRequests() []*request.Request {
 	return permutePaths(paths)
 }
 
-func permuteSamplePathsIPFS() []*request.Request {
-	return permutePaths(samplePathsIPFS)
-}
-
-func permuteSamplePathsIPNS() []*request.Request {
-	return permutePaths(samplePathsIPNS)
-}
-
 func permutePaths(paths []string) []*request.Request {
 	headerVariants := []map[string]string{
 		{},
@@ -409,7 +401,7 @@ func NewLokiRequestSource(cfg *loki.LokiConfig, filter filter.RequestFilter, met
 	l := &LokiRequestSource{
 		cfg:     *cfg,
 		ch:      make(chan request.Request, rps*60*30), // buffer at least 30 minutes of requests
-		done:    make(chan struct{}, 0),
+		done:    make(chan struct{}),
 		filter:  filter,
 		metrics: metrics,
 	}
@@ -507,7 +499,7 @@ func NewSQSRequestSource(cfg *SQSConfig, filter filter.RequestFilter, metrics *R
 	s := &SQSRequestSource{
 		cfg:     *cfg,
 		ch:      make(chan request.Request, rps*60*30), // buffer at least 30 minutes of requests
-		done:    make(chan struct{}, 0),
+		done:    make(chan struct{}),
 		filter:  filter,
 		metrics: metrics,
 	}

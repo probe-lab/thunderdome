@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/kortschak/utter"
 	"golang.org/x/exp/slog"
 
 	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
@@ -22,7 +21,7 @@ type Provider struct {
 func NewProvider() (*Provider, error) {
 	region := os.Getenv("AWS_REGION")
 	if region == "" {
-		return nil, fmt.Errorf("Environment variable AWS_REGION should be set to the region Thunderdome is running in")
+		return nil, fmt.Errorf("environment variable AWS_REGION should be set to the region Thunderdome is running in")
 	}
 	return &Provider{
 		region: region,
@@ -257,10 +256,4 @@ func (p *Provider) ListExperiments(ctx context.Context) (*api.ListExperimentsOut
 	}
 
 	return out, nil
-}
-
-func dump(vs ...any) {
-	for _, v := range vs {
-		fmt.Println(utter.Sdump(v))
-	}
 }

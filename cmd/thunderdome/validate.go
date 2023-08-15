@@ -19,8 +19,6 @@ var ValidateCommand = &cli.Command{
 	Flags:     commonFlags,
 }
 
-var validateOpts struct{}
-
 func Validate(cc *cli.Context) error {
 	ctx := cc.Context
 	setupLogging()
