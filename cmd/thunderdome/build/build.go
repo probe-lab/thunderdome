@@ -82,7 +82,7 @@ func Build(ctx context.Context, tag string, spec *exp.ImageSpec) (string, error)
 	}
 
 	if err := ConfigureImage(workDir, baseImage, imageName, labels, spec.InitCommands); err != nil {
-		return "", err
+		return "", fmt.Errorf("configure image: %w", err)
 	}
 
 	return imageName, nil

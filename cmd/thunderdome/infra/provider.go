@@ -28,7 +28,7 @@ func NewProvider() (*Provider, error) {
 	}, nil
 }
 
-func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
+func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment, forceBuild bool) error {
 	base, err := NewBaseInfra(p.region)
 	if err != nil {
 		return fmt.Errorf("failed to read base infra: %w", err)
@@ -54,9 +54,10 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 
 		var err error
 		slog.Info("building docker image", "component", "target "+t.Name)
-		t.Image, err = p.BuildImage(ctx, t.ImageSpec, base.EcrBaseURL)
+		t.Image, err = p.BuildImage(ctx, t.ImageSpec, base.EcrBaseURL, forceBuild)
 		slog.Debug("using docker image", "component", "target "+t.Name, "image", t.Image)
 		if err != nil {
+			slog.Error("build image", err)
 			return fmt.Errorf("failed to build image for target %s", t.Name)
 		}
 	}
@@ -177,7 +178,7 @@ func (p *Provider) Status(ctx context.Context, e *exp.Experiment) error {
 	return nil
 }
 
-func (p *Provider) BuildImage(ctx context.Context, is *exp.ImageSpec, ecrBaseURL string) (string, error) {
+func (p *Provider) BuildImage(ctx context.Context, is *exp.ImageSpec, ecrBaseURL string, forceBuild bool) (string, error) {
 	tag := is.Hash()
 	image, ok := p.imageCache[tag]
 	if ok {
@@ -188,10 +189,12 @@ func (p *Provider) BuildImage(ctx context.Context, is *exp.ImageSpec, ecrBaseURL
 		p.imageCache = make(map[string]string)
 	}
 
-	if exists, _ := build.ImageExists(tag, p.region, ecrBaseURL); exists {
-		remoteImage := ecrBaseURL + ":" + tag
-		p.imageCache[tag] = remoteImage
-		return remoteImage, nil
+	if !forceBuild {
+		if exists, _ := build.ImageExists(tag, p.region, ecrBaseURL); exists {
+			remoteImage := ecrBaseURL + ":" + tag
+			p.imageCache[tag] = remoteImage
+			return remoteImage, nil
+		}
 	}
 
 	if _, err := build.Build(ctx, tag, is); err != nil {
