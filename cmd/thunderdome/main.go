@@ -57,7 +57,7 @@ func setupLogging() {
 
 func checkBuildEnv() error {
 	if os.Getenv("AWS_PROFILE") == "" {
-		return fmt.Errorf("Environment variable AWS_PROFILE should be set to a valid AWS profile name to allow pushing of images to ECR")
+		return fmt.Errorf("environment variable AWS_PROFILE should be set to a valid AWS profile name to allow pushing of images to ECR")
 	}
 
 	return checkEnv()
@@ -65,7 +65,7 @@ func checkBuildEnv() error {
 
 func checkEnv() error {
 	if os.Getenv("AWS_REGION") == "" {
-		return fmt.Errorf("Environment variable AWS_REGION should be set to the region Thunderdome is running in")
+		return fmt.Errorf("environment variable AWS_REGION should be set to the region Thunderdome is running in")
 	}
 
 	return nil

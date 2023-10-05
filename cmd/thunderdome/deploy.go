@@ -23,12 +23,20 @@ var DeployCommand = &cli.Command{
 				Usage:       "Duration to run the experiment for, in minutes.",
 				Destination: &deployOpts.duration,
 			},
+			&cli.BoolFlag{
+				Name:        "force",
+				Required:    false,
+				Aliases:     []string{"f"},
+				Usage:       "Force docker images to be rebuilt.",
+				Destination: &deployOpts.forceBuild,
+			},
 		},
 	),
 }
 
 var deployOpts struct {
-	duration int
+	duration   int
+	forceBuild bool
 }
 
 func Deploy(cc *cli.Context) error {
@@ -58,5 +66,5 @@ func Deploy(cc *cli.Context) error {
 		return err
 	}
 
-	return prov.Deploy(ctx, e)
+	return prov.Deploy(ctx, e, deployOpts.forceBuild)
 }

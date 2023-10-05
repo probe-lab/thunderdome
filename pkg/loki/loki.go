@@ -69,7 +69,7 @@ func NewLokiTailer(cfg *LokiConfig) (*LokiTailer, error) {
 	}
 	l := &LokiTailer{
 		cfg:      *cfg,
-		shutdown: make(chan struct{}, 0),
+		shutdown: make(chan struct{}),
 		ch:       make(chan LogLine, 100*60*30),
 	}
 

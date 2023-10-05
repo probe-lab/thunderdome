@@ -9,7 +9,6 @@ import (
 
 	promexp "contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/prometheus/client_golang/prometheus"
-	prom "github.com/prometheus/client_golang/prometheus"
 	"go.opencensus.io/stats/view"
 	"golang.org/x/exp/slog"
 )
@@ -28,8 +27,8 @@ type PrometheusServer struct {
 func NewPrometheusServer(addr string, metricsPath string, appName string) (*PrometheusServer, error) {
 	pe, err := promexp.NewExporter(promexp.Options{
 		Namespace:  appName,
-		Registerer: prom.DefaultRegisterer,
-		Gatherer:   prom.DefaultGatherer,
+		Registerer: prometheus.DefaultRegisterer,
+		Gatherer:   prometheus.DefaultGatherer,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("new prometheus exporter: %w", err)
@@ -54,11 +53,9 @@ func (p *PrometheusServer) Run(ctx context.Context) error {
 	mux.Handle(p.metricsPath, p.pe)
 	server := &http.Server{Addr: p.addr, Handler: mux}
 	go func() {
-		select {
-		case <-ctx.Done():
-			if err := server.Shutdown(context.Background()); err != nil {
-				slog.Error("failed to shut down diagnostics server", err)
-			}
+		<-ctx.Done()
+		if err := server.Shutdown(context.Background()); err != nil {
+			slog.Error("failed to shut down diagnostics server", err)
 		}
 	}()
 

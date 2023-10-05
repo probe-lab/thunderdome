@@ -24,10 +24,9 @@ type Dealgood struct {
 	image       string
 	environment map[string]string
 
-	taskDefinitionFamily   string
-	taskName               string
-	requestQueueName       string
-	requestQueuePolicyPath string
+	taskDefinitionFamily string
+	taskName             string
+	requestQueueName     string
 
 	// mu guards access to fields in block directly below
 	mu                     sync.Mutex

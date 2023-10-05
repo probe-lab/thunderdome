@@ -5,8 +5,8 @@ FROM "$FROM_IMAGE_NAME"
 RUN mkdir -p /container-init.d \
   && chown ipfs:users /container-init.d
 
-# Copy the init stuff 
-ADD container_daemon /usr/local/bin/start_ipfs
+# Copy the init stuff
+ADD start_ipfs /usr/local/bin/start_ipfs
 ADD container_init_run /usr/local/bin/container_init_run
 RUN chmod 0755 /usr/local/bin/start_ipfs
 RUN chmod 0555 /usr/local/bin/container_init_run
@@ -15,5 +15,10 @@ RUN chmod 0555 /usr/local/bin/container_init_run
 ADD /container-init.d/* /container-init.d/
 RUN chmod a+x /container-init.d/*
 
+# This just makes sure that:
+# 1. There's an fs-repo, and initializes one if there isn't.
+# 2. The API and Gateway are accessible from outside the container.
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/start_ipfs"]
+
 EXPOSE 8080
-CMD ["daemon", "--enable-gc", "--migrate=true", "--agent-version-suffix=docker"]
+CMD ["daemon", "--enable-gc", "--migrate=true", "--agent-version-suffix=thunderdome"]
