@@ -58,7 +58,7 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment) error {
 		t.Image, err = p.BuildImage(ctx, t.ImageSpec, base.EcrBaseURL)
 		slog.Debug("using docker image", "component", "target "+t.Name, "image", t.Image)
 		if err != nil {
-			return fmt.Errorf("failed to build image for target %s", t.Name)
+			return fmt.Errorf("failed to build image for target %s: %w", t.Name, err)
 		}
 	}
 
