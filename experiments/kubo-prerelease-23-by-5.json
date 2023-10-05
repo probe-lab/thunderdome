@@ -1,0 +1,108 @@
+{
+	"name": "kubo-prerelease-22-by-5",
+	"max_request_rate": 10,
+	"max_concurrency": 30,
+	"request_filter": "pathonly",
+
+	"defaults": {
+		"instance_type": "io_medium"
+	},
+
+	"shared": {
+		"init_commands" : [
+			"ipfs config --json AutoNAT '{\"ServiceMode\": \"disabled\"}'",
+			"ipfs config --json Datastore.BloomFilterSize '268435456'",
+			"ipfs config --json Datastore.StorageGCWatermark 90",
+			"ipfs config --json Datastore.StorageMax '\"160GB\"'",
+			"ipfs config --json Pubsub.StrictSignatureVerification false",
+			"ipfs config --json Reprovider.Interval '\"0\"'",
+			"ipfs config --json Swarm.ConnMgr.GracePeriod '\"2m\"'",
+			"ipfs config --json Swarm.ConnMgr.DisableBandwidthMetrics true",
+			"ipfs config --json Experimental.AcceleratedDHTClient true",
+			"ipfs config --json Experimental.StrategicProviding true"
+		]
+	},
+
+	"targets": [
+		{
+			"name": "kubo22-1",
+			"description": "kubo 0.22.0",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.22.0"
+			}
+		},
+		{
+			"name": "kubo22-2",
+			"description": "kubo 0.22.0",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.22.0"
+			}
+		},
+		{
+			"name": "kubo22-3",
+			"description": "kubo 0.22.0",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.22.0"
+			}
+		},
+		{
+			"name": "kubo22-4",
+			"description": "kubo 0.22.0",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.22.0"
+			}
+		},
+		{
+			"name": "kubo22-5",
+			"description": "kubo 0.22.0",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.22.0"
+			}
+		},
+		{
+			"name": "kubo23-rc1-1",
+			"description": "kubo 0.23.0-rc1",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.23.0-rc1"
+			}
+		},
+		{
+			"name": "kubo23-rc1-2",
+			"description": "kubo 0.23.0-rc1",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.23.0-rc1"
+			}
+		},
+		{
+			"name": "kubo23-rc1-3",
+			"description": "kubo 0.23.0-rc1",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.23.0-rc1"
+			}
+		},
+		{
+			"name": "kubo23-rc1-4",
+			"description": "kubo 0.23.0-rc1",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.23.0-rc1"
+			}
+		},
+		{
+			"name": "kubo23-rc1-5",
+			"description": "kubo 0.23.0-rc1",
+			"build_from_git": {
+				"repo": "https://github.com/ipfs/kubo.git",
+				"tag":"v0.23.0-rc1"
+			}
+		}
+	]
+}
