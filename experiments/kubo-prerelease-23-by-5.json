@@ -1,5 +1,5 @@
 {
-	"name": "kubo-prerelease-22-by-5",
+	"name": "kubo-prerelease-23-by-5",
 	"max_request_rate": 10,
 	"max_concurrency": 30,
 	"request_filter": "pathonly",
