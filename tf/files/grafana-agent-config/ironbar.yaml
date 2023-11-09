@@ -3,10 +3,10 @@ metrics:
     scrape_interval: 30s
     scrape_timeout: 30s
     remote_write:
-      - url: https://prometheus-us-central1.grafana.net/api/prom/push
+      - url: ${PROMETHEUS_URL}
         basic_auth:
-          username: ${GRAFANA_USER}
-          password: ${GRAFANA_PASS}
+          username: ${PROMETHEUS_USER}
+          password: ${PROMETHEUS_PASS}
   configs:
     - name: thunderdome
       host_filter: false

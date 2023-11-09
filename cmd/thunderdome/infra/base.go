@@ -23,7 +23,7 @@ type BaseInfra struct {
 	EcsExecutionRoleArn           string
 	EfsFileSystemID               string
 	ExperimentsTableName          string
-	GrafanaPushSecretArn          string
+	PrometheusSecretArn           string
 	IronbarAddr                   string
 	LogGroupName                  string
 	RequestSNSTopicArn            string

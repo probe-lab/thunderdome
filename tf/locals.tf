@@ -17,7 +17,7 @@ locals {
     EcsExecutionRoleArn             = aws_iam_role.ecsTaskExecutionRole.arn
     EfsFileSystemID                 = aws_efs_file_system.thunderdome.id
     ExperimentsTableName            = aws_dynamodb_table.experiments.name
-    GrafanaPushSecretArn            = data.aws_secretsmanager_secret.grafana-push-secret.arn
+    PrometheusSecretArn             = data.aws_secretsmanager_secret.prometheus-secret.arn
     IronbarAddr                     = "${aws_eip.ecs[0].public_ip}:${local.ironbar_port_number}"
     LogGroupName                    = aws_cloudwatch_log_group.logs.name
     RequestSNSTopicArn              = aws_sns_topic.gateway_requests.arn

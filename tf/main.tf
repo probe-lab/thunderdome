@@ -24,8 +24,8 @@ data "aws_kms_key" "default_secretsmanager_key" {
   key_id = "arn:aws:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:key/d32eafb8-e9b3-44f2-9703-fd4663949020"
 }
 
-data "aws_secretsmanager_secret" "grafana-push-secret" {
-  arn = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:grafana-push-MxjNiv"
+data "aws_secretsmanager_secret" "prometheus-secret" {
+  arn = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:prometheus_credentials-ujqWDl"
 }
 
 data "aws_secretsmanager_secret" "dealgood-loki-secret" {

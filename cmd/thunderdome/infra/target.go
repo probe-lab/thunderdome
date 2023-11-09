@@ -313,12 +313,16 @@ func (t *Target) createTaskDefinition() Task {
 						},
 						Secrets: []*ecs.Secret{
 							{
-								Name:      aws.String("GRAFANA_USER"),
-								ValueFrom: aws.String(t.base.GrafanaPushSecretArn + ":username::"),
+								Name:      aws.String("PROMETHEUS_URL"),
+								ValueFrom: aws.String(t.base.PrometheusSecretArn + ":url::"),
 							},
 							{
-								Name:      aws.String("GRAFANA_PASS"),
-								ValueFrom: aws.String(t.base.GrafanaPushSecretArn + ":password::"),
+								Name:      aws.String("PROMETHEUS_USER"),
+								ValueFrom: aws.String(t.base.PrometheusSecretArn + ":username::"),
+							},
+							{
+								Name:      aws.String("PROMETHEUS_PASS"),
+								ValueFrom: aws.String(t.base.PrometheusSecretArn + ":password::"),
 							},
 						},
 					},
