@@ -13,9 +13,9 @@ import (
 	"github.com/pkg/profile"
 	"github.com/urfave/cli/v2"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
-	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
-	"github.com/ipfs-shipyard/thunderdome/pkg/run"
+	"github.com/plprobelab/thunderdome/pkg/loki"
+	"github.com/plprobelab/thunderdome/pkg/prom"
+	"github.com/plprobelab/thunderdome/pkg/run"
 )
 
 const appName = "skyfish"

@@ -19,7 +19,7 @@ The infrastructure is managed using Terraform and the tooling is written in Go.
 
 The thunderdome client is in [/cmd/thunderdome](cmd/thunderdome/README.md). 
 It's a command line utility that allows users to deploy and manage Thunderdome experiments.
-See the [Thunderdome Client Documentation](cmd/thunderdome/README.md) for information on how to use the client and the [Experiment File Syntax](https://github.com/ipfs-shipyard/thunderdome/blob/main/cmd/thunderdome/README.md#experiment-file-syntax) to understand how to define an experiment.
+See the [Thunderdome Client Documentation](cmd/thunderdome/README.md) for information on how to use the client and the [Experiment File Syntax](https://github.com/plprobelab/thunderdome/blob/main/cmd/thunderdome/README.md#experiment-file-syntax) to understand how to define an experiment.
 
 ### Thunderdome Infrastructure
 

@@ -13,10 +13,10 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/filter"
-	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
-	"github.com/ipfs-shipyard/thunderdome/pkg/request"
-	"github.com/ipfs-shipyard/thunderdome/pkg/run"
+	"github.com/plprobelab/thunderdome/pkg/filter"
+	"github.com/plprobelab/thunderdome/pkg/loki"
+	"github.com/plprobelab/thunderdome/pkg/request"
+	"github.com/plprobelab/thunderdome/pkg/run"
 )
 
 var TailCommand = &cli.Command{

@@ -6,7 +6,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/infra"
+	"github.com/plprobelab/thunderdome/cmd/thunderdome/infra"
 )
 
 var DeployCommand = &cli.Command{

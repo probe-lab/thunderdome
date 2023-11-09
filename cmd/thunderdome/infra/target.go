@@ -15,7 +15,7 @@ import (
 	// "github.com/aws/aws-sdk-go/service/servicediscovery"
 	"golang.org/x/exp/slog"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
+	"github.com/plprobelab/thunderdome/cmd/ironbar/api"
 )
 
 type Target struct {

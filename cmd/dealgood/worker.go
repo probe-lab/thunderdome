@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/request"
+	"github.com/plprobelab/thunderdome/pkg/request"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"

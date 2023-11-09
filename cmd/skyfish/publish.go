@@ -12,9 +12,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
-	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
-	"github.com/ipfs-shipyard/thunderdome/pkg/request"
+	"github.com/plprobelab/thunderdome/pkg/loki"
+	"github.com/plprobelab/thunderdome/pkg/prom"
+	"github.com/plprobelab/thunderdome/pkg/request"
 )
 
 const MaxMessageSize = 256 * 1024 // sns has 256kb max message size

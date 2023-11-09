@@ -15,8 +15,8 @@ import (
 	"github.com/gorilla/mux"
 	"golang.org/x/exp/slog"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
-	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
+	"github.com/plprobelab/thunderdome/cmd/ironbar/api"
+	"github.com/plprobelab/thunderdome/pkg/prom"
 )
 
 type Server struct {

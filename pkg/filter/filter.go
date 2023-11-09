@@ -3,7 +3,7 @@ package filter
 import (
 	"strings"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/request"
+	"github.com/plprobelab/thunderdome/pkg/request"
 	ipfspath "github.com/ipfs/go-path"
 )
 

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/exp"
+	"github.com/plprobelab/thunderdome/pkg/exp"
 )
 
 type ExperimentJSON struct {
