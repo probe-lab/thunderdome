@@ -12,18 +12,6 @@ variable "admins" {
       instance_type     = "t2.small"
       ami               = "ami-0591c8c8aa7d9b217" # debian 11
     }
-    "tom.hall" = {
-      key_name          = "tom.hall"
-      provision_workbox = false
-      instance_type     = "t2.small"
-      ami               = "ami-0333305f9719618c7" # ubuntu
-    }
-    "gus.eggert" = {
-      key_name          = "gus.eggert"
-      provision_workbox = false
-      instance_type     = "t2.small"
-      ami               = "ami-0333305f9719618c7" # ubuntu
-    }
   }
 }
 
