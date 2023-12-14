@@ -6,7 +6,7 @@
 
 	"defaults": {
 		"instance_type": "io_medium",
-		"base_image": "ipfs/kubo:v0.22.0"
+		"base_image": "ipfs/kubo:v0.24.0"
 	},
 
 	"shared": {
