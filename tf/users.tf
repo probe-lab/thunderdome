@@ -12,6 +12,18 @@ variable "admins" {
       instance_type     = "t2.small"
       ami               = "ami-0591c8c8aa7d9b217" # debian 11
     }
+    "dennis" = {
+      key_name          = "dennis"
+      provision_workbox = false
+      instance_type     = "t2.small"
+      ami               = "ami-0591c8c8aa7d9b217" # debian 11
+    }
+    "jorropo" = {
+      key_name          = "Jorropo"
+      provision_workbox = false
+      instance_type     = "t2.small"
+      ami               = "ami-0591c8c8aa7d9b217" # debian 11
+    }
   }
 }
 
@@ -20,14 +32,14 @@ locals {
 }
 
 
-resource "aws_iam_user" "admin" {
-  for_each = var.admins
-  name     = each.key
-}
+# resource "aws_iam_user" "admin" {
+#   for_each = var.admins
+#   name     = each.key
+# }
 
 resource "aws_iam_user_policy_attachment" "admin" {
-  for_each   = aws_iam_user.admin
-  user       = each.value.name
+  for_each   = var.admins
+  user       = each.key
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }
 
