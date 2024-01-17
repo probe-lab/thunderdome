@@ -150,6 +150,7 @@ func (l *LokiTailer) Run(ctx context.Context) error {
 				err := json.Unmarshal([]byte(entry.Line()), &line)
 				if err != nil {
 					l.errorCounter.Add(1)
+					log.Printf("failed to parse loki json: %v", err)
 					continue
 				}
 
