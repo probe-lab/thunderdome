@@ -33,7 +33,7 @@ data "aws_secretsmanager_secret" "dealgood-loki-secret" {
 }
 
 module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
+  source  = "terraform-aws-modules/vpc/aws"
   version = "5.5.1"
 
   name = "thunderdome"

@@ -19,7 +19,7 @@ resource "aws_ecs_service" "skyfish" {
 }
 
 resource "aws_ecs_task_definition" "skyfish" {
-  family                   = "skyfish"
+  family                   = "skyfish-something-else"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   execution_role_arn       = aws_iam_role.ecsTaskExecutionRole.arn
@@ -125,12 +125,12 @@ resource "aws_ecs_task_definition" "skyfish" {
         }
       ]
       portMappings = []
-      secrets      = [
+      secrets = [
         { name = "PROMETHEUS_URL", valueFrom = "${data.aws_secretsmanager_secret.prometheus-secret.arn}:url::" },
         { name = "PROMETHEUS_USER", valueFrom = "${data.aws_secretsmanager_secret.prometheus-secret.arn}:username::" },
         { name = "PROMETHEUS_PASS", valueFrom = "${data.aws_secretsmanager_secret.prometheus-secret.arn}:password::" }
       ]
-      volumesFrom  = []
+      volumesFrom = []
     }
   ])
 }

@@ -38,10 +38,10 @@ resource "aws_iam_user_policy_attachment" "admin" {
 }
 
 resource "aws_instance" "testbox" {
-  for_each      = { for k, v in var.admins : k => v if v.provision_workbox }
-  ami           = each.value["ami"]
-  instance_type = each.value["instance_type"]
-  key_name      = each.value["key_name"]
+  for_each             = { for k, v in var.admins : k => v if v.provision_workbox }
+  ami                  = each.value["ami"]
+  instance_type        = each.value["instance_type"]
+  key_name             = each.value["key_name"]
   iam_instance_profile = aws_iam_instance_profile.testbox_profile.name
   vpc_security_group_ids = [
     aws_security_group.dealgood.id,
