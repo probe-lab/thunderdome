@@ -274,7 +274,7 @@ func (t *Target) createTaskDefinition() Task {
 					},
 					{
 						Name:  aws.String("grafana-agent"),
-						Image: aws.String("grafana/agent:v0.26.1"),
+						Image: aws.String("grafana/agent:v0.39.1"),
 						Command: []*string{
 							aws.String("-metrics.wal-directory=/data/grafana-agent"),
 							aws.String("-config.expand-env"),
