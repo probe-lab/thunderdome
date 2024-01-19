@@ -114,7 +114,7 @@ resource "aws_ecs_task_definition" "target" {
     },
     {
       cpu   = 0
-      image = "grafana/agent:v0.26.1"
+      image = "grafana/agent:v0.39.1"
       command = [
         "-metrics.wal-directory=/data/grafana-agent",
         "-config.expand-env",

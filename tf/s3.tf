@@ -1,8 +1,12 @@
 module "s3_bucket_public" {
-  source = "terraform-aws-modules/s3-bucket/aws"
+  source  = "terraform-aws-modules/s3-bucket/aws"
+  version = "4.0.1"
 
-  bucket        = "pl-thunderdome-public"
-  acl           = "public-read"
+  bucket             = "pl-thunderdome-public"
+  acl                = "public-read"
+  block_public_acls  = false
+  ignore_public_acls = false
+
   force_destroy = true
   versioning = {
     enabled = true
@@ -10,7 +14,7 @@ module "s3_bucket_public" {
 }
 
 resource "aws_s3_bucket" "s3_bucket_private" {
-  bucket = "pl-thunderdome-private"
+  bucket        = "pl-thunderdome-private"
   force_destroy = true
 }
 

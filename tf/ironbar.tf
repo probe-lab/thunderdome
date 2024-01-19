@@ -118,12 +118,12 @@ resource "aws_ecs_task_definition" "ironbar" {
     {
       name  = "grafana-agent"
       cpu   = 0
-      image = "grafana/agent:v0.26.1"
+      image = "grafana/agent:v0.39.1"
       command = [
         "-metrics.wal-directory=/data/grafana-agent",
         "-config.expand-env",
         "-enable-features=remote-configs",
-        "-config.file=http://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["ironbar"].s3_object_id}"
+        "-config.file=https://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["ironbar"].s3_object_id}"
       ]
       environment = [
       ]

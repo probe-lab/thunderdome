@@ -6,12 +6,6 @@ variable "admins" {
     ami               = string
   }))
   default = {
-    "ian.davis" = {
-      key_name          = "ian.davis"
-      provision_workbox = true
-      instance_type     = "t2.small"
-      ami               = "ami-0591c8c8aa7d9b217" # debian 11
-    }
     "dennis" = {
       key_name          = "dennis"
       provision_workbox = false

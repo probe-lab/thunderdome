@@ -78,6 +78,6 @@ module "grafana_agent_config" {
 
   file_source = "./files/grafana-agent-config/${each.key}.yaml"
   # ensure changes to local file are detected and then uploaded
-  etag        = "${filemd5("./files/grafana-agent-config/${each.key}.yaml")}"
+  etag = filemd5("./files/grafana-agent-config/${each.key}.yaml")
 }
 
