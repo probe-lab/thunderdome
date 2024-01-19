@@ -8,7 +8,7 @@ locals {
 
   infra_json = jsonencode({
     AwsRegion                     = data.aws_region.current.name
-    DealgoodGrafanaAgentConfigURL = "http://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["dealgood"].s3_object_id}"
+    DealgoodGrafanaAgentConfigURL = "https://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["dealgood"].s3_object_id}"
     DealgoodImage                 = "${aws_ecr_repository.dealgood.repository_url}:${local.dealgood_image_tag}"
     DealgoodSecurityGroup         = aws_security_group.dealgood.id
     DealgoodTaskRoleArn           = aws_iam_role.dealgood.arn
@@ -21,7 +21,7 @@ locals {
     IronbarAddr                   = "${aws_eip.ecs[0].public_ip}:${local.ironbar_port_number}"
     LogGroupName                  = aws_cloudwatch_log_group.logs.name
     RequestSNSTopicArn            = aws_sns_topic.gateway_requests.arn
-    TargetGrafanaAgentConfigURL   = "http://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["target"].s3_object_id}"
+    TargetGrafanaAgentConfigURL   = "https://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["target"].s3_object_id}"
     TargetTaskRoleArn             = aws_iam_role.target.arn
     VpcPublicSubnet               = module.vpc.public_subnets[0]
   })
