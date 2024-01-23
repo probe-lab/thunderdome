@@ -8,8 +8,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/plprobelab/thunderdome/cmd/thunderdome/build"
-	"github.com/plprobelab/thunderdome/pkg/exp"
+	"github.com/probe-lab/thunderdome/cmd/thunderdome/build"
+	"github.com/probe-lab/thunderdome/pkg/exp"
 )
 
 var ImageCommand = &cli.Command{

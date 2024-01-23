@@ -19,7 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/config"
 
-	"github.com/plprobelab/thunderdome/pkg/prom"
+	"github.com/probe-lab/thunderdome/pkg/prom"
 )
 
 const (

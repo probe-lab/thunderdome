@@ -10,8 +10,8 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/plprobelab/thunderdome/cmd/ironbar/api"
-	"github.com/plprobelab/thunderdome/pkg/exp"
+	"github.com/probe-lab/thunderdome/cmd/ironbar/api"
+	"github.com/probe-lab/thunderdome/pkg/exp"
 )
 
 func RegisterExperiment(addr string, e *exp.Experiment, res []api.Resource) func(ctx context.Context) (bool, error) {
