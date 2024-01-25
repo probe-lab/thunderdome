@@ -7,8 +7,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/plprobelab/thunderdome/cmd/thunderdome/build"
-	"github.com/plprobelab/thunderdome/cmd/thunderdome/infra"
+	"github.com/probe-lab/thunderdome/cmd/thunderdome/build"
+	"github.com/probe-lab/thunderdome/cmd/thunderdome/infra"
 )
 
 var ValidateCommand = &cli.Command{
