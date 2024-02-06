@@ -2,3 +2,4 @@ tf/.terraform
 .env
 .envrc
 .direnv
+.docker
