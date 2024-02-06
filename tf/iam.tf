@@ -22,7 +22,7 @@ data "aws_iam_policy_document" "ecsTaskExecutionRole_secretsmanager" {
   statement {
     actions = ["kms:Decrypt", "secretsmanager:GetSecretValue"]
     resources = [
-      data.aws_secretsmanager_secret.grafana-push-secret.arn,
+      data.aws_secretsmanager_secret.prometheus-secret.arn,
       data.aws_secretsmanager_secret.dealgood-loki-secret.arn,
       data.aws_kms_key.default_secretsmanager_key.arn,
     ]
@@ -155,33 +155,33 @@ resource "aws_iam_role" "ironbar" {
   inline_policy {
     name = "ironbar_inline"
     policy = jsonencode({
-      "Version": "2012-10-17",
-      "Statement": [
-          {
-              "Sid": "ironbar",
-              "Effect": "Allow",
-              "Action": [
-                  "dynamodb:BatchGetItem",
-                  "dynamodb:BatchWriteItem",
-                  "dynamodb:PutItem",
-                  "dynamodb:DescribeTable",
-                  "dynamodb:DeleteItem",
-                  "dynamodb:GetItem",
-                  "dynamodb:Scan",
-                  "dynamodb:Query",
-                  "dynamodb:UpdateItem",
-                  "dynamodb:UpdateTable",
-                  "ecs:DescribeTasks",
-                  "ecs:DescribeTaskDefinition",
-                  "ecs:DeregisterTaskDefinition",
-                  "sns:GetSubscriptionAttributes",
-                  "ecs:StopTask",
-                  "sns:Unsubscribe",
-                  "sqs:DeleteQueue",
-                  "sqs:GetQueueAttributes"
-              ],
-              "Resource": "*"
-          }
+      "Version" : "2012-10-17",
+      "Statement" : [
+        {
+          "Sid" : "ironbar",
+          "Effect" : "Allow",
+          "Action" : [
+            "dynamodb:BatchGetItem",
+            "dynamodb:BatchWriteItem",
+            "dynamodb:PutItem",
+            "dynamodb:DescribeTable",
+            "dynamodb:DeleteItem",
+            "dynamodb:GetItem",
+            "dynamodb:Scan",
+            "dynamodb:Query",
+            "dynamodb:UpdateItem",
+            "dynamodb:UpdateTable",
+            "ecs:DescribeTasks",
+            "ecs:DescribeTaskDefinition",
+            "ecs:DeregisterTaskDefinition",
+            "sns:GetSubscriptionAttributes",
+            "ecs:StopTask",
+            "sns:Unsubscribe",
+            "sqs:DeleteQueue",
+            "sqs:GetQueueAttributes"
+          ],
+          "Resource" : "*"
+        }
       ]
     })
   }
@@ -220,7 +220,7 @@ resource "aws_iam_group" "deployers" {
 
 resource "aws_iam_user_group_membership" "deployer" {
   for_each = aws_iam_user.deployer
-  user = each.value.name
+  user     = each.value.name
 
   groups = [
     aws_iam_group.deployers.name,
@@ -228,42 +228,42 @@ resource "aws_iam_user_group_membership" "deployer" {
 }
 
 resource "aws_iam_group_policy" "deployers" {
-  name = "deployers"
+  name  = "deployers"
   group = aws_iam_group.deployers.name
   policy = jsonencode({
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "ironbar",
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DescribeInstances",
-                "ecr:BatchCheckLayerAvailability",
-                "ecr:CompleteLayerUpload",
-                "ecr:DescribeImages",
-                "ecr:GetAuthorizationToken",
-                "ecr:UploadLayerPart",
-                "ecr:InitiateLayerUpload",
-                "ecr:PutImage",
-                "ecs:DeregisterTaskDefinition",
-                "ecs:DescribeClusters",
-                "ecs:DescribeTasks",
-                "ecs:DescribeTaskDefinition",
-                "ecs:DescribeContainerInstances",
-                "ecs:RegisterTaskDefinition",
-                "ecs:RunTask",
-                "ecs:StopTask",
-                "s3:GetObject",
-                "sns:GetSubscriptionAttributes",
-                "sns:Subscribe",
-                "sns:Unsubscribe",
-                "sqs:CreateQueue",
-                "sqs:DeleteQueue",
-                "sqs:GetQueueAttributes",
-                "sqs:SetQueueAttributes"
-            ],
-            "Resource": "*"
-        }
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "ironbar",
+        "Effect" : "Allow",
+        "Action" : [
+          "ec2:DescribeInstances",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:CompleteLayerUpload",
+          "ecr:DescribeImages",
+          "ecr:GetAuthorizationToken",
+          "ecr:UploadLayerPart",
+          "ecr:InitiateLayerUpload",
+          "ecr:PutImage",
+          "ecs:DeregisterTaskDefinition",
+          "ecs:DescribeClusters",
+          "ecs:DescribeTasks",
+          "ecs:DescribeTaskDefinition",
+          "ecs:DescribeContainerInstances",
+          "ecs:RegisterTaskDefinition",
+          "ecs:RunTask",
+          "ecs:StopTask",
+          "s3:GetObject",
+          "sns:GetSubscriptionAttributes",
+          "sns:Subscribe",
+          "sns:Unsubscribe",
+          "sqs:CreateQueue",
+          "sqs:DeleteQueue",
+          "sqs:GetQueueAttributes",
+          "sqs:SetQueueAttributes"
+        ],
+        "Resource" : "*"
+      }
     ]
   })
 }
@@ -335,8 +335,8 @@ resource "aws_iam_role_policy_attachment" "testbox_sqs_subscribe" {
 }
 
 resource "aws_iam_instance_profile" "testbox_profile" {
-  name       = "testbox-profile"
-  role       = aws_iam_role.testbox_role.name
+  name = "testbox-profile"
+  role = aws_iam_role.testbox_role.name
 }
 
 

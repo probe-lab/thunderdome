@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/request"
+	"github.com/probe-lab/thunderdome/pkg/request"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/http2"
 )

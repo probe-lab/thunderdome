@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/exp"
+	"github.com/probe-lab/thunderdome/pkg/exp"
 	"golang.org/x/exp/slog"
 )
 

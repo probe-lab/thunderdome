@@ -8,9 +8,9 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
-	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/build"
-	"github.com/ipfs-shipyard/thunderdome/pkg/exp"
+	"github.com/probe-lab/thunderdome/cmd/ironbar/api"
+	"github.com/probe-lab/thunderdome/cmd/thunderdome/build"
+	"github.com/probe-lab/thunderdome/pkg/exp"
 )
 
 type Provider struct {

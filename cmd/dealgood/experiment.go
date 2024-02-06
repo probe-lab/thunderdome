@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/request"
+	"github.com/probe-lab/thunderdome/pkg/request"
 )
 
 type ExperimentJSON struct {

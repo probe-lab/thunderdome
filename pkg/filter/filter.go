@@ -3,8 +3,8 @@ package filter
 import (
 	"strings"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/request"
 	ipfspath "github.com/ipfs/go-path"
+	"github.com/probe-lab/thunderdome/pkg/request"
 )
 
 // A RequestFilter reports whether a request meets a condition

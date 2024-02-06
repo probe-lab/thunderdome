@@ -6,7 +6,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/exp/slog"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/thunderdome/infra"
+	"github.com/probe-lab/thunderdome/cmd/thunderdome/infra"
 )
 
 var TeardownCommand = &cli.Command{

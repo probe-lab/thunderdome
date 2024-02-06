@@ -6,23 +6,17 @@ variable "admins" {
     ami               = string
   }))
   default = {
-    "ian.davis" = {
-      key_name          = "ian.davis"
-      provision_workbox = true
+    "dennis" = {
+      key_name          = "dennis"
+      provision_workbox = false
       instance_type     = "t2.small"
       ami               = "ami-0591c8c8aa7d9b217" # debian 11
     }
-    "tom.hall" = {
-      key_name          = "tom.hall"
+    "jorropo" = {
+      key_name          = "Jorropo"
       provision_workbox = false
       instance_type     = "t2.small"
-      ami               = "ami-0333305f9719618c7" # ubuntu
-    }
-    "gus.eggert" = {
-      key_name          = "gus.eggert"
-      provision_workbox = false
-      instance_type     = "t2.small"
-      ami               = "ami-0333305f9719618c7" # ubuntu
+      ami               = "ami-0591c8c8aa7d9b217" # debian 11
     }
   }
 }
@@ -32,22 +26,22 @@ locals {
 }
 
 
-resource "aws_iam_user" "admin" {
-  for_each = var.admins
-  name     = each.key
-}
+# resource "aws_iam_user" "admin" {
+#   for_each = var.admins
+#   name     = each.key
+# }
 
 resource "aws_iam_user_policy_attachment" "admin" {
-  for_each   = aws_iam_user.admin
-  user       = each.value.name
+  for_each   = var.admins
+  user       = each.key
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }
 
 resource "aws_instance" "testbox" {
-  for_each      = { for k, v in var.admins : k => v if v.provision_workbox }
-  ami           = each.value["ami"]
-  instance_type = each.value["instance_type"]
-  key_name      = each.value["key_name"]
+  for_each             = { for k, v in var.admins : k => v if v.provision_workbox }
+  ami                  = each.value["ami"]
+  instance_type        = each.value["instance_type"]
+  key_name             = each.value["key_name"]
   iam_instance_profile = aws_iam_instance_profile.testbox_profile.name
   vpc_security_group_ids = [
     aws_security_group.dealgood.id,

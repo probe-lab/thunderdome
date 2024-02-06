@@ -127,7 +127,7 @@ module "autoscaling" {
       instance_type = "i3en.2xlarge"
     }
 
-    io_medium  = {
+    io_medium = {
       # 32GB RAM, 4 CPU, Up to 25 Gigabit, $0.31 hourly
       instance_type = "i3en.xlarge"
     }

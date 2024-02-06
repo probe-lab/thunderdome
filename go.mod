@@ -1,4 +1,4 @@
-module github.com/ipfs-shipyard/thunderdome
+module github.com/probe-lab/thunderdome
 
 go 1.20
 

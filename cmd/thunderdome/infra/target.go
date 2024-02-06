@@ -15,7 +15,7 @@ import (
 	// "github.com/aws/aws-sdk-go/service/servicediscovery"
 	"golang.org/x/exp/slog"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
+	"github.com/probe-lab/thunderdome/cmd/ironbar/api"
 )
 
 type Target struct {
@@ -274,7 +274,7 @@ func (t *Target) createTaskDefinition() Task {
 					},
 					{
 						Name:  aws.String("grafana-agent"),
-						Image: aws.String("grafana/agent:v0.26.1"),
+						Image: aws.String("grafana/agent:v0.39.1"),
 						Command: []*string{
 							aws.String("-metrics.wal-directory=/data/grafana-agent"),
 							aws.String("-config.expand-env"),
@@ -313,12 +313,16 @@ func (t *Target) createTaskDefinition() Task {
 						},
 						Secrets: []*ecs.Secret{
 							{
-								Name:      aws.String("GRAFANA_USER"),
-								ValueFrom: aws.String(t.base.GrafanaPushSecretArn + ":username::"),
+								Name:      aws.String("PROMETHEUS_URL"),
+								ValueFrom: aws.String(t.base.PrometheusSecretArn + ":url::"),
 							},
 							{
-								Name:      aws.String("GRAFANA_PASS"),
-								ValueFrom: aws.String(t.base.GrafanaPushSecretArn + ":password::"),
+								Name:      aws.String("PROMETHEUS_USER"),
+								ValueFrom: aws.String(t.base.PrometheusSecretArn + ":username::"),
+							},
+							{
+								Name:      aws.String("PROMETHEUS_PASS"),
+								ValueFrom: aws.String(t.base.PrometheusSecretArn + ":password::"),
 							},
 						},
 					},

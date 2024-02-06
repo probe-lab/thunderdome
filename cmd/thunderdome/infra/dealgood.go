@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"golang.org/x/exp/slog"
 
-	"github.com/ipfs-shipyard/thunderdome/cmd/ironbar/api"
+	"github.com/probe-lab/thunderdome/cmd/ironbar/api"
 )
 
 type Dealgood struct {
@@ -299,7 +299,7 @@ func (d *Dealgood) createTaskDefinition() Task {
 					},
 					{
 						Name:  aws.String("grafana-agent"),
-						Image: aws.String("grafana/agent:v0.26.1"),
+						Image: aws.String("grafana/agent:v0.39.1"),
 						Command: []*string{
 							aws.String("-metrics.wal-directory=/data/grafana-agent"),
 							aws.String("-config.expand-env"),
@@ -334,12 +334,16 @@ func (d *Dealgood) createTaskDefinition() Task {
 						},
 						Secrets: []*ecs.Secret{
 							{
-								Name:      aws.String("GRAFANA_USER"),
-								ValueFrom: aws.String(d.base.GrafanaPushSecretArn + ":username::"),
+								Name:      aws.String("PROMETHEUS_URL"),
+								ValueFrom: aws.String(d.base.PrometheusSecretArn + ":url::"),
 							},
 							{
-								Name:      aws.String("GRAFANA_PASS"),
-								ValueFrom: aws.String(d.base.GrafanaPushSecretArn + ":password::"),
+								Name:      aws.String("PROMETHEUS_USER"),
+								ValueFrom: aws.String(d.base.PrometheusSecretArn + ":username::"),
+							},
+							{
+								Name:      aws.String("PROMETHEUS_PASS"),
+								ValueFrom: aws.String(d.base.PrometheusSecretArn + ":password::"),
 							},
 						},
 					},

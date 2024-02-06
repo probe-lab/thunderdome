@@ -6,7 +6,7 @@ logtool is a tool for working with gateway logs
 
 Install via the go command:
 
-	go install github.com/ipfs-shipyard/thunderdome/cmd/logtool
+	go install github.com/probe-lab/thunderdome/cmd/logtool
 
 
 ## Usage

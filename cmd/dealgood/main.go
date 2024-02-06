@@ -23,8 +23,8 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/filter"
-	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
+	"github.com/probe-lab/thunderdome/pkg/filter"
+	"github.com/probe-lab/thunderdome/pkg/loki"
 )
 
 const appName = "dealgood"

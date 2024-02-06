@@ -18,10 +18,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/ipfs-shipyard/thunderdome/pkg/filter"
-	"github.com/ipfs-shipyard/thunderdome/pkg/loki"
-	"github.com/ipfs-shipyard/thunderdome/pkg/prom"
-	"github.com/ipfs-shipyard/thunderdome/pkg/request"
+	"github.com/probe-lab/thunderdome/pkg/filter"
+	"github.com/probe-lab/thunderdome/pkg/loki"
+	"github.com/probe-lab/thunderdome/pkg/prom"
+	"github.com/probe-lab/thunderdome/pkg/request"
 )
 
 // A RequestSource is a provider of a stream of requests that can be sent to workers.
