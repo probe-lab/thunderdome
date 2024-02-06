@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"golang.org/x/exp/slog"
 
-	"github.com/plprobelab/thunderdome/cmd/ironbar/api"
+	"github.com/probe-lab/thunderdome/cmd/ironbar/api"
 )
 
 type Dealgood struct {
