@@ -19,7 +19,7 @@ resource "aws_ecs_service" "skyfish" {
 }
 
 resource "aws_ecs_task_definition" "skyfish" {
-  family                   = "skyfish"
+  family                   = "skyfish-something-else"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   execution_role_arn       = aws_iam_role.ecsTaskExecutionRole.arn
@@ -96,12 +96,12 @@ resource "aws_ecs_task_definition" "skyfish" {
     {
       name  = "grafana-agent"
       cpu   = 0
-      image = "grafana/agent:v0.26.1"
+      image = "grafana/agent:v0.39.1"
       command = [
         "-metrics.wal-directory=/data/grafana-agent",
         "-config.expand-env",
         "-enable-features=remote-configs",
-        "-config.file=http://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["skyfish"].s3_object_id}"
+        "-config.file=https://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["skyfish"].s3_object_id}"
       ]
       environment = [
       ]
@@ -125,12 +125,12 @@ resource "aws_ecs_task_definition" "skyfish" {
         }
       ]
       portMappings = []
-      secrets      = [
+      secrets = [
         { name = "PROMETHEUS_URL", valueFrom = "${data.aws_secretsmanager_secret.prometheus-secret.arn}:url::" },
         { name = "PROMETHEUS_USER", valueFrom = "${data.aws_secretsmanager_secret.prometheus-secret.arn}:username::" },
         { name = "PROMETHEUS_PASS", valueFrom = "${data.aws_secretsmanager_secret.prometheus-secret.arn}:password::" }
       ]
-      volumesFrom  = []
+      volumesFrom = []
     }
   ])
 }

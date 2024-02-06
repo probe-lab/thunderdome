@@ -1,9 +1,9 @@
 terraform {
-  required_version = "1.2.6"
+  required_version = ">= 1.6.0"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "= 4.26.0"
+      version = ">= 4"
     }
   }
   backend "s3" {
@@ -33,7 +33,8 @@ data "aws_secretsmanager_secret" "dealgood-loki-secret" {
 }
 
 module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.5.1"
 
   name = "thunderdome"
   cidr = "10.0.0.0/16"
@@ -42,14 +43,11 @@ module "vpc" {
   private_subnets = ["10.0.1.0/24"]
   public_subnets  = ["10.0.100.0/24"]
 
-  enable_ipv6 = true # This is mostly historic coincidence as we started out with it enabled
+  enable_ipv6 = false # This is mostly historic coincidence as we started out with it enabled
 
   # we don't assign ipv6 addresses by default as we can't block internal ipv6 traffic with a NACL
-  assign_ipv6_address_on_creation                = false
+  public_subnet_assign_ipv6_address_on_creation  = false
   private_subnet_assign_ipv6_address_on_creation = false
-
-  public_subnet_ipv6_prefixes  = [0, 1]
-  private_subnet_ipv6_prefixes = [2, 3]
 
   # Need both of these to make DNS auto-discovery work
   # see https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-private-hosted-zones

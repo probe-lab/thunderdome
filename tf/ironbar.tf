@@ -12,9 +12,9 @@ resource "aws_ecs_service" "ironbar" {
   }
 
   load_balancer {
-    target_group_arn = "${aws_lb_target_group.ironbar.id}"
+    target_group_arn = aws_lb_target_group.ironbar.id
     container_name   = "ironbar"
-    container_port   = "${local.ironbar_port_number}"
+    container_port   = local.ironbar_port_number
   }
 
   capacity_provider_strategy {
@@ -25,7 +25,7 @@ resource "aws_ecs_service" "ironbar" {
 }
 
 resource "aws_service_discovery_service" "ironbar" {
-  name     = "ironbar"
+  name = "ironbar"
 
   dns_config {
     namespace_id = aws_service_discovery_private_dns_namespace.main.id
@@ -43,16 +43,16 @@ resource "aws_lb_target_group" "ironbar" {
   name        = "ironbar"
   port        = local.ironbar_port_number
   protocol    = "TCP"
-  vpc_id      = "${module.vpc.vpc_id}"
+  vpc_id      = module.vpc.vpc_id
   target_type = "ip"
 }
 
 resource "aws_lb_listener" "front_end" {
-  load_balancer_arn = "${aws_lb.ecs.id}"
-  port              = "${local.ironbar_port_number}"
+  load_balancer_arn = aws_lb.ecs.id
+  port              = local.ironbar_port_number
   protocol          = "TCP"
   default_action {
-    target_group_arn = "${aws_lb_target_group.ironbar.id}"
+    target_group_arn = aws_lb_target_group.ironbar.id
     type             = "forward"
   }
 }
@@ -118,12 +118,12 @@ resource "aws_ecs_task_definition" "ironbar" {
     {
       name  = "grafana-agent"
       cpu   = 0
-      image = "grafana/agent:v0.26.1"
+      image = "grafana/agent:v0.39.1"
       command = [
         "-metrics.wal-directory=/data/grafana-agent",
         "-config.expand-env",
         "-enable-features=remote-configs",
-        "-config.file=http://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["ironbar"].s3_object_id}"
+        "-config.file=https://${module.s3_bucket_public.s3_bucket_bucket_domain_name}/${module.grafana_agent_config["ironbar"].s3_object_id}"
       ]
       environment = [
       ]
@@ -143,12 +143,12 @@ resource "aws_ecs_task_definition" "ironbar" {
         },
       ]
       portMappings = []
-      secrets      = [
+      secrets = [
         { name = "PROMETHEUS_URL", valueFrom = "${data.aws_secretsmanager_secret.prometheus-secret.arn}:url::" },
         { name = "PROMETHEUS_USER", valueFrom = "${data.aws_secretsmanager_secret.prometheus-secret.arn}:username::" },
         { name = "PROMETHEUS_PASS", valueFrom = "${data.aws_secretsmanager_secret.prometheus-secret.arn}:password::" }
       ]
-      volumesFrom  = []
+      volumesFrom = []
     }
   ])
 }

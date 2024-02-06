@@ -6,12 +6,6 @@ variable "admins" {
     ami               = string
   }))
   default = {
-    "ian.davis" = {
-      key_name          = "ian.davis"
-      provision_workbox = true
-      instance_type     = "t2.small"
-      ami               = "ami-0591c8c8aa7d9b217" # debian 11
-    }
     "dennis" = {
       key_name          = "dennis"
       provision_workbox = false
@@ -44,10 +38,10 @@ resource "aws_iam_user_policy_attachment" "admin" {
 }
 
 resource "aws_instance" "testbox" {
-  for_each      = { for k, v in var.admins : k => v if v.provision_workbox }
-  ami           = each.value["ami"]
-  instance_type = each.value["instance_type"]
-  key_name      = each.value["key_name"]
+  for_each             = { for k, v in var.admins : k => v if v.provision_workbox }
+  ami                  = each.value["ami"]
+  instance_type        = each.value["instance_type"]
+  key_name             = each.value["key_name"]
   iam_instance_profile = aws_iam_instance_profile.testbox_profile.name
   vpc_security_group_ids = [
     aws_security_group.dealgood.id,
