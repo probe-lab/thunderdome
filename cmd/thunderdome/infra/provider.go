@@ -58,7 +58,7 @@ func (p *Provider) Deploy(ctx context.Context, e *exp.Experiment, forceBuild boo
 		slog.Debug("using docker image", "component", "target "+t.Name, "image", t.Image)
 		if err != nil {
 			slog.Error("build image", err)
-			return fmt.Errorf("failed to build image for target %s", t.Name)
+			return fmt.Errorf("failed to build image for target %s: %w", t.Name, err)
 		}
 	}
 
