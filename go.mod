@@ -2,7 +2,6 @@ module github.com/probe-lab/thunderdome
 
 go 1.21
 
-
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/aws/aws-sdk-go v1.44.202
