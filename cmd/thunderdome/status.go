@@ -54,7 +54,7 @@ func Status(cc *cli.Context) error {
 			fmt.Printf("Stopped at   : %s\n", out.Stopped.Format(time.Stamp))
 		}
 
-		dashboard := fmt.Sprintf("https://protocollabs.grafana.net/d/GE2JD7ZVz/experiment-timeline?orgId=1&from=now-1h&to=now&var-experiment=%s", statusOpts.experiment)
+		dashboard := fmt.Sprintf("https://probelab.grafana.net/d/GE2JD7ZVz/experiment-timeline?orgId=1&from=now-1h&to=now&var-experiment=%s", statusOpts.experiment)
 		fmt.Println("Grafana dashboard: " + dashboard)
 
 		return nil
