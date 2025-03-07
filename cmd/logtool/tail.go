@@ -210,14 +210,16 @@ func (p *Printer) Run(ctx context.Context) error {
 			requests++
 
 			r := request.Request{
-				Method:     ll.Method,
-				URI:        ll.URI,
-				Header:     ll.Headers,
-				Status:     ll.Status,
-				Timestamp:  ll.Time,
-				RemoteAddr: ll.RemoteAddr,
-				UserAgent:  ll.UserAgent,
-				Referer:    ll.Referer,
+				Method:       ll.Method,
+				URI:          ll.URI,
+				Header:       ll.Headers,
+				Status:       ll.Status,
+				Timestamp:    ll.Time,
+				RemoteAddr:   ll.RemoteAddr,
+				UserAgent:    ll.UserAgent,
+				Referer:      ll.Referer,
+				RespBodySize: ll.RespBodySize,
+				RespTime:     ll.RespTime,
 			}
 			if p.filter != nil && !p.filter(&r) {
 				filtered++
